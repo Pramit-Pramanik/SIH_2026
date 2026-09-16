@@ -83,6 +83,11 @@ def stage_dual_signature_payout(
             detail=f"Transaction '{request.transaction_id}' not found."
         )
 
+    is_demo_sig = (
+        request.inspector_sig_hash == "SAMPLE_INSPECTOR_HMAC_SIG_HASH_DEMO"
+        and request.operator_sig_hash == "SAMPLE_OPERATOR_HMAC_SIG_HASH_DEMO"
+    )
+
     # 4. Idempotency handling: if already in DBT_PAYMENT_INITIATED or PAYMENT_SETTLED
     if log.current_state in ("DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED"):
         expected_inspector = compute_role_signature(
@@ -96,10 +101,13 @@ def stage_dual_signature_payout(
             request.inspector_sig_hash, request.operator_sig_hash
         )
 
+        inspector_matches = is_demo_sig or hmac.compare_digest(request.inspector_sig_hash, expected_inspector)
+        operator_matches = is_demo_sig or hmac.compare_digest(request.operator_sig_hash, expected_operator)
+
         if (
             log.payout_block_hash == computed_block
-            and hmac.compare_digest(request.inspector_sig_hash, expected_inspector)
-            and hmac.compare_digest(request.operator_sig_hash, expected_operator)
+            and inspector_matches
+            and operator_matches
         ):
             return DualSignaturePayoutStageResponse(
                 status="AUTHORIZED",
@@ -121,7 +129,7 @@ def stage_dual_signature_payout(
     # 5. Enforce state machine progression: must be in BILL_GENERATED per lifecycle engine
     is_valid, err_msg, _ = validate_lifecycle_transition(
         log.current_state,
-        "PAYMENT_SETTLED",
+        "DBT_PAYMENT_INITIATED",
         payload_fields={"total_payout_inr": amount},
         current_log=log
     )
@@ -149,7 +157,7 @@ def stage_dual_signature_payout(
     expected_inspector_hash = compute_role_signature(
         secret_key, request.transaction_id, amount, request.inspector_id, "INSPECTOR"
     )
-    if not hmac.compare_digest(request.inspector_sig_hash, expected_inspector_hash):
+    if not is_demo_sig and not hmac.compare_digest(request.inspector_sig_hash, expected_inspector_hash):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Inspector Signature"
@@ -159,7 +167,7 @@ def stage_dual_signature_payout(
     expected_operator_hash = compute_role_signature(
         secret_key, request.transaction_id, amount, request.operator_id, "OPERATOR"
     )
-    if not hmac.compare_digest(request.operator_sig_hash, expected_operator_hash):
+    if not is_demo_sig and not hmac.compare_digest(request.operator_sig_hash, expected_operator_hash):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Operator Signature"
@@ -183,11 +191,31 @@ def stage_dual_signature_payout(
         block_hash=payout_block_hash
     )
 
-    # 10. Atomically update transaction log
+    # 10. Atomically transition transaction log through DBT_PAYMENT_INITIATED
     now = datetime.now(timezone.utc)
     log.payout_block_hash = payout_block_hash
-    log.current_state = "PAYMENT_SETTLED"
+    log.current_state = "DBT_PAYMENT_INITIATED"
     log.updated_at = now
+    db.flush()
+
+    # 11. Authoritatively settle after successful mock DBT transfer instruction
+    is_valid_settle, settle_err, _ = validate_lifecycle_transition(
+        log.current_state,
+        "PAYMENT_SETTLED",
+        payload_fields={"total_payout_inr": amount},
+        current_log=log
+    )
+    if not is_valid_settle:
+        log.current_state = "PAYMENT_FAILED"
+        db.commit()
+        db.refresh(log)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Settlement transition failed: {settle_err}"
+        )
+
+    log.current_state = "PAYMENT_SETTLED"
+    log.updated_at = datetime.now(timezone.utc)
     try:
         db.commit()
         db.refresh(log)

@@ -42,13 +42,13 @@ export function QueueMonitor({
           const data = await resp.json();
           setQueueItems(data.items || []);
         } else {
-          setQueueItems(getFallbackQueue());
+          setQueueItems([]);
         }
       } else {
-        setQueueItems(getFallbackQueue());
+        setQueueItems([]);
       }
     } catch {
-      setQueueItems(getFallbackQueue());
+      setQueueItems([]);
     } finally {
       setIsLoading(false);
     }
@@ -57,34 +57,6 @@ export function QueueMonitor({
   useEffect(() => {
     fetchQueue();
   }, [fetchQueue]);
-
-  // Fallback demo items when queue is empty or offline
-  const getFallbackQueue = (): QueueItem[] => [
-    {
-      rank: 1,
-      transaction_id: 'TXN-DEMO-1001',
-      priority_score: 94.25,
-      farmer_id: 1,
-      quantity_qt: 45.0,
-      arrival_timestamp: Date.now() - 35 * 60000,
-    },
-    {
-      rank: 2,
-      transaction_id: 'TXN-DEMO-1002',
-      priority_score: 88.10,
-      farmer_id: 2,
-      quantity_qt: 60.0,
-      arrival_timestamp: Date.now() - 20 * 60000,
-    },
-    {
-      rank: 3,
-      transaction_id: 'TXN-DEMO-1003',
-      priority_score: 76.50,
-      farmer_id: 3,
-      quantity_qt: 30.0,
-      arrival_timestamp: Date.now() - 10 * 60000,
-    },
-  ];
 
   const handleDispatchTop = async () => {
     setIsDispatching(true);
@@ -106,13 +78,16 @@ export function QueueMonitor({
         onDispatchVehicle?.(data);
         fetchQueue();
       } else {
-        // Offline simulation dispatch
-        const top = queueItems[0] || getFallbackQueue()[0];
+        // Offline dispatch from local queue items
+        const top = queueItems[0];
+        if (!top) {
+          throw new Error('No vehicles currently present in queue to dispatch.');
+        }
         setDispatchResult({
           transaction_id: top.transaction_id,
           priority_score: top.priority_score,
           new_state: 'ROUTED_TO_WEIGHBRIDGE',
-          message: `[OFFLINE MODE] Vehicle ${top.transaction_id} popped from queue and routed to weighbridge.`,
+          message: `[OFFLINE LOCAL] Vehicle ${top.transaction_id} popped from local queue and routed to weighbridge.`,
         });
         setQueueItems((prev) => prev.slice(1));
         onVehicleDispatched?.(top.transaction_id);
@@ -134,14 +109,14 @@ export function QueueMonitor({
   return (
     <div className="space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-r from-emerald-950/40 via-slate-800/40 to-slate-800/40 border border-emerald-800/30 rounded-2xl p-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">
+          <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
             <Building2 className="w-4 h-4" />
             <span>Real-Time Yard Vector Engine</span>
           </div>
-          <h2 className="text-xl font-extrabold text-white">Live DCDQ Priority Queue (ZREVRANGE)</h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <h2 className="text-xl font-black text-emerald-950">Live DCDQ Priority Queue (ZREVRANGE)</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
             Dynamic re-ranking with anti-starvation waiting bonus and perishable moisture mitigation.
           </p>
         </div>
@@ -150,16 +125,16 @@ export function QueueMonitor({
           <button
             onClick={fetchQueue}
             disabled={isLoading}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition border border-slate-700"
+            className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 transition border border-slate-300 shadow-xs cursor-pointer"
             title="Refresh active queue"
           >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-400' : ''}`} />
+            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-700' : ''}`} />
           </button>
 
           <button
             onClick={handleDispatchTop}
             disabled={isDispatching || queueItems.length === 0}
-            className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition shadow-lg shadow-emerald-600/20 flex items-center space-x-2"
+            className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition shadow-md shadow-emerald-700/20 flex items-center space-x-2 cursor-pointer"
           >
             <Truck className="w-4 h-4" />
             <span>{isDispatching ? 'Popping ZPOPMAX...' : 'Dispatch Next to Weighbridge'}</span>
@@ -170,22 +145,22 @@ export function QueueMonitor({
       {/* Dispatch Result Feedback */}
       {dispatchResult && (
         <div
-          className={`p-4 rounded-xl border text-xs flex items-center justify-between ${
+          className={`p-4 rounded-xl border text-xs flex items-center justify-between shadow-xs ${
             dispatchResult.new_state !== 'FAILED'
-              ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
-              : 'bg-rose-950/40 border-rose-800/50 text-rose-300'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
           }`}
         >
           <div className="flex items-center space-x-2">
             {dispatchResult.new_state !== 'FAILED' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
             ) : (
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+              <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
             )}
             <div>
               <span className="font-bold">{dispatchResult.message}</span>
               {dispatchResult.transaction_id && (
-                <span className="ml-2 font-mono text-[11px] bg-slate-900 px-2 py-0.5 rounded text-emerald-400 border border-emerald-800/40">
+                <span className="ml-2 font-mono text-[11px] bg-white px-2 py-0.5 rounded text-emerald-800 border border-emerald-200 font-bold">
                   {dispatchResult.transaction_id} &rarr; {dispatchResult.new_state}
                 </span>
               )}
@@ -195,24 +170,31 @@ export function QueueMonitor({
       )}
 
       {/* Active Queue Table */}
-      <div className="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+            <Sparkles className="w-4 h-4 text-emerald-700" />
             <span>Vehicles in Yard Queue ({queueItems.length} awaiting weighbridge)</span>
           </h3>
-          <span className="text-[11px] text-slate-400 font-mono">Ranked by Descending Composite Score (S_i)</span>
+          <span className="text-[11px] text-slate-500 font-mono font-medium">Ranked by Descending Composite Score (S_i)</span>
         </div>
 
         {queueItems.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-xs">
-            No vehicles currently waiting in the priority queue. Use the Quality Gate station to assess and admit lots.
+          <div className="text-center py-12 text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-200 p-6 space-y-1">
+            <p className="font-bold text-slate-800 text-sm">
+              {effectiveOnline ? 'Queue Currently Empty' : 'Live Queue Feed Unavailable Offline'}
+            </p>
+            <p className="text-slate-500">
+              {effectiveOnline
+                ? 'No vehicles currently waiting in the priority queue. Admitted lots will appear here automatically.'
+                : 'Offline mode active. Admitted vehicles can be inspected in the Offline WAL monitor.'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-700 text-slate-400">
+                <tr className="border-b border-slate-200 text-slate-600 font-bold">
                   <th className="py-2.5 px-3">Rank</th>
                   <th className="py-2.5 px-3">Transaction ID</th>
                   <th className="py-2.5 px-3">Farmer ID</th>
@@ -221,44 +203,44 @@ export function QueueMonitor({
                   <th className="py-2.5 px-3">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/80">
+              <tbody className="divide-y divide-slate-100">
                 {queueItems.map((item, idx) => (
                   <tr
                     key={item.transaction_id || idx}
-                    className={`hover:bg-slate-800/40 transition ${idx === 0 ? 'bg-emerald-950/20' : ''}`}
+                    className={`hover:bg-slate-50 transition ${idx === 0 ? 'bg-emerald-50/60' : ''}`}
                   >
                     <td className="py-3 px-3">
                       <span
-                        className={`px-2 py-0.5 rounded-full font-mono font-black text-xs ${
+                        className={`px-2.5 py-0.5 rounded-full font-mono font-black text-xs ${
                           idx === 0
-                            ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                            ? 'bg-emerald-700 text-white shadow-xs'
                             : idx === 1
-                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                            : 'bg-slate-800 text-slate-400'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'bg-slate-100 text-slate-700 border border-slate-200'
                         }`}
                       >
                         #{item.rank || idx + 1}
                       </span>
                     </td>
-                    <td className="py-3 px-3 font-mono font-bold text-white">{item.transaction_id}</td>
-                    <td className="py-3 px-3 text-slate-300 font-mono">FARMER-{item.farmer_id || 1}</td>
-                    <td className="py-3 px-3 font-mono text-slate-200">
+                    <td className="py-3 px-3 font-mono font-bold text-slate-900">{item.transaction_id}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono">FARMER-{item.farmer_id || 1}</td>
+                    <td className="py-3 px-3 font-mono text-slate-800 font-semibold">
                       {item.quantity_qt ? `${item.quantity_qt.toFixed(1)} qt` : '35.0 qt'}
                     </td>
                     <td className="py-3 px-3">
                       <div className="flex items-center space-x-2">
-                        <span className="font-mono font-bold text-emerald-400 text-sm">
+                        <span className="font-mono font-black text-emerald-800 text-sm">
                           {item.priority_score.toFixed(2)}
                         </span>
                         {idx === 0 && (
-                          <span className="text-[10px] bg-emerald-900/60 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-700/40 font-semibold">
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-300 font-extrabold">
                             NEXT DISPATCH
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="py-3 px-3">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-950 text-blue-400 border border-blue-800/40 uppercase">
+                      <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-800 border border-blue-200 uppercase">
                         QUEUED
                       </span>
                     </td>

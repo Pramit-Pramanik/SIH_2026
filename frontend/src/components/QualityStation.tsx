@@ -232,33 +232,33 @@ export function QualityStation({
   return (
     <div className="space-y-6">
       {/* Banner */}
-      <div className="bg-gradient-to-r from-amber-950/40 via-slate-800/40 to-slate-800/40 border border-amber-800/30 rounded-2xl p-5">
-        <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+      <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-purple-700 mb-1">
           <Layers className="w-4 h-4" />
-          <span>Quality Assaying & Moisture Gate Station</span>
+          <span>Crop Quality Inspection & Grading</span>
         </div>
-        <h2 className="text-xl font-extrabold text-white">Digital Crop Assaying & 17.0% Quality Gate</h2>
-        <p className="text-xs text-slate-400 mt-0.5">
-          Quality strictly overrides queue priority (AC-007): lots exceeding 17.0% moisture are routed to the drying apron.
+        <h2 className="text-xl font-black text-purple-950">Digital Crop Assaying & Quality Gate</h2>
+        <p className="text-xs text-slate-600 mt-0.5">
+          Quality parameters determine queue priority: lots exceeding 17.0% moisture are routed to the drying apron.
         </p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Assaying Form */}
-        <div className="lg:col-span-7 bg-slate-800/50 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-4">
-          <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-amber-400" />
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+          <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+            <Layers className="w-4 h-4 text-purple-600" />
             <span>Digital Moisture Meter Telemetry</span>
           </h3>
 
           <form onSubmit={handleAssessQuality} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">Transaction ID:</label>
+              <label className="block text-xs font-bold text-slate-700 mb-1">Transaction ID:</label>
               <input
                 type="text"
                 value={transactionId}
                 onChange={(e) => setTransactionId(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-purple-600 focus:outline-none"
                 required
               />
             </div>
@@ -266,14 +266,14 @@ export function QualityStation({
             {/* Moisture Slider & Value */}
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-semibold text-slate-300">Measured Moisture Percentage:</label>
+                <label className="text-xs font-bold text-slate-700">Measured Moisture Percentage:</label>
                 <span
-                  className={`font-mono font-bold text-sm px-2 py-0.5 rounded ${
+                  className={`font-mono font-bold text-sm px-2.5 py-0.5 rounded-full ${
                     isRejected
-                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
                       : isHighMoistureBonus
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   }`}
                 >
                   {moisturePct.toFixed(1)}%
@@ -286,20 +286,20 @@ export function QualityStation({
                 step="0.1"
                 value={moisturePct}
                 onChange={(e) => setMoisturePct(parseFloat(e.target.value))}
-                className="w-full h-2 bg-slate-900 rounded-lg appearance-none cursor-pointer accent-amber-400"
+                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
               />
-              <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+              <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-semibold">
                 <span>9.0% (Dry)</span>
-                <span className="text-emerald-400 font-semibold">14.0% Optimal</span>
-                <span className="text-amber-400 font-semibold">15-17% DCDQ Bonus</span>
-                <span className="text-rose-400 font-bold">17.0% REJECT THRESHOLD</span>
+                <span className="text-emerald-700">14.0% Optimal</span>
+                <span className="text-amber-700">15-17% DCDQ Bonus</span>
+                <span className="text-rose-700 font-black">17.0% REJECT THRESHOLD</span>
                 <span>24.0%</span>
               </div>
             </div>
 
             {/* Elapsed Wait Minutes */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Elapsed Yard Wait Time (Anti-Starvation Bonus factor):
               </label>
               <div className="relative">
@@ -309,16 +309,16 @@ export function QualityStation({
                   min="0"
                   value={elapsedWaitMin}
                   onChange={(e) => setElapsedWaitMin(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-purple-600 focus:outline-none"
                 />
-                <span className="absolute right-3 top-2 text-xs text-slate-400">minutes</span>
+                <span className="absolute right-3 top-2 text-xs text-slate-500 font-medium">minutes</span>
               </div>
             </div>
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-lg shadow-amber-600/20 flex items-center justify-center space-x-2"
+              className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-amber-500/20 flex items-center justify-center space-x-2 cursor-pointer"
             >
               <span>{isSubmitting ? 'Evaluating Moisture Gate & Calculating S_i...' : 'Submit Quality Assaying'}</span>
               <ArrowRight className="w-4 h-4" />
@@ -330,37 +330,37 @@ export function QualityStation({
             <div
               className={`p-4 rounded-xl border text-xs space-y-2 mt-4 ${
                 result.status === 'QUALITY_APPROVED'
-                  ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-200'
+                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
                   : result.status === 'QUALITY_REJECTED'
-                  ? 'bg-rose-950/40 border-rose-800/50 text-rose-200'
-                  : 'bg-slate-900 border-slate-800 text-slate-300'
+                  ? 'bg-rose-50 border-rose-300 text-rose-950'
+                  : 'bg-slate-50 border-slate-200 text-slate-900'
               }`}
             >
               <div className="flex items-center justify-between font-bold text-sm">
                 <div className="flex items-center space-x-2">
                   {result.status === 'QUALITY_APPROVED' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-700" />
                   ) : (
-                    <ShieldAlert className="w-4 h-4 text-rose-400" />
+                    <ShieldAlert className="w-4 h-4 text-rose-700" />
                   )}
-                  <span>Status: {result.status}</span>
+                  <span className="font-extrabold">Status: {result.status}</span>
                 </div>
                 {result.priority_score !== undefined && (
-                  <span className="font-mono text-xs px-2 py-0.5 rounded bg-slate-900 text-amber-300 border border-amber-500/30">
+                  <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
                     DCDQ Score (S_i): {result.priority_score.toFixed(2)}
                   </span>
                 )}
               </div>
 
-              {result.advisory_notice && <p className="text-slate-300">{result.advisory_notice}</p>}
-              {result.message && <p className="text-slate-300">{result.message}</p>}
+              {result.advisory_notice && <p className="text-slate-700 font-medium">{result.advisory_notice}</p>}
+              {result.message && <p className="text-slate-700 font-medium">{result.message}</p>}
 
               {result.status === 'QUALITY_REJECTED' && (
-                <div className="pt-2 border-t border-rose-900/60 flex items-center justify-between">
-                  <span className="text-[11px] text-rose-300">Requires supervisor override to re-admit lot.</span>
+                <div className="pt-2 border-t border-rose-200 flex items-center justify-between">
+                  <span className="text-[11px] text-rose-800 font-medium">Requires supervisor override to re-admit lot.</span>
                   <button
                     onClick={() => setShowOverride(!showOverride)}
-                    className="px-2.5 py-1 rounded bg-rose-900/80 hover:bg-rose-800 text-white font-bold text-[11px] transition"
+                    className="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold text-[11px] transition shadow-xs"
                   >
                     Supervisor Override
                   </button>
@@ -371,43 +371,43 @@ export function QualityStation({
 
           {/* Supervisor Override Panel */}
           {showOverride && (
-            <form onSubmit={handleSupervisorOverride} className="bg-slate-900/90 border border-amber-500/40 rounded-xl p-4 space-y-3">
-              <div className="flex items-center space-x-2 text-xs font-bold text-amber-300">
-                <ShieldAlert className="w-4 h-4" />
-                <span>Mandi Supervisor Quality Override (AC-007)</span>
+            <form onSubmit={handleSupervisorOverride} className="bg-amber-50/70 border border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
+              <div className="flex items-center space-x-2 text-xs font-extrabold text-amber-950">
+                <ShieldAlert className="w-4 h-4 text-amber-700" />
+                <span>Mandi Supervisor Quality Override</span>
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 mb-1">Supervisor Authorization Token:</label>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Supervisor Authorization Token:</label>
                 <input
                   type="text"
                   value={supervisorToken}
                   onChange={(e) => setSupervisorToken(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
+                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:border-amber-600 focus:outline-none"
                   required
                 />
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Calibrated Moisture (must be &le; 17.0%):</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Calibrated Moisture (must be &le; 17.0%):</label>
                   <input
                     type="number"
                     step="0.1"
                     max="17.0"
                     value={calibratedMoisture}
                     onChange={(e) => setCalibratedMoisture(parseFloat(e.target.value))}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-900 focus:border-amber-600 focus:outline-none"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] text-slate-400 mb-1">Auditable Justification Reason:</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Auditable Justification Reason:</label>
                   <input
                     type="text"
                     value={overrideReason}
                     onChange={(e) => setOverrideReason(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
+                    className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 focus:border-amber-600 focus:outline-none"
                     required
                   />
                 </div>
@@ -416,7 +416,7 @@ export function QualityStation({
               <button
                 type="submit"
                 disabled={isOverriding || calibratedMoisture > 17.0}
-                className="w-full bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-slate-950 font-bold text-xs uppercase py-2 rounded-lg transition"
+                className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs uppercase py-2 rounded-lg transition shadow-xs cursor-pointer"
               >
                 {isOverriding ? 'Authorizing Override...' : 'Authorize Re-Admission into DCDQ Queue'}
               </button>
@@ -426,25 +426,25 @@ export function QualityStation({
 
         {/* Algorithm Card */}
         <div className="lg:col-span-5 space-y-4">
-          <div className="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 shadow-lg space-y-3">
-            <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-              <Sparkles className="w-4 h-4 text-amber-400" />
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+            <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+              <Sparkles className="w-4 h-4 text-amber-600" />
               <span>DCDQ Algorithm Breakdown</span>
             </h3>
 
-            <div className="space-y-2 text-xs text-slate-300">
-              <p className="font-mono bg-slate-900 p-2.5 rounded-lg border border-slate-800 text-amber-300 text-[11px]">
+            <div className="space-y-2 text-xs text-slate-600">
+              <p className="font-mono bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-emerald-950 font-bold text-[11px]">
                 S_i = &alpha; A_i + &beta; D_i + &gamma; M_i + &lambda; W_i
               </p>
-              <ul className="space-y-1 text-[11px] text-slate-400 list-disc pl-4">
+              <ul className="space-y-1.5 text-[11px] text-slate-600 list-disc pl-4">
                 <li>
-                  <strong className="text-slate-200">&gamma; M_i (Moisture Weight):</strong> Damp grain (&gt;15.0%) receives priority boost to prevent aflatoxin and yard fermentation.
+                  <strong className="text-slate-900">&gamma; M_i (Moisture Weight):</strong> Damp grain (&gt;15.0%) receives priority boost to prevent aflatoxin and yard fermentation.
                 </li>
                 <li>
-                  <strong className="text-slate-200">&lambda; W_i (Anti-Starvation Bonus):</strong> Longer wait times increase score linearly so dry grain is never starved.
+                  <strong className="text-slate-900">&lambda; W_i (Anti-Starvation Bonus):</strong> Longer wait times increase score linearly so dry grain is never starved.
                 </li>
                 <li>
-                  <strong className="text-slate-200">Strict Quality Precedence:</strong> If moisture &gt; 17.0%, the lot is rejected regardless of composite score.
+                  <strong className="text-slate-900">Strict Quality Precedence:</strong> If moisture &gt; 17.0%, the lot is rejected regardless of composite score.
                 </li>
               </ul>
             </div>

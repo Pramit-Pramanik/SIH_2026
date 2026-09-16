@@ -13,6 +13,8 @@ export interface LocalTransactionWAL {
   client_timestamp: number;            // Local epoch milliseconds (DIAGNOSTIC METADATA ONLY)
   sync_status: 'PENDING' | 'SYNCED' | 'FAILED';
   retry_count: number;                 // Number of sync attempts
+  last_attempt_at?: number;            // Timestamp (ms) of the last synchronization attempt
+  server_sequence?: number;            // Authoritative sequence returned by backend
   error_message?: string;              // Last sync failure reason
 }
 
@@ -98,12 +100,38 @@ export async function getPendingWALRecords(): Promise<LocalTransactionWAL[]> {
 }
 
 /**
+ * Retrieves pending WAL records that are eligible for sync attempt,
+ * respecting exponential backoff timing and retry limits.
+ */
+export async function getEligiblePendingWALRecords(maxRetries: number = 5): Promise<LocalTransactionWAL[]> {
+  const pending = await getPendingWALRecords();
+  const now = Date.now();
+
+  return pending.filter((rec) => {
+    if (rec.retry_count >= maxRetries) {
+      return false;
+    }
+    if (!rec.last_attempt_at || rec.retry_count === 0) {
+      return true;
+    }
+    // Exponential backoff: min(60s, 2^(retry_count) * 1000ms)
+    const backoffMs = Math.min(60000, Math.pow(2, rec.retry_count) * 1000);
+    return (now - rec.last_attempt_at) >= backoffMs;
+  });
+}
+
+/**
  * Updates a WAL record status to SYNCED and updates materialized local state.
  */
-export async function markWALRecordSynced(id: number, cloudPayload?: Record<string, unknown>): Promise<void> {
+export async function markWALRecordSynced(
+  id: number,
+  cloudPayload?: Record<string, unknown>,
+  serverSequence?: number
+): Promise<void> {
   const rec = await localDB.transactionsWAL.get(id);
   await localDB.transactionsWAL.update(id, {
     sync_status: 'SYNCED',
+    server_sequence: serverSequence,
     error_message: undefined
   });
 
@@ -135,14 +163,27 @@ export async function markWALRecordSynced(id: number, cloudPayload?: Record<stri
 }
 
 /**
- * Updates a WAL record status to FAILED with error message and increments retry_count.
+ * Updates a WAL record failure status.
+ * If failure is transient (e.g. network disconnect or server 5xx) and retries remain,
+ * keeps status as PENDING with exponential backoff timestamp.
+ * If permanent (domain validation error / 4xx) or max retries exceeded, marks as FAILED.
  */
-export async function markWALRecordFailed(id: number, error: string): Promise<void> {
+export async function markWALRecordFailed(
+  id: number,
+  error: string,
+  isTransient: boolean = false,
+  maxRetries: number = 5
+): Promise<void> {
   const existing = await localDB.transactionsWAL.get(id);
   const currentRetries = existing?.retry_count ?? 0;
+  const newRetryCount = currentRetries + 1;
+  const shouldRetry = isTransient && newRetryCount < maxRetries;
+  const nextStatus: 'PENDING' | 'FAILED' = shouldRetry ? 'PENDING' : 'FAILED';
+
   await localDB.transactionsWAL.update(id, {
-    sync_status: 'FAILED',
-    retry_count: currentRetries + 1,
+    sync_status: nextStatus,
+    retry_count: newRetryCount,
+    last_attempt_at: Date.now(),
     error_message: error
   });
 
@@ -150,7 +191,7 @@ export async function markWALRecordFailed(id: number, error: string): Promise<vo
     const localTxn = await localDB.localTransactions.get(existing.transaction_id);
     if (localTxn && localTxn.last_client_mutation_id === existing.client_mutation_id) {
       await localDB.localTransactions.update(existing.transaction_id, {
-        sync_status: 'FAILED'
+        sync_status: nextStatus
       });
     }
   }

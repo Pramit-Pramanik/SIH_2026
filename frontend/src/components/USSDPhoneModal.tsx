@@ -91,41 +91,41 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
-      <div className="relative w-full max-w-sm bg-slate-900 border border-slate-700 rounded-3xl p-6 shadow-2xl flex flex-col items-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4">
+      <div className="relative w-full max-w-sm bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-2xl flex flex-col items-center">
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-white text-lg font-bold"
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 text-lg font-bold p-1 rounded"
         >
           &times;
         </button>
 
         {/* Feature Phone Title */}
         <div className="text-center mb-4">
-          <div className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+          <div className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">
             Zero-Data Cellular Simulator
           </div>
-          <div className="text-sm font-semibold text-white">
+          <div className="text-sm font-black text-slate-900">
             GSM MAP Layer (*247#)
           </div>
         </div>
 
         {/* Phone Body */}
-        <div className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl p-4 shadow-inner">
-          {/* LCD Screen */}
-          <div className="bg-[#0b1a10] border-2 border-[#16361f] rounded-lg p-3 font-mono text-emerald-400 text-xs min-h-[160px] max-h-[220px] overflow-y-auto flex flex-col justify-between shadow-inner">
-            <div className="flex justify-between border-b border-emerald-900/60 pb-1 text-[10px] text-emerald-500">
+        <div className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 shadow-inner">
+          {/* LCD Screen (Retro High Contrast Agrarian Green) */}
+          <div className="bg-[#0b1a10] border-2 border-[#16361f] rounded-xl p-3 font-mono text-emerald-400 text-xs min-h-[160px] max-h-[220px] overflow-y-auto flex flex-col justify-between shadow-inner">
+            <div className="flex justify-between border-b border-emerald-900/60 pb-1 text-[10px] text-emerald-500 font-bold">
               <span>GSM-4G [||||]</span>
               <span>{sessionActive ? 'MAP ACTIVE' : 'STANDBY'}</span>
             </div>
 
-            <pre className="whitespace-pre-wrap leading-relaxed my-2 font-mono text-[11px] text-emerald-300">
+            <pre className="whitespace-pre-wrap leading-relaxed my-2 font-mono text-[11px] text-emerald-300 font-semibold">
               {loading ? 'Transmitting signaling packet...' : screenMessage}
             </pre>
 
             <div className="border-t border-emerald-900/60 pt-1 flex items-center justify-between text-[10px]">
-              <span className="text-emerald-500">Input:</span>
+              <span className="text-emerald-500 font-bold">Input:</span>
               <span className="font-bold text-emerald-200">{currentText || '_'}</span>
             </div>
           </div>
@@ -135,13 +135,13 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
             <button
               onClick={() => handleSend()}
               disabled={loading}
-              className="bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold py-2 rounded-lg text-xs transition shadow"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs"
             >
               SEND / DIAL
             </button>
             <button
               onClick={handleEndSession}
-              className="bg-rose-800 hover:bg-rose-700 text-white font-bold py-2 rounded-lg text-xs transition shadow"
+              className="bg-rose-700 hover:bg-rose-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs"
             >
               END / EXIT
             </button>
@@ -153,7 +153,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
               <button
                 key={key}
                 onClick={() => handleKeypadPress(key)}
-                className="bg-slate-700/80 hover:bg-slate-600 text-white font-mono font-bold py-2.5 rounded-lg text-sm transition active:scale-95 shadow border border-slate-600/50"
+                className="bg-white hover:bg-slate-100 text-slate-900 font-mono font-black py-2.5 rounded-xl text-sm transition active:scale-95 shadow-xs border border-slate-300"
               >
                 {key}
               </button>
@@ -163,7 +163,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
           <div className="mt-2 text-center">
             <button
               onClick={handleClear}
-              className="text-[10px] text-slate-400 hover:text-slate-200 uppercase tracking-wider"
+              className="text-[10px] text-slate-500 hover:text-slate-800 font-bold uppercase tracking-wider"
             >
               Clear Input
             </button>
@@ -171,13 +171,13 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
         </div>
 
         {/* Info footer */}
-        <div className="text-[11px] text-slate-400 text-center mt-3 flex items-center justify-center space-x-1.5">
+        <div className="text-[11px] text-slate-600 text-center mt-3 flex items-center justify-center space-x-1.5 font-medium">
           <span>Caller:</span>
           <input
             type="text"
             value={phoneNumber}
             onChange={(e) => setPhoneNumber(e.target.value)}
-            className="bg-slate-800 border border-slate-700 px-2 py-0.5 rounded font-mono text-slate-200 text-[11px] w-28 text-center"
+            className="bg-slate-100 border border-slate-300 px-2.5 py-0.5 rounded-lg font-mono text-slate-900 text-[11px] w-28 text-center font-bold focus:outline-none focus:border-emerald-600"
           />
         </div>
       </div>

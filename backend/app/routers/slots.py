@@ -1,7 +1,14 @@
-from fastapi import APIRouter, Depends, status
+from datetime import date
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+# Ensure HTTP 422 responses use status.HTTP_422_UNPROCESSABLE_ENTITY without Starlette deprecation warnings
+if not hasattr(status, "__dict__") or "HTTP_422_UNPROCESSABLE_ENTITY" not in status.__dict__:
+    status.HTTP_422_UNPROCESSABLE_ENTITY = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
+
 from backend.app.dependencies.get_db import get_db
+from backend.app.models.slot import ProcurementSlot
 from backend.app.schemas.slot import (
     SlotReservationRequest,
     SlotReservationResponse,
@@ -10,6 +17,43 @@ from backend.app.schemas.slot import (
 from backend.app.services.reservation_service import reserve_slot_atomic, get_slot_availability
 
 router = APIRouter(prefix="/slots", tags=["Procurement Slots"])
+
+
+@router.get(
+    "",
+    response_model=List[SlotAvailabilityResponse],
+    summary="List Procurement Slots",
+    description="Retrieves available hourly procurement slots for a specific mandi and scheduled date."
+)
+def list_slots(
+    mandi_id: int = Query(..., gt=0, description="Target APMC mandi identifier"),
+    scheduled_date: Optional[date] = Query(None, description="Target date (defaults to today)"),
+    db: Session = Depends(get_db)
+) -> List[SlotAvailabilityResponse]:
+    target_date = scheduled_date or date.today()
+    slots = db.query(ProcurementSlot).filter(
+        ProcurementSlot.mandi_id == mandi_id,
+        ProcurementSlot.scheduled_date == target_date
+    ).order_by(ProcurementSlot.start_time.asc()).all()
+
+    result = []
+    for slot in slots:
+        allocated = float(slot.allocated_capacity_qt)
+        booked = float(slot.booked_capacity_qt)
+        remaining = max(0.0, allocated - booked)
+        result.append(
+            SlotAvailabilityResponse(
+                slot_id=slot.slot_id,
+                mandi_id=slot.mandi_id,
+                scheduled_date=str(slot.scheduled_date),
+                start_time=str(slot.start_time),
+                end_time=str(slot.end_time),
+                allocated_capacity_qt=allocated,
+                booked_capacity_qt=booked,
+                remaining_capacity_qt=remaining
+            )
+        )
+    return result
 
 
 @router.get(

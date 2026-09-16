@@ -26,6 +26,10 @@ from backend.app.routers.mock_dbt import router as mock_dbt_router
 from backend.app.routers.sync import router as sync_router
 from backend.app.routers.ussd import router as ussd_router
 from backend.app.routers.auth import router as auth_router
+from backend.app.routers.mandis import router as mandis_router
+from backend.app.routers.crops import router as crops_router
+from backend.app.routers.farmers import router as farmers_router
+from backend.app.routers.admin import router as admin_router
 
 settings = get_settings()
 
@@ -76,6 +80,10 @@ app.include_router(mock_dbt_router, prefix="/api/v1")
 app.include_router(sync_router, prefix="/api/v1")
 app.include_router(ussd_router, prefix="/api/v1")
 app.include_router(auth_router, prefix="/api/v1")
+app.include_router(mandis_router, prefix="/api/v1")
+app.include_router(crops_router, prefix="/api/v1")
+app.include_router(farmers_router, prefix="/api/v1")
+app.include_router(admin_router, prefix="/api/v1")
 
 @app.get("/", tags=["Root"])
 def root() -> JSONResponse:

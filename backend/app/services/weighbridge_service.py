@@ -308,6 +308,12 @@ def record_unified_weighment(
             )
         )
 
+    # For unified weighment, both gross and tare are captured atomically.
+    # Set intermediate gross weight state
+    prior_state = log.current_state
+    log.gross_weight_qt = gross_weight
+    log.current_state = "WEIGHED_GROSS"
+
     # Lifecycle validation with payload
     is_valid, err_msg, _ = validate_lifecycle_transition(
         log.current_state,
@@ -316,6 +322,7 @@ def record_unified_weighment(
         current_log=log
     )
     if not is_valid:
+        log.current_state = prior_state
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Cannot perform weighment: {err_msg}"
@@ -340,6 +347,7 @@ def record_unified_weighment(
             total_delivered = float(other_delivered) + net_weight
             ceiling = float(farmer.production_ceiling_qt)
             if total_delivered > ceiling:
+                log.current_state = prior_state
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(

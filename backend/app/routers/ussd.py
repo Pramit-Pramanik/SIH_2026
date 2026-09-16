@@ -7,6 +7,7 @@ from backend.app.dependencies.get_db import get_db
 from backend.app.schemas.ussd import USSDSessionRequest, USSDSessionResponse
 from backend.app.services.ussd_service import handle_ussd_session
 from backend.app.adapters.agmarknet_adapter import AgmarknetMockAdapter
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/ussd", tags=["USSD Zero-Data Gateway (*247#)"])
 
@@ -51,6 +52,39 @@ async def ussd_session_endpoint(
         return PlainTextResponse(content=ussd_res.message, status_code=200)
 
     return ussd_res
+
+
+class USSDCallbackRequest(BaseModel):
+    session_id: Optional[str] = None
+    phone_number: Optional[str] = None
+    service_code: Optional[str] = None
+    text_input: Optional[str] = None
+    text: Optional[str] = None
+
+
+@router.post(
+    "/callback",
+    response_model=USSDSessionResponse,
+    summary="USSD Telecom Callback Webhook",
+    description="Processes USSD callbacks from telecom aggregators."
+)
+def ussd_callback(
+    payload: USSDCallbackRequest,
+    db: Session = Depends(get_db)
+) -> USSDSessionResponse:
+    """
+    Processes telecom callback webhook requests for USSD *247# interactions.
+    """
+    import uuid
+    text = payload.text_input if payload.text_input is not None else (payload.text or "")
+    cleaned_text = text.replace("*247*", "").replace("#", "").replace("*247", "").strip()
+    session_req = USSDSessionRequest(
+        session_id=payload.session_id or f"sess-callback-{uuid.uuid4().hex[:6]}",
+        phone_number=payload.phone_number or "9876543210",
+        service_code=payload.service_code or "*247#",
+        text=cleaned_text
+    )
+    return handle_ussd_session(db=db, request=session_req)
 
 
 @router.get(

@@ -71,7 +71,8 @@ def test_lifecycle_graph_valid_and_invalid_transitions():
     assert can_transition(None, "GATE_ENTRY_VERIFIED") is True
     assert can_transition("SLOT_BOOKED", "GATE_ENTRY_VERIFIED") is True
     assert can_transition("GATE_ENTRY_VERIFIED", "QUALITY_APPROVED") is True
-    assert can_transition("QUALITY_APPROVED", "WEIGHED_GROSS") is True
+    assert can_transition("QUALITY_APPROVED", "ROUTED_TO_WEIGHBRIDGE") is True
+    assert can_transition("ROUTED_TO_WEIGHBRIDGE", "WEIGHED_GROSS") is True
     assert can_transition("WEIGHED_GROSS", "WEIGHED_TARE") is True
     assert can_transition("WEIGHED_TARE", "BILL_GENERATED") is True
     assert can_transition("BILL_GENERATED", "DBT_PAYMENT_INITIATED") is True
@@ -86,6 +87,9 @@ def test_lifecycle_graph_valid_and_invalid_transitions():
     assert can_transition("PAYMENT_SETTLED", "PAYMENT_SETTLED") is True
 
     # Invalid state skips
+    assert can_transition("QUALITY_APPROVED", "WEIGHED_TARE") is False
+    assert can_transition("QUALITY_APPROVED", "WEIGHED_GROSS") is False
+    assert can_transition("ROUTED_TO_WEIGHBRIDGE", "WEIGHED_TARE") is False
     assert can_transition("SLOT_BOOKED", "BILL_GENERATED") is False
     assert can_transition(None, "PAYMENT_SETTLED") is False
     assert can_transition(None, "WEIGHED_TARE") is False
@@ -476,6 +480,17 @@ def test_wal_full_valid_lifecycle_progression(client: TestClient, db_session: Se
                 "mutation_type": "QUALITY_ASSAY"
             },
             {
+                "client_mutation_id": "mut-seq-002b",
+                "transaction_id": "TXN-PROG-001",
+                "farmer_id": farmer.farmer_id,
+                "mandi_id": mandi.mandi_id,
+                "current_state": "ROUTED_TO_WEIGHBRIDGE",
+                "payload": {"queue_dispatch": True},
+                "hmac_signature": "SIG_PROG_002b",
+                "client_timestamp": 1715000090.0,
+                "mutation_type": "QUEUE_DISPATCH"
+            },
+            {
                 "client_mutation_id": "mut-seq-003",
                 "transaction_id": "TXN-PROG-001",
                 "farmer_id": farmer.farmer_id,
@@ -505,12 +520,12 @@ def test_wal_full_valid_lifecycle_progression(client: TestClient, db_session: Se
     data = res.json()
 
     assert data["success"] is True
-    assert data["synced_count"] == 4
+    assert data["synced_count"] == 5
     results = data["results"]
 
     # Verify monotonic sequences
     seqs = [r["server_receive_sequence"] for r in results]
-    assert seqs == sorted(seqs) and len(set(seqs)) == 4
+    assert seqs == sorted(seqs) and len(set(seqs)) == 5
 
     # Verify final database state
     log = db_session.query(ProcurementLog).filter_by(transaction_id="TXN-PROG-001").first()

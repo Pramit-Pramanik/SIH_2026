@@ -73,8 +73,8 @@ def generate_jform_invoice(
     deductions = round(float(request.deductions_inr or 0.0), 2)
     if deductions < 0.0:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Deductions cannot be negative."
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Deductions cannot be negative"
         )
 
     # 4. Check Net Weight availability
@@ -87,6 +87,11 @@ def generate_jform_invoice(
 
     # 5. Compute Invoice Amount
     gross_amount = round(net_weight * rate, 2)
+    if deductions > gross_amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Deductions cannot exceed gross amount"
+        )
     invoice_amount = round(gross_amount - deductions, 2)
     if invoice_amount <= 0.0:
         raise HTTPException(

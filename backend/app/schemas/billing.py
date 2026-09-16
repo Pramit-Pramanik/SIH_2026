@@ -16,7 +16,6 @@ class JFormGenerationRequest(BaseModel):
     )
     deductions_inr: float = Field(
         default=0.0,
-        ge=0.0,
         description="Value deductions in INR (e.g. handling or moisture value cut)"
     )
     inspector_notes: Optional[str] = Field(

@@ -20,10 +20,24 @@ def is_quality_rejected(moisture_pct: float) -> bool:
 def calculate_appointment_adherence(planned_arrival_ts: float, actual_arrival_ts: float) -> float:
     """
     Computes Appointment Adherence Score (A_i), bounded in [0.0, 40.0].
-    A_i = max(0.0, 40.0 - (|t_actual - t_planned| / 60.0) * 0.5)
+    Early arrivals (actual <= planned) are not penalized (lateness = 0.0).
+    Lateness penalty applies only if actual_arrival_ts > planned_arrival_ts.
+    A_i = max(0.0, 40.0 - (lateness_minutes * 0.5))
     """
-    lateness_minutes = abs(actual_arrival_ts - planned_arrival_ts) / 60.0
+    lateness_seconds = max(0.0, float(actual_arrival_ts - planned_arrival_ts))
+    lateness_minutes = lateness_seconds / 60.0
     return max(0.0, round(40.0 - (lateness_minutes * 0.5), 4))
+
+
+def calculate_lateness_penalty(actual_arrival_ts: float, planned_arrival_ts: float) -> float:
+    """
+    Computes Arrival Lateness Penalty (L_i), bounded in [0.0, 10.0].
+    Early arrivals (actual <= planned) incur 0.0 penalty.
+    Lateness penalty = min(10.0, lateness_min / 60.0)
+    """
+    lateness_seconds = max(0.0, float(actual_arrival_ts - planned_arrival_ts))
+    lateness_min = lateness_seconds / 60.0
+    return min(10.0, round(lateness_min / 60.0, 4))
 
 
 def calculate_demurrage_score(
@@ -41,13 +55,19 @@ def calculate_demurrage_score(
     return 0.0
 
 
-def calculate_moisture_risk(moisture_pct: float, decay_k: Optional[float] = None) -> float:
+def calculate_moisture_risk(
+    moisture_pct: float,
+    decay_k: Optional[float] = None,
+    continuous: bool = False
+) -> float:
     """
     Computes Crop Quality & Moisture Risk Index (M_i), bounded in [0.0, 20.0].
-    Piecewise non-linear formulation:
+    Piecewise formulation:
     - M <= 14.0% -> M_i = 0.0
     - 14.0% < M <= 15.0% -> M_i = 2.0 * (M - 14.0)
-    - 15.0% < M <= 17.0% -> M_i = min(20.0, 2.0 * exp(k * (min(17.0, M) - 14.0)))
+    - 15.0% < M <= 17.0% ->
+        continuous=True:  min(20.0, 2.0 + 2.0 * (exp(k * (capped - 15.0)) - 1.0))
+        continuous=False: min(20.0, 2.0 * exp(k * (capped - 14.0))) [Legacy AC-006]
     """
     if decay_k is None:
         decay_k = get_settings().MANDIQ_MOISTURE_DECAY_K
@@ -57,8 +77,11 @@ def calculate_moisture_risk(moisture_pct: float, decay_k: Optional[float] = None
     elif moisture_pct <= MOISTURE_LINEAR_CEILING_PCT:
         return round(2.0 * (moisture_pct - MOISTURE_BASELINE_PCT), 4)
     else:
-        capped_moisture = min(MOISTURE_ACCEPTANCE_THRESHOLD, moisture_pct)
-        exponential_term = 2.0 * math.exp(decay_k * (capped_moisture - MOISTURE_BASELINE_PCT))
+        capped_moisture = min(MOISTURE_ACCEPTANCE_THRESHOLD, max(0.0, moisture_pct))
+        if continuous:
+            exponential_term = 2.0 + 2.0 * (math.exp(decay_k * (capped_moisture - MOISTURE_LINEAR_CEILING_PCT)) - 1.0)
+        else:
+            exponential_term = 2.0 * math.exp(decay_k * (capped_moisture - MOISTURE_BASELINE_PCT))
         return min(20.0, round(exponential_term, 4))
 
 
@@ -80,7 +103,8 @@ def calculate_dcdq_priority_score(
     alpha: float = 1.0,
     beta: float = 1.0,
     gamma: float = 1.0,
-    lambda_param: float = 1.0
+    lambda_param: float = 1.0,
+    continuous: bool = False
 ) -> float:
     """
     Computes the composite Dynamic Crop-Dehydration and Congestion Queue (DCDQ) Priority Score (S_i)
@@ -91,7 +115,56 @@ def calculate_dcdq_priority_score(
     """
     a_i = calculate_appointment_adherence(planned_arrival_ts, actual_arrival_ts)
     d_i = calculate_demurrage_score(demurrage_score=demurrage_score)
-    m_i = calculate_moisture_risk(moisture_pct)
+    m_i = calculate_moisture_risk(moisture_pct, continuous=continuous)
+    w_i = calculate_wait_bonus(elapsed_wait_minutes)
+
+    total_score = (alpha * a_i) + (beta * d_i) + (gamma * m_i) + (lambda_param * w_i)
+    return round(float(total_score), 4)
+
+
+def calculate_priority_score(
+    planned_arrival_ts: float = 0.0,
+    actual_arrival_ts: float = 0.0,
+    moisture_pct: float = 14.0,
+    elapsed_wait_minutes: float = 0.0,
+    demurrage_score: float = 0.0,
+    decay_k: Optional[float] = None,
+    alpha: float = 1.0,
+    beta: float = 1.0,
+    gamma: float = 1.0,
+    lambda_param: float = 1.0,
+    continuous: bool = True
+) -> float:
+    """
+    Computes the DCDQ priority score with continuous piecewise moisture formulation
+    and non-penalizing early arrival calculation.
+    """
+    if decay_k is None:
+        decay_k = get_settings().MANDIQ_MOISTURE_DECAY_K
+
+    capped_moisture = min(MOISTURE_ACCEPTANCE_THRESHOLD, max(0.0, moisture_pct))
+    if capped_moisture <= MOISTURE_BASELINE_PCT:
+        moisture_score = 0.0
+    elif capped_moisture <= MOISTURE_LINEAR_CEILING_PCT:
+        moisture_score = 2.0 * (capped_moisture - MOISTURE_BASELINE_PCT)
+    else:
+        if continuous:
+            moisture_score = min(
+                20.0,
+                2.0 + 2.0 * (math.exp(decay_k * (capped_moisture - MOISTURE_LINEAR_CEILING_PCT)) - 1.0)
+            )
+        else:
+            moisture_score = min(
+                20.0,
+                2.0 * math.exp(decay_k * (capped_moisture - MOISTURE_BASELINE_PCT))
+            )
+
+    lateness_seconds = max(0.0, float(actual_arrival_ts - planned_arrival_ts))
+    lateness_min = lateness_seconds / 60.0
+
+    a_i = max(0.0, 40.0 - (lateness_min * 0.5))
+    d_i = calculate_demurrage_score(demurrage_score=demurrage_score)
+    m_i = moisture_score
     w_i = calculate_wait_bonus(elapsed_wait_minutes)
 
     total_score = (alpha * a_i) + (beta * d_i) + (gamma * m_i) + (lambda_param * w_i)

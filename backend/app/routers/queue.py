@@ -17,6 +17,22 @@ router = APIRouter(prefix="/queue", tags=["DCDQ Priority Queue"])
 
 
 @router.get(
+    "/state",
+    response_model=QueueListResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List active mandi priority queue state via query param (AC-006)"
+)
+def get_queue_state(
+    mandi_id: int = 1,
+    db: Session = Depends(get_db)
+) -> QueueListResponse:
+    """
+    Retrieves the full active vehicle queue for the specified mandi via query parameter.
+    """
+    return get_mandi_queue_list(db=db, mandi_id=mandi_id)
+
+
+@router.get(
     "/{mandi_id}",
     response_model=QueueListResponse,
     status_code=status.HTTP_200_OK,

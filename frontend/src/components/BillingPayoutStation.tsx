@@ -298,7 +298,7 @@ export function BillingPayoutStation({
           setPayoutResult(data);
           setFeedback({
             type: 'success',
-            message: 'AC-009 Dual-Signature DBT Payout Staged & Authorized!',
+            message: 'Dual-Signature DBT Payout Staged & Authorized!',
             details: {
               Status: data.status,
               Transaction: data.transaction_id,
@@ -403,29 +403,29 @@ export function BillingPayoutStation({
   return (
     <div className="space-y-6">
       {/* Station Header */}
-      <div className="bg-slate-800/60 border border-slate-700/80 rounded-2xl p-6 backdrop-blur shadow-xl">
+      <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-2xl p-6 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <div className="inline-flex items-center space-x-2 text-xs font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-950/60 border border-emerald-800/50 px-3 py-1 rounded-md mb-2">
+            <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-md mb-2">
               <Receipt className="w-3.5 h-3.5" />
-              <span>Phase 5 — J-Form Joint-Sale Billing & Dual-Signature DBT Payout</span>
+              <span>Billing & DBT Payment Disbursal</span>
             </div>
-            <h2 className="text-2xl font-bold text-white tracking-tight">
+            <h2 className="text-2xl font-black text-emerald-950 tracking-tight">
               Settlement & Payout Accounting Terminal
             </h2>
-            <p className="text-sm text-slate-400 mt-1 max-w-3xl">
+            <p className="text-sm text-slate-600 mt-1 max-w-3xl">
               Generates legally binding digital J-Form joint receipts applying authoritative Agmarknet MSP.
               Requires dual cryptographic HMAC signatures (Inspector + Operator) before releasing DBT funds to farmer bank accounts.
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
-            <div className="bg-slate-900/80 border border-slate-800 px-4 py-2.5 rounded-xl text-right">
-              <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+            <div className="bg-white border border-emerald-200 shadow-xs px-4 py-2.5 rounded-xl text-right">
+              <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
                 Wheat MSP Baseline
               </div>
-              <div className="text-lg font-bold text-emerald-400">
-                ₹2,275.00 <span className="text-xs text-slate-400 font-normal">/ quintal</span>
+              <div className="text-lg font-black text-emerald-800">
+                ₹2,275.00 <span className="text-xs text-slate-500 font-normal">/ quintal</span>
               </div>
             </div>
           </div>
@@ -435,32 +435,32 @@ export function BillingPayoutStation({
       {/* Grid: J-Form Generator and Dual-Signature Payout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Step 1: J-Form Joint-Sale Billing Generator */}
-        <div className="bg-slate-800/40 border border-slate-700/70 rounded-2xl p-6 flex flex-col justify-between shadow-lg">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between shadow-sm">
           <div>
-            <div className="flex items-center space-x-2.5 mb-4 border-b border-slate-700/60 pb-3">
-              <FileText className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-base font-bold text-white">
+            <div className="flex items-center space-x-2.5 mb-4 border-b border-slate-200 pb-3">
+              <FileText className="w-5 h-5 text-emerald-700" />
+              <h3 className="text-base font-extrabold text-slate-900">
                 1. Digital J-Form Joint-Sale Receipt
               </h3>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Procurement Transaction ID
                 </label>
                 <input
                   type="text"
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 transition"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
                   placeholder="e.g. TXN-DEMO-1001"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Procurement Rate (₹/qt)
                   </label>
                   <input
@@ -469,13 +469,13 @@ export function BillingPayoutStation({
                     min="1"
                     value={ratePerQt}
                     onChange={(e) => setRatePerQt(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 transition"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block">Government MSP rate</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">Government MSP rate</span>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Deductions (₹ INR)
                   </label>
                   <input
@@ -484,35 +484,35 @@ export function BillingPayoutStation({
                     min="0"
                     value={deductionsInr}
                     onChange={(e) => setDeductionsInr(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2 text-sm font-mono text-white focus:outline-none focus:border-emerald-500 transition"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block">Moisture or handling cut</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">Moisture or handling cut</span>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                   Inspector Remarks
                 </label>
                 <textarea
                   rows={2}
                   value={inspectorNotes}
                   onChange={(e) => setInspectorNotes(e.target.value)}
-                  className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 transition resize-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-xs text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition resize-none"
                 />
               </div>
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-700/60">
+          <div className="mt-6 pt-4 border-t border-slate-200">
             <button
               onClick={handleGenerateJForm}
               disabled={isGeneratingBill || !transactionId.trim()}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-slate-950 font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-emerald-600/20"
+              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-md shadow-emerald-700/20 cursor-pointer"
             >
               {isGeneratingBill ? (
                 <>
-                  <span className="w-2 h-2 rounded-full bg-slate-950 animate-ping" />
+                  <span className="w-2 h-2 rounded-full bg-white animate-ping" />
                   <span>Computing J-Form Invoice...</span>
                 </>
               ) : (
@@ -526,34 +526,34 @@ export function BillingPayoutStation({
         </div>
 
         {/* Step 2: Dual-Signature DBT Payout Staging */}
-        <div className="bg-slate-800/40 border border-slate-700/70 rounded-2xl p-6 flex flex-col justify-between shadow-lg">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between shadow-sm">
           <div>
-            <div className="flex items-center space-x-2.5 mb-4 border-b border-slate-700/60 pb-3">
-              <ShieldCheck className="w-5 h-5 text-indigo-400" />
-              <h3 className="text-base font-bold text-white">
+            <div className="flex items-center space-x-2.5 mb-4 border-b border-slate-200 pb-3">
+              <ShieldCheck className="w-5 h-5 text-indigo-600" />
+              <h3 className="text-base font-extrabold text-slate-900">
                 2. Dual-Signature Cryptographic DBT Payout
               </h3>
             </div>
 
-            <p className="text-xs text-slate-400 mb-4">
-              Per AC-009, DBT funds disbursement requires independent cryptographic signatures from both the Quality Inspector and APMC Operator.
+            <p className="text-xs text-slate-600 mb-4">
+              DBT funds disbursement requires independent cryptographic signatures from both the Quality Inspector and APMC Operator.
             </p>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Inspector ID
                   </label>
                   <input
                     type="number"
                     value={inspectorId}
                     onChange={(e) => setInspectorId(parseInt(e.target.value) || 101)}
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Inspector HMAC-SHA256
                   </label>
                   <input
@@ -561,25 +561,25 @@ export function BillingPayoutStation({
                     value={inspectorSig}
                     onChange={(e) => setInspectorSig(e.target.value)}
                     placeholder="Enter or auto-verify HMAC"
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Operator ID
                   </label>
                   <input
                     type="number"
                     value={operatorId}
                     onChange={(e) => setOperatorId(parseInt(e.target.value) || 202)}
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-indigo-500"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Operator HMAC-SHA256
                   </label>
                   <input
@@ -587,25 +587,25 @@ export function BillingPayoutStation({
                     value={operatorSig}
                     onChange={(e) => setOperatorSig(e.target.value)}
                     placeholder="Enter or auto-verify HMAC"
-                    className="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
-              <div className="bg-slate-900/70 border border-slate-800 rounded-xl p-3 flex items-center justify-between text-xs">
-                <span className="text-slate-400">Target Invoice Amount:</span>
-                <span className="text-white font-mono font-bold">
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                <span className="text-indigo-900 font-semibold">Target Invoice Amount:</span>
+                <span className="text-indigo-950 font-mono font-black">
                   {invoice ? `₹${invoice.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Generate J-Form First'}
                 </span>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-700/60 space-y-2">
+          <div className="mt-6 pt-4 border-t border-slate-200 space-y-2">
             <button
               onClick={handleStagePayout}
               disabled={isStagingPayout || !invoice}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-lg shadow-indigo-600/20"
+              className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-md shadow-indigo-600/20 cursor-pointer"
             >
               {isStagingPayout ? (
                 <>
@@ -623,9 +623,9 @@ export function BillingPayoutStation({
             <button
               onClick={handleTriggerMockDbt}
               disabled={isCallingDbt}
-              className="w-full bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-2 px-4 rounded-xl text-xs transition flex items-center justify-center space-x-2 border border-slate-700"
+              className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition flex items-center justify-center space-x-2 border border-slate-300 cursor-pointer"
             >
-              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+              <Building2 className="w-3.5 h-3.5 text-emerald-700" />
               <span>Simulate PFMS / NPCI Aadhaar Settlement Direct Rail</span>
             </button>
           </div>
@@ -634,49 +634,49 @@ export function BillingPayoutStation({
 
       {/* J-Form Display Preview Card if generated */}
       {invoice && (
-        <div className="bg-slate-800/60 border-2 border-emerald-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-700 pb-4">
+        <div className="bg-white border-2 border-emerald-600/40 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-800">
                 <Receipt className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
                   <span>Official Form J — Sale Intimation & Receipt</span>
-                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 text-[10px] font-bold">
+                  <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
                     {invoice.current_state}
                   </span>
                 </h3>
-                <p className="text-xs text-slate-400">
-                  Invoice ID: <span className="font-mono text-emerald-300">{invoice.invoice_id}</span> | Txn: <span className="font-mono text-slate-300">{invoice.transaction_id}</span>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Invoice ID: <span className="font-mono font-bold text-emerald-800">{invoice.invoice_id}</span> | Txn: <span className="font-mono text-slate-600">{invoice.transaction_id}</span>
                 </p>
               </div>
             </div>
 
             <div className="text-right">
-              <div className="text-xs text-slate-400">Total Net Amount Payable</div>
-              <div className="text-2xl font-black text-emerald-400 font-mono">
+              <div className="text-xs text-slate-500 font-semibold">Total Net Amount Payable</div>
+              <div className="text-2xl font-black text-emerald-800 font-mono">
                 ₹{invoice.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-              <div className="text-slate-400 text-[10px] uppercase">Farmer Name</div>
-              <div className="text-white font-semibold mt-1 truncate">{invoice.farmer_name}</div>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="text-slate-500 text-[10px] uppercase font-bold">Farmer Name</div>
+              <div className="text-slate-900 font-bold mt-1 truncate">{invoice.farmer_name}</div>
             </div>
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-              <div className="text-slate-400 text-[10px] uppercase">Commodity / Net Qty</div>
-              <div className="text-white font-semibold mt-1">{invoice.crop_type} ({invoice.net_weight_qt} qt)</div>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="text-slate-500 text-[10px] uppercase font-bold">Commodity / Net Qty</div>
+              <div className="text-slate-900 font-bold mt-1">{invoice.crop_type} ({invoice.net_weight_qt} qt)</div>
             </div>
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-              <div className="text-slate-400 text-[10px] uppercase">Rate Per Quintal</div>
-              <div className="text-white font-semibold mt-1">₹{invoice.rate_per_qt.toFixed(2)}</div>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="text-slate-500 text-[10px] uppercase font-bold">Rate Per Quintal</div>
+              <div className="text-slate-900 font-bold mt-1">₹{invoice.rate_per_qt.toFixed(2)}</div>
             </div>
-            <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800">
-              <div className="text-slate-400 text-[10px] uppercase">Total Deductions</div>
-              <div className="text-rose-400 font-semibold mt-1">-₹{invoice.deductions_inr.toFixed(2)}</div>
+            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="text-slate-500 text-[10px] uppercase font-bold">Total Deductions</div>
+              <div className="text-rose-700 font-bold mt-1">-₹{invoice.deductions_inr.toFixed(2)}</div>
             </div>
           </div>
         </div>
@@ -684,28 +684,28 @@ export function BillingPayoutStation({
 
       {/* Payout & Settlement Receipt Card */}
       {(payoutResult || mockDbtResult) && (
-        <div className="bg-slate-800/40 border border-indigo-500/40 rounded-2xl p-6 shadow-xl space-y-3">
-          <div className="flex items-center space-x-2 text-indigo-400">
+        <div className="bg-white border border-indigo-200 rounded-2xl p-6 shadow-sm space-y-3">
+          <div className="flex items-center space-x-2 text-indigo-700">
             <Wallet className="w-5 h-5" />
-            <h4 className="text-sm font-bold text-white">Government DBT Settlement Confirmation</h4>
+            <h4 className="text-sm font-extrabold text-slate-900">Government DBT Settlement Confirmation</h4>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
             {payoutResult && (
-              <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800 col-span-2">
-                <div className="text-slate-400 text-[10px] uppercase mb-1">Cryptographic Payout Block Hash</div>
-                <div className="text-indigo-300 text-[11px] break-all">{payoutResult.payout_block_hash}</div>
-                <div className="mt-2 text-[10px] text-slate-500">
-                  Status: <span className="text-emerald-400 font-bold">{payoutResult.status}</span> | State: {payoutResult.current_state}
+              <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-200 col-span-2">
+                <div className="text-indigo-900 text-[10px] uppercase font-bold mb-1">Cryptographic Payout Block Hash</div>
+                <div className="text-indigo-950 text-[11px] font-bold break-all">{payoutResult.payout_block_hash}</div>
+                <div className="mt-2 text-[10px] text-slate-600">
+                  Status: <span className="text-emerald-800 font-bold">{payoutResult.status}</span> | State: {payoutResult.current_state}
                 </div>
               </div>
             )}
 
             {mockDbtResult && (
-              <div className="bg-slate-900/90 p-3.5 rounded-xl border border-slate-800">
-                <div className="text-slate-400 text-[10px] uppercase mb-1">PFMS Aadhaar Reference</div>
-                <div className="text-emerald-400 font-bold text-sm">{mockDbtResult.payout_reference_id}</div>
-                <div className="mt-2 text-[10px] text-slate-500">
+              <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200">
+                <div className="text-emerald-900 text-[10px] uppercase font-bold mb-1">PFMS Aadhaar Reference</div>
+                <div className="text-emerald-800 font-black text-sm">{mockDbtResult.payout_reference_id}</div>
+                <div className="mt-2 text-[10px] text-slate-600">
                   Settlement Rail: {mockDbtResult.settlement_rail}
                 </div>
               </div>
@@ -717,30 +717,30 @@ export function BillingPayoutStation({
       {/* Feedback Toast / Alert */}
       {feedback && (
         <div
-          className={`p-4 rounded-xl border text-sm flex items-start justify-between ${
+          className={`p-4 rounded-xl border text-sm flex items-start justify-between shadow-xs ${
             feedback.type === 'success'
-              ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
               : feedback.type === 'warning'
-              ? 'bg-amber-950/40 border-amber-800/50 text-amber-300'
-              : 'bg-rose-950/40 border-rose-800/50 text-rose-300'
+              ? 'bg-amber-50 border-amber-300 text-amber-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
           }`}
         >
           <div className="space-y-1">
             <div className="flex items-center space-x-2">
               {feedback.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0" />
               ) : (
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0" />
               )}
-              <span className="font-semibold">{feedback.message}</span>
+              <span className="font-bold">{feedback.message}</span>
             </div>
 
             {feedback.details && (
               <div className="mt-2 text-xs font-mono space-y-0.5 opacity-90 pl-6">
                 {Object.entries(feedback.details).map(([key, value]) => (
                   <div key={key}>
-                    <span className="text-slate-400">{key}:</span>{' '}
-                    <span className="text-white font-medium">{String(value)}</span>
+                    <span className="text-slate-600">{key}:</span>{' '}
+                    <span className="text-slate-900 font-bold">{String(value)}</span>
                   </div>
                 ))}
               </div>
@@ -748,7 +748,7 @@ export function BillingPayoutStation({
           </div>
           <button
             onClick={() => setFeedback(null)}
-            className="text-xs text-slate-400 hover:text-white ml-4"
+            className="text-xs text-slate-400 hover:text-slate-700 ml-4 font-bold"
           >
             ✕
           </button>

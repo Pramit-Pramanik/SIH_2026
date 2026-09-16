@@ -12,39 +12,134 @@ from sqlalchemy import func
 from backend.app.models.log import ProcurementLog, VALID_PROCUREMENT_STATES
 from backend.app.models.farmer import Farmer
 
+class TransactionState:
+    SLOT_BOOKED = "SLOT_BOOKED"
+    GATE_ENTRY_VERIFIED = "GATE_ENTRY_VERIFIED"
+    IN_QA_QUEUE = "IN_QA_QUEUE"
+    QUALITY_APPROVED = "QUALITY_APPROVED"
+    QUALITY_REJECTED = "QUALITY_REJECTED"
+    ROUTED_TO_WEIGHBRIDGE = "ROUTED_TO_WEIGHBRIDGE"
+    WEIGHED_GROSS = "WEIGHED_GROSS"
+    WEIGHED_TARE = "WEIGHED_TARE"
+    BILL_GENERATED = "BILL_GENERATED"
+    DBT_PAYMENT_INITIATED = "DBT_PAYMENT_INITIATED"
+    PAYMENT_SETTLED = "PAYMENT_SETTLED"
+    PAYMENT_FAILED = "PAYMENT_FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class InvalidStateTransitionError(Exception):
+    """Raised when an invalid procurement lifecycle state transition is attempted."""
+    def __init__(self, from_state: Optional[str], to_state: str, message: Optional[str] = None):
+        self.from_state = from_state
+        self.to_state = to_state
+        self.message = message or (
+            f"Cannot skip required prior state: transaction is in state '{from_state}'. "
+            f"Transition to '{to_state}' is prohibited by procurement lifecycle."
+        )
+        super().__init__(self.message)
+
+
 # Authoritative Allowed Transitions Graph
 # None indicates initial creation of a transaction log record.
 ALLOWED_TRANSITIONS: Dict[Optional[str], Set[str]] = {
-    None: {"SLOT_BOOKED", "GATE_ENTRY_VERIFIED"},
-    "SLOT_BOOKED": {"SLOT_BOOKED", "GATE_ENTRY_VERIFIED"},
-    "GATE_ENTRY_VERIFIED": {"GATE_ENTRY_VERIFIED", "IN_QA_QUEUE", "QUALITY_APPROVED", "QUALITY_REJECTED", "ROUTED_TO_WEIGHBRIDGE", "WEIGHED_GROSS"},
-    "IN_QA_QUEUE": {"IN_QA_QUEUE", "QUALITY_APPROVED", "QUALITY_REJECTED"},
-    "QUALITY_REJECTED": {"QUALITY_REJECTED", "QUALITY_APPROVED"},  # Allowed only via supervisor override
-    "QUALITY_APPROVED": {"QUALITY_APPROVED", "ROUTED_TO_WEIGHBRIDGE", "WEIGHED_GROSS", "WEIGHED_TARE"},
-    "ROUTED_TO_WEIGHBRIDGE": {"ROUTED_TO_WEIGHBRIDGE", "WEIGHED_GROSS", "WEIGHED_TARE"},
-    "WEIGHED_GROSS": {"WEIGHED_GROSS", "WEIGHED_TARE"},
-    "WEIGHED_TARE": {"WEIGHED_TARE", "BILL_GENERATED"},
-    "BILL_GENERATED": {"BILL_GENERATED", "DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED"},
-    "DBT_PAYMENT_INITIATED": {"DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED", "PAYMENT_FAILED"},
-    "PAYMENT_SETTLED": {"PAYMENT_SETTLED"},  # Terminal state (idempotent self-transitions only)
-    "PAYMENT_FAILED": {"PAYMENT_FAILED", "DBT_PAYMENT_INITIATED"}
+    None: {TransactionState.SLOT_BOOKED, TransactionState.GATE_ENTRY_VERIFIED},
+    TransactionState.SLOT_BOOKED: {TransactionState.SLOT_BOOKED, TransactionState.GATE_ENTRY_VERIFIED, TransactionState.CANCELLED},
+    TransactionState.GATE_ENTRY_VERIFIED: {
+        TransactionState.GATE_ENTRY_VERIFIED,
+        TransactionState.IN_QA_QUEUE,
+        TransactionState.QUALITY_APPROVED,
+        TransactionState.QUALITY_REJECTED,
+        TransactionState.ROUTED_TO_WEIGHBRIDGE,
+        TransactionState.WEIGHED_GROSS,
+        TransactionState.CANCELLED
+    },
+    TransactionState.IN_QA_QUEUE: {
+        TransactionState.IN_QA_QUEUE,
+        TransactionState.QUALITY_APPROVED,
+        TransactionState.QUALITY_REJECTED,
+        TransactionState.CANCELLED
+    },
+    TransactionState.QUALITY_REJECTED: {
+        TransactionState.QUALITY_REJECTED,
+        TransactionState.QUALITY_APPROVED,
+        TransactionState.CANCELLED
+    },  # Allowed only via supervisor override
+    TransactionState.QUALITY_APPROVED: {
+        TransactionState.QUALITY_APPROVED,
+        TransactionState.ROUTED_TO_WEIGHBRIDGE,
+        TransactionState.CANCELLED
+    },
+    TransactionState.ROUTED_TO_WEIGHBRIDGE: {
+        TransactionState.ROUTED_TO_WEIGHBRIDGE,
+        TransactionState.WEIGHED_GROSS,
+        TransactionState.CANCELLED
+    },
+    TransactionState.WEIGHED_GROSS: {
+        TransactionState.WEIGHED_GROSS,
+        TransactionState.WEIGHED_TARE,
+        TransactionState.CANCELLED
+    },
+    TransactionState.WEIGHED_TARE: {
+        TransactionState.WEIGHED_TARE,
+        TransactionState.BILL_GENERATED,
+        TransactionState.CANCELLED
+    },
+    TransactionState.BILL_GENERATED: {
+        TransactionState.BILL_GENERATED,
+        TransactionState.DBT_PAYMENT_INITIATED,
+        TransactionState.CANCELLED
+    },
+    TransactionState.DBT_PAYMENT_INITIATED: {
+        TransactionState.DBT_PAYMENT_INITIATED,
+        TransactionState.PAYMENT_SETTLED,
+        TransactionState.PAYMENT_FAILED
+    },
+    TransactionState.PAYMENT_SETTLED: {TransactionState.PAYMENT_SETTLED},  # Terminal state (idempotent self-transitions only)
+    TransactionState.PAYMENT_FAILED: {TransactionState.PAYMENT_FAILED, TransactionState.DBT_PAYMENT_INITIATED},
+    TransactionState.CANCELLED: {TransactionState.CANCELLED}
 }
 
 # State ranks for linear ordering (detecting backward regressions)
 STATE_RANK: Dict[str, int] = {
-    "SLOT_BOOKED": 10,
-    "GATE_ENTRY_VERIFIED": 20,
-    "IN_QA_QUEUE": 25,
-    "QUALITY_REJECTED": 30,
-    "QUALITY_APPROVED": 30,
-    "ROUTED_TO_WEIGHBRIDGE": 40,
-    "WEIGHED_GROSS": 50,
-    "WEIGHED_TARE": 60,
-    "BILL_GENERATED": 70,
-    "DBT_PAYMENT_INITIATED": 80,
-    "PAYMENT_SETTLED": 90,
-    "PAYMENT_FAILED": 90
+    TransactionState.SLOT_BOOKED: 10,
+    TransactionState.GATE_ENTRY_VERIFIED: 20,
+    TransactionState.IN_QA_QUEUE: 25,
+    TransactionState.QUALITY_REJECTED: 30,
+    TransactionState.QUALITY_APPROVED: 30,
+    TransactionState.ROUTED_TO_WEIGHBRIDGE: 40,
+    TransactionState.WEIGHED_GROSS: 50,
+    TransactionState.WEIGHED_TARE: 60,
+    TransactionState.BILL_GENERATED: 70,
+    TransactionState.DBT_PAYMENT_INITIATED: 80,
+    TransactionState.PAYMENT_SETTLED: 90,
+    TransactionState.PAYMENT_FAILED: 90,
+    TransactionState.CANCELLED: 100
 }
+
+
+def transition_state(
+    from_state: Optional[str],
+    to_state: str,
+    payload_fields: Optional[Dict[str, Any]] = None,
+    farmer: Optional[Farmer] = None,
+    db: Optional[Session] = None,
+    current_log: Optional[ProcurementLog] = None
+) -> str:
+    """
+    Enforces that a state transition is valid and raises InvalidStateTransitionError if it is not.
+    """
+    is_valid, err_msg, _ = validate_lifecycle_transition(
+        from_state=from_state,
+        to_state=to_state,
+        payload_fields=payload_fields,
+        farmer=farmer,
+        db=db,
+        current_log=current_log
+    )
+    if not is_valid:
+        raise InvalidStateTransitionError(from_state, to_state, err_msg)
+    return to_state
 
 
 def can_transition(from_state: Optional[str], to_state: str) -> bool:

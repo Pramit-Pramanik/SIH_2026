@@ -1,19 +1,23 @@
 import { useState, useEffect, FormEvent } from 'react';
 import {
-  UserCheck,
-  Calendar,
-  ShieldCheck,
   QrCode,
   AlertTriangle,
   CheckCircle2,
-  Sparkles,
-  ArrowRight
+  ArrowRight,
+  Plus,
+  Minus,
+  Building2,
+  Check,
+  Receipt
 } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
   getLatestLocalTransaction,
-  markWALRecordSynced
+  markWALRecordSynced,
+  LocalTransactionState
 } from '../db/dexie';
+import { DigitalReceipt } from './DigitalReceipt';
+import { reserveSlot, BookingPayload, OwnershipStatus } from '../services/api';
 
 interface FarmerPortalProps {
   mandiId: number;
@@ -26,24 +30,54 @@ interface FarmerPortalProps {
 interface FarmerProfile {
   farmer_id: number;
   name: string;
-  mobile: string;
+  mobile_number: string;
   land_area_hectares: number;
   registered_crop_type: string;
   production_ceiling_qt: number;
   cumulative_booked_qt: number;
   remaining_ceiling_qt: number;
+  ifsc_code: string;
 }
 
-interface ActivePass {
-  transaction_id: string;
-  slot_id: number;
-  quantity_qt: number;
-  scheduled_date: string;
-  scheduled_time: string;
-  token_signature: string;
-  current_state: string;
-  created_at: string;
+interface MandiItem {
+  mandi_id: number;
+  name: string;
+  district: string;
+  state: string;
+  daily_capacity_qt: number;
+  is_operational: boolean;
 }
+
+interface CropItem {
+  crop_id: number;
+  crop_name: string;
+  crop_code: string;
+  category: string;
+  msp_price_inr: number;
+  optimal_moisture_pct: number;
+  max_moisture_pct: number;
+  is_active: boolean;
+}
+
+interface SlotItem {
+  slot_id: number;
+  mandi_id: number;
+  scheduled_date: string;
+  start_time: string;
+  end_time: string;
+  allocated_capacity_qt: number;
+  booked_capacity_qt: number;
+  remaining_capacity_qt: number;
+}
+
+const MANDI_STAGES = [
+  { id: 'CROP', label: 'फसल / Crop', icon: '🌾', step: 1 },
+  { id: 'SLOT_BOOKED', label: 'टोकन / Token', icon: '🎫', step: 2 },
+  { id: 'GATE_ENTRY_VERIFIED', label: 'गेट / Gate', icon: '🚛', step: 3 },
+  { id: 'QUALITY_ASSAYED', label: 'गुणवत्ता / Quality', icon: '🔬', step: 4 },
+  { id: 'WEIGHMENT_COMPLETED', label: 'वजन / Weight', icon: '⚖️', step: 5 },
+  { id: 'PAYMENT_SETTLED', label: 'भुगतान / Payment', icon: '₹', step: 6 },
+];
 
 export function FarmerPortal({
   mandiId,
@@ -52,434 +86,760 @@ export function FarmerPortal({
   onTransactionCreated,
   activeTxnId,
 }: FarmerPortalProps) {
-  // Demo Farmer State
-  const [profile, setProfile] = useState<FarmerProfile>({
-    farmer_id: 1,
-    name: 'Ramesh Kumar',
-    mobile: '9876543210',
-    land_area_hectares: 2.5,
-    registered_crop_type: 'Wheat (HD-2967)',
-    production_ceiling_qt: 100.0,
-    cumulative_booked_qt: 0.0,
-    remaining_ceiling_qt: 100.0,
-  });
+  // Real API State
+  const [profile, setProfile] = useState<FarmerProfile | null>(null);
+  const [mandis, setMandis] = useState<MandiItem[]>([]);
+  const [crops, setCrops] = useState<CropItem[]>([]);
+  const [slots, setSlots] = useState<SlotItem[]>([]);
 
+  // Selection State
+  const [selectedMandiId, setSelectedMandiId] = useState<number>(mandiId);
+  const [selectedCropId, setSelectedCropId] = useState<number | null>(null);
+  const [selectedSlotId, setSelectedSlotId] = useState<number | null>(null);
+  const [scheduledDate, setScheduledDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
   const [requestedQty, setRequestedQty] = useState<number>(35.0);
-  const [selectedSlotId, setSelectedSlotId] = useState<number>(1);
+
+  // Tenant / Sharecropper Oral Lease State
+  const [ownershipStatus, setOwnershipStatus] = useState<OwnershipStatus>('OWNER');
+  const [landownerName, setLandownerName] = useState<string>('');
+  const [certificateFile, setCertificateFile] = useState<File | null>(null);
+  const [isBonaFideCertified, setIsBonaFideCertified] = useState<boolean>(false);
+
+  // Status & Loading State
+  const [isLoadingProfile, setIsLoadingProfile] = useState(false);
+  const [isLoadingCrops, setIsLoadingCrops] = useState(false);
+  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [activePass, setActivePass] = useState<ActivePass | null>(null);
 
-  // Available hourly slots for the chosen Mandi
-  const availableSlots = [
-    { slot_id: 1, date: '2026-10-20', time: '10:00 - 11:00 AM', capacity_qt: 500, booked_qt: 120 },
-    { slot_id: 2, date: '2026-10-20', time: '11:00 - 12:00 PM', capacity_qt: 500, booked_qt: 280 },
-    { slot_id: 3, date: '2026-10-20', time: '12:00 - 01:00 PM', capacity_qt: 500, booked_qt: 450 },
-  ];
+  // Active Pass & Receipt Modal State
+  const [activePass, setActivePass] = useState<LocalTransactionState | null>(null);
+  const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Hydrate active pass from local Dexie transaction boundary
+  // 1. Fetch Farmer Profile
   useEffect(() => {
-    async function loadSavedPass() {
+    async function loadProfile() {
+      setIsLoadingProfile(true);
       try {
-        const latest = await getLatestLocalTransaction();
-        if (latest && latest.transaction_id && latest.current_state) {
-          setActivePass({
-            transaction_id: latest.transaction_id,
-            slot_id: latest.slot_id || 1,
-            quantity_qt: latest.requested_qty_qt || 35.0,
-            scheduled_date: latest.scheduled_date || '2026-10-20',
-            scheduled_time: latest.scheduled_time || '10:00 - 11:00 AM',
-            token_signature: latest.token_signature || '',
-            current_state: latest.current_state,
-            created_at: new Date(latest.last_updated_ts).toLocaleTimeString(),
-          });
+        const res = await fetch('/api/v1/farmers/profile?farmer_id=1');
+        if (res.ok) {
+          const data: FarmerProfile = await res.json();
+          setProfile(data);
         }
       } catch {
-        // Continue if empty
+        // Handled via null profile state
+      } finally {
+        setIsLoadingProfile(false);
       }
     }
-    loadSavedPass();
+    loadProfile();
   }, []);
 
-  // Refresh active transaction status if online
+  // 2. Fetch Mandis
   useEffect(() => {
-    if (activeTxnId && effectiveOnline) {
-      fetch(`/api/v1/weighbridge/${activeTxnId}`)
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data && activePass) {
-            setActivePass((prev) => (prev ? { ...prev, current_state: data.current_state } : null));
+    async function loadMandis() {
+      try {
+        const res = await fetch('/api/v1/mandis');
+        if (res.ok) {
+          const data: MandiItem[] = await res.json();
+          setMandis(data);
+          if (data.length > 0 && !selectedMandiId) {
+            setSelectedMandiId(data[0].mandi_id);
           }
-        })
-        .catch(() => {
-          // Keep local state on fetch error
-        });
+        }
+      } catch {
+        // Keep empty state
+      }
     }
-  }, [activeTxnId, effectiveOnline, activePass]);
+    loadMandis();
+  }, [selectedMandiId]);
 
+  // 3. Fetch Crops with MSP
+  useEffect(() => {
+    async function loadCrops() {
+      setIsLoadingCrops(true);
+      try {
+        const res = await fetch('/api/v1/crops');
+        if (res.ok) {
+          const data: CropItem[] = await res.json();
+          setCrops(data);
+          if (data.length > 0 && selectedCropId === null) {
+            setSelectedCropId(data[0].crop_id);
+          }
+        }
+      } catch {
+        // Keep empty state
+      } finally {
+        setIsLoadingCrops(false);
+      }
+    }
+    loadCrops();
+  }, [selectedCropId]);
+
+  // 4. Fetch Slots for chosen Mandi and Scheduled Date
+  useEffect(() => {
+    async function loadSlots() {
+      if (!selectedMandiId) return;
+      setIsLoadingSlots(true);
+      try {
+        const res = await fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${scheduledDate}`);
+        if (res.ok) {
+          const data: SlotItem[] = await res.json();
+          setSlots(data);
+          if (data.length > 0) {
+            setSelectedSlotId(data[0].slot_id);
+          } else {
+            setSelectedSlotId(null);
+          }
+        } else {
+          setSlots([]);
+          setSelectedSlotId(null);
+        }
+      } catch {
+        setSlots([]);
+        setSelectedSlotId(null);
+      } finally {
+        setIsLoadingSlots(false);
+      }
+    }
+    loadSlots();
+  }, [selectedMandiId, scheduledDate]);
+
+  // 5. Hydrate active transaction from Dexie
+  const loadSavedPass = async () => {
+    try {
+      const latest = await getLatestLocalTransaction();
+      if (latest && latest.transaction_id) {
+        setActivePass(latest);
+      }
+    } catch {
+      // Keep null
+    }
+  };
+
+  useEffect(() => {
+    loadSavedPass();
+  }, [activeTxnId]);
+
+  // Handle Slot Booking Reservation
   const handleReserveSlot = async (e: FormEvent) => {
     e.preventDefault();
     setFeedback(null);
 
-    // Instant Yield Ceiling validation (AC-001 / AC-005)
-    if (requestedQty <= 0) {
-      setFeedback({ type: 'error', message: 'Requested delivery quantity must be strictly greater than 0 quintals.' });
+    if (!effectiveOnline) {
+      setFeedback({
+        type: 'error',
+        message: 'Real-time slot reservation requires cloud connectivity to verify APMC capacity and generate cryptographic HMAC passes. Please reconnect.',
+      });
       return;
     }
 
-    if (requestedQty > profile.remaining_ceiling_qt) {
+    if (!selectedSlotId) {
+      setFeedback({ type: 'error', message: 'Please select an available procurement time slot.' });
+      return;
+    }
+
+    if (requestedQty <= 0) {
+      setFeedback({ type: 'error', message: 'Delivery quantity must be greater than 0 quintals.' });
+      return;
+    }
+
+    if (profile && requestedQty > profile.remaining_ceiling_qt) {
       setFeedback({
         type: 'error',
-        message: `Yield Ceiling Invariant Violation: Requested ${requestedQty.toFixed(1)} qt exceeds your remaining production ceiling of ${profile.remaining_ceiling_qt.toFixed(1)} qt.`,
+        message: `Yield Ceiling Violation: Requested ${requestedQty.toFixed(1)} qt exceeds remaining ceiling of ${profile.remaining_ceiling_qt.toFixed(1)} qt.`,
       });
       return;
+    }
+
+    if (ownershipStatus === 'TENANT') {
+      if (!landownerName.trim()) {
+        setFeedback({
+          type: 'error',
+          message: 'Tenant Declaration: Please enter the legal Landowner Name.',
+        });
+        return;
+      }
+      if (!isBonaFideCertified) {
+        setFeedback({
+          type: 'error',
+          message: 'Legal Confirmation Required: Please certify that you are the bona fide cultivator under oral lease.',
+        });
+        return;
+      }
     }
 
     setIsSubmitting(true);
-    const chosenSlot = availableSlots.find((s) => s.slot_id === selectedSlotId) || availableSlots[0];
-    const txnId = `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const offlineSig = `OFFLINE_SIG_HMAC_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const chosenCrop = crops.find((c) => c.crop_id === selectedCropId);
+    const chosenSlot = slots.find((s) => s.slot_id === selectedSlotId);
 
     try {
-      // 1. Commit to authoritative local transaction boundary (Dexie WAL + materialized state)
+      const bookingPayload: BookingPayload = {
+        mandi_id: selectedMandiId,
+        slot_id: selectedSlotId,
+        farmer_id: profile?.farmer_id || 1,
+        requested_qty_qt: requestedQty,
+        ownership_status: ownershipStatus,
+        landowner_name: ownershipStatus === 'TENANT' ? landownerName.trim() : undefined,
+        panchayat_certificate_filename: ownershipStatus === 'TENANT' ? (certificateFile?.name || 'panchayat_undertaking.pdf') : undefined,
+        is_bona_fide_certified: ownershipStatus === 'TENANT' ? isBonaFideCertified : undefined,
+      };
+
+      const resData = await reserveSlot(bookingPayload);
+
+      // Commit to local IndexedDB WAL
       const walResult = await executeLocalTransactionMutation({
-        transaction_id: txnId,
-        farmer_id: profile.farmer_id,
-        farmer_name: profile.name,
-        mandi_id: mandiId,
+        transaction_id: resData.transaction_id,
+        farmer_id: resData.farmer_id,
+        farmer_name: profile?.name,
+        mandi_id: resData.mandi_id,
         mutation_type: 'SLOT_RESERVATION',
         target_state: 'SLOT_BOOKED',
         payload: {
-          slot_id: selectedSlotId,
+          slot_id: resData.slot_id,
+          crop_type: chosenCrop ? chosenCrop.crop_name : 'Wheat',
           requested_qty_qt: requestedQty,
-          scheduled_date: chosenSlot.date,
-          scheduled_time: chosenSlot.time,
-          crop_type: profile.registered_crop_type,
+          token_signature: resData.token_signature,
+          scheduled_date: scheduledDate,
+          scheduled_time: chosenSlot ? `${chosenSlot.start_time} - ${chosenSlot.end_time}` : '',
+          rate_per_qt: chosenCrop ? chosenCrop.msp_price_inr : 0,
+          ownership_status: ownershipStatus,
+          landowner_name: ownershipStatus === 'TENANT' ? landownerName.trim() : undefined,
+          panchayat_certificate: ownershipStatus === 'TENANT' ? (certificateFile?.name || 'panchayat_undertaking.pdf') : undefined,
+          is_bona_fide_certified: ownershipStatus === 'TENANT' ? isBonaFideCertified : undefined,
         },
-        hmac_signature: offlineSig,
+        hmac_signature: resData.token_signature,
       });
 
-      let tokenSignature = offlineSig;
-      let isSyncedOnline = false;
-
-      // 2. If online, attempt direct dispatch to server
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/slots/reserve', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              mandi_id: mandiId,
-              farmer_id: profile.farmer_id,
-              slot_id: selectedSlotId,
-              requested_qty_qt: requestedQty,
-            }),
-          });
-
-          if (resp.ok) {
-            const data = await resp.json();
-            tokenSignature = data.token.signature;
-            await markWALRecordSynced(walResult.wal_id);
-            isSyncedOnline = true;
-          }
-        } catch {
-          // Unhandled network crash prevented: WAL already saved locally
-        }
-      }
-
-      const newPass: ActivePass = {
-        transaction_id: txnId,
-        slot_id: selectedSlotId,
-        quantity_qt: requestedQty,
-        scheduled_date: chosenSlot.date,
-        scheduled_time: chosenSlot.time,
-        token_signature: tokenSignature,
-        current_state: isSyncedOnline ? 'SLOT_BOOKED' : 'SLOT_BOOKED (LOCAL WAL)',
-        created_at: new Date().toLocaleTimeString(),
-      };
-
-      setActivePass(newPass);
-      onSlotReserved?.(txnId);
-      onTransactionCreated?.(txnId);
-
-      setProfile((prev) => ({
-        ...prev,
-        cumulative_booked_qt: prev.cumulative_booked_qt + requestedQty,
-        remaining_ceiling_qt: Math.max(0, prev.remaining_ceiling_qt - requestedQty),
-      }));
+      await markWALRecordSynced(walResult.wal_id);
 
       setFeedback({
         type: 'success',
-        message: isSyncedOnline
-          ? `Slot Reserved Successfully! Verified by cloud and committed to local ledger.`
-          : `[LOCAL WAL BOUNDARY] Slot reserved and committed to IndexedDB transactionsWAL. Gate pass active. Will synchronize automatically.`,
+        message: `Appointment Confirmed! Gate Pass #${resData.transaction_id} issued with cryptographic signature.`,
       });
+
+      onSlotReserved?.(resData.transaction_id);
+      onTransactionCreated?.(resData.transaction_id);
+      await loadSavedPass();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Unknown reservation error';
+      const msg = err instanceof Error ? err.message : 'Reservation failed';
       setFeedback({ type: 'error', message: msg });
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const getStageIndex = (state: string) => {
+    switch (state) {
+      case 'SLOT_BOOKED': return 2;
+      case 'GATE_ENTRY_VERIFIED': return 3;
+      case 'QUALITY_ASSAYED': return 4;
+      case 'WEIGHMENT_COMPLETED': return 5;
+      case 'BILL_GENERATED':
+      case 'DBT_PAYMENT_INITIATED':
+      case 'PAYMENT_SETTLED': return 6;
+      default: return 1;
+    }
+  };
+
+  const activeStageIndex = activePass ? getStageIndex(activePass.current_state) : 1;
+
   return (
-    <div className="space-y-6">
-      {/* Top Banner */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-emerald-950/40 via-slate-800/40 to-slate-800/40 border border-emerald-800/30 rounded-2xl p-5">
-        <div>
-          <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-400 mb-1">
-            <UserCheck className="w-4 h-4" />
-            <span>Farmer Self-Service PWA Touchpoint</span>
+    <div className="space-y-6 max-w-4xl mx-auto font-sans">
+      {/* 1. Farmer Greeting Card */}
+      <section className="bg-white border-2 border-emerald-800/20 rounded-2xl p-5 shadow-sm space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#1e5e3a] to-[#004625] flex items-center justify-center text-amber-300 text-2xl shadow-md ring-2 ring-emerald-200 shrink-0">
+              <span>🌾</span>
+            </div>
+            <div className="truncate">
+              <div className="flex items-center space-x-2">
+                <h1 className="text-xl font-black text-emerald-950 truncate">
+                  {profile ? `नमस्ते, ${profile.name}` : 'किसान प्रोफाइल / Farmer Profile'}
+                </h1>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold border border-emerald-300">
+                  सत्यापित / VERIFIED
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 font-medium">
+                {isLoadingProfile
+                  ? 'Loading Kisan profile from backend...'
+                  : profile
+                  ? `Kisan ID: PB-00${profile.farmer_id} • Mob: ${profile.mobile_number}`
+                  : 'No farmer profile loaded'}
+              </p>
+            </div>
           </div>
-          <h2 className="text-xl font-extrabold text-white">Dynamic Slot Booking & Offline Gate Pass</h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Verified e-KYC profile, real-time production ceiling enforcement, and tamper-proof gate tokens.
+
+          <div className="flex items-center gap-2">
+            <div className="text-right">
+              <span className="text-[10px] uppercase font-extrabold text-slate-500 block">Remaining Yield Ceiling</span>
+              <span className="text-base font-black text-emerald-700">
+                {profile ? `${profile.remaining_ceiling_qt.toFixed(1)} / ${profile.production_ceiling_qt.toFixed(1)} Qt` : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Center Location Tag */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2">
+            <Building2 className="w-4 h-4 text-emerald-700" />
+            <span className="font-bold text-slate-800">
+              {mandis.find((m) => m.mandi_id === selectedMandiId)?.name || 'APMC Mandi Procurement Center'}
+            </span>
+          </div>
+          <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold">
+            Yard Operational
+          </span>
+        </div>
+      </section>
+
+      {/* 2. Active Token Card (Stitch Physical Pass Metaphor) */}
+      {activePass && (
+        <section className="bg-white border-2 border-amber-600/40 rounded-2xl shadow-md overflow-hidden">
+          {/* Amber Header Banner */}
+          <div className="bg-[#d97706] text-white px-4 py-2.5 flex items-center justify-between">
+            <div className="flex items-center space-x-2 text-xs font-black tracking-wide uppercase">
+              <span>🎟️ ACTIVE TOKEN • आपका टोकन</span>
+            </div>
+            <span className="text-[11px] bg-black/20 font-bold px-2.5 py-0.5 rounded-full">
+              {activePass.scheduled_date || 'Today'}
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
+                  टोकन संख्या / TOKEN NO.
+                </span>
+                <div className="text-3xl font-black text-[#004625] my-1 font-mono tracking-tight">
+                  #{activePass.transaction_id.slice(-6).toUpperCase()}
+                </div>
+                <div className="text-xs font-semibold text-slate-700 flex items-center flex-wrap gap-1.5">
+                  <span>{activePass.crop_type || 'Wheat'} • {activePass.requested_qty_qt || 35} Quintals</span>
+                  {activePass.payload && (activePass.payload as Record<string, unknown>).ownership_status === 'TENANT' && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                      बटाईदार / Tenant Cultivator
+                    </span>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-500 mt-0.5">
+                  Slot: {activePass.scheduled_time || 'Morning Delivery Window'}
+                </div>
+              </div>
+
+              {/* Scannable APMC QR Pass Tile */}
+              <div className="flex flex-col items-center bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                <QrCode className="w-16 h-16 text-slate-900" />
+                <span className="text-[10px] text-emerald-800 font-extrabold mt-1 tracking-tight">SCAN AT GATE</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 font-bold text-xs border border-emerald-300">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                Status: {activePass.current_state}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => setIsReceiptOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                <span>View J-Form Receipt</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 3. Mandi Process Rail Stepper */}
+      <section className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-2">
+        <div className="flex items-center justify-between text-xs">
+          <span className="font-extrabold text-slate-800 uppercase tracking-wide">
+            मंडी प्रक्रिया / Mandi Process Flow
+          </span>
+          <span className="font-bold text-emerald-700">चरण {activeStageIndex} of 6</span>
+        </div>
+
+        <div className="grid grid-cols-6 gap-1 text-center pt-2">
+          {MANDI_STAGES.map((s) => {
+            const isCompleted = s.step < activeStageIndex;
+            const isCurrent = s.step === activeStageIndex;
+            return (
+              <div key={s.id} className="flex flex-col items-center gap-1">
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold transition shadow-xs ${
+                    isCompleted
+                      ? 'bg-emerald-700 text-white'
+                      : isCurrent
+                      ? 'bg-amber-500 text-white ring-2 ring-amber-300 animate-pulse'
+                      : 'bg-slate-100 text-slate-400'
+                  }`}
+                >
+                  {isCompleted ? <Check className="w-4 h-4" /> : s.icon}
+                </div>
+                <span
+                  className={`text-[10px] truncate w-full font-bold ${
+                    isCurrent ? 'text-amber-700' : isCompleted ? 'text-emerald-900' : 'text-slate-400'
+                  }`}
+                >
+                  {s.label.split(' / ')[0]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 4. Book Token / Delivery Slot Section */}
+      <section className="bg-white border-2 border-emerald-800/20 rounded-2xl p-5 shadow-sm space-y-5">
+        <div>
+          <h2 className="text-xl font-black text-emerald-950">Book Delivery Token / टोकन बुक करें</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            Select your harvest crop, quantity, and preferred time slot for automated gate pass and weighment.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
-          <div className="bg-slate-900/90 border border-slate-800 px-3.5 py-1.5 rounded-xl text-right">
-            <div className="text-[10px] text-slate-400 uppercase font-bold">Remaining Ceiling</div>
-            <div className="text-lg font-black text-emerald-400 font-mono">
-              {profile.remaining_ceiling_qt.toFixed(1)} <span className="text-xs font-normal text-slate-400">qt</span>
-            </div>
+        {feedback && (
+          <div
+            className={`p-3.5 rounded-xl border text-xs flex items-start space-x-2 ${
+              feedback.type === 'success'
+                ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                : 'bg-rose-50 border-rose-300 text-rose-900'
+            }`}
+          >
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+            )}
+            <span className="leading-relaxed">{feedback.message}</span>
           </div>
-        </div>
-      </div>
+        )}
 
-      {/* Two Column Grid: Profile & Booking Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Col: Verified Profile & Land Records (4 cols) */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-5 shadow-lg space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
-              <div className="flex items-center space-x-2">
-                <ShieldCheck className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-sm font-bold text-white">Verified e-KYC Profile</h3>
-              </div>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                UIDAI / AgriStack OK
-              </span>
+        <form onSubmit={handleReserveSlot} className="space-y-5">
+          {/* Step 1: Crop Selection with Official MSP */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                1. Select Crop & MSP / फसल चुनें
+              </label>
+              <span className="text-[11px] text-emerald-700 font-bold">Govt Supported Price</span>
             </div>
 
-            <div className="space-y-2.5 text-xs">
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-400">Farmer Name:</span>
-                <span className="font-semibold text-white">{profile.name}</span>
+            {isLoadingCrops ? (
+              <div className="p-4 text-center text-xs text-slate-500">Loading crops catalog...</div>
+            ) : crops.length === 0 ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                No active crops available in master catalog.
               </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-400">Mobile Number:</span>
-                <span className="font-mono text-slate-300">{profile.mobile}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-400">Land Area:</span>
-                <span className="font-medium text-slate-200">{profile.land_area_hectares.toFixed(2)} Hectares</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-400">Registered Crop:</span>
-                <span className="font-semibold text-emerald-300">{profile.registered_crop_type}</span>
-              </div>
-              <div className="flex justify-between py-1 border-b border-slate-800">
-                <span className="text-slate-400">Total Production Ceiling:</span>
-                <span className="font-mono font-semibold text-white">{profile.production_ceiling_qt.toFixed(1)} qt</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span className="text-slate-400">Cumulative Booked:</span>
-                <span className="font-mono font-semibold text-amber-300">{profile.cumulative_booked_qt.toFixed(1)} qt</span>
-              </div>
-            </div>
-
-            {/* Visual Ceiling Progress Bar */}
-            <div className="pt-2">
-              <div className="flex justify-between text-[11px] mb-1 text-slate-400">
-                <span>Ceiling Utilization</span>
-                <span className="font-mono">
-                  {((profile.cumulative_booked_qt / profile.production_ceiling_qt) * 100).toFixed(0)}%
-                </span>
-              </div>
-              <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
-                <div
-                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      (profile.cumulative_booked_qt / profile.production_ceiling_qt) * 100
-                    )}%`,
-                  }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right Col: Slot Reservation Form (8 cols) */}
-        <div className="lg:col-span-8 space-y-4">
-          <div className="bg-slate-800/50 border border-slate-700/80 rounded-2xl p-6 shadow-lg">
-            <h3 className="text-sm font-bold text-white mb-4 flex items-center space-x-2">
-              <Calendar className="w-4 h-4 text-emerald-400" />
-              <span>Book Arrival Slot (Zero-Wait APMC Gate Admission)</span>
-            </h3>
-
-            <form onSubmit={handleReserveSlot} className="space-y-4">
-              {/* Select Slot */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-2">
-                  Select Procurement Hourly Window:
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  {availableSlots.map((slot) => (
-                    <div
-                      key={slot.slot_id}
-                      onClick={() => setSelectedSlotId(slot.slot_id)}
-                      className={`p-3 rounded-xl border text-xs cursor-pointer transition ${
-                        selectedSlotId === slot.slot_id
-                          ? 'bg-emerald-950/50 border-emerald-500 text-white shadow-md shadow-emerald-500/10'
-                          : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-300'
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                {crops.map((crop) => {
+                  const isSelected = selectedCropId === crop.crop_id;
+                  return (
+                    <button
+                      key={crop.crop_id}
+                      type="button"
+                      onClick={() => setSelectedCropId(crop.crop_id)}
+                      className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col justify-between active:scale-95 ${
+                        isSelected
+                          ? 'border-emerald-700 bg-emerald-50/50 shadow-md ring-2 ring-emerald-600/20'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
                       }`}
                     >
-                      <div className="font-semibold text-white flex items-center justify-between">
-                        <span>{slot.time}</span>
-                        {selectedSlotId === slot.slot_id && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />}
+                      <div>
+                        <div className="text-xl mb-1">🌾</div>
+                        <div className="font-extrabold text-xs text-slate-900 leading-tight">{crop.crop_name}</div>
+                        <div className="text-[10px] text-slate-500">{crop.category}</div>
                       </div>
-                      <div className="text-[11px] text-slate-400 mt-1 font-mono">{slot.date}</div>
-                      <div className="text-[10px] text-slate-500 mt-1">
-                        Cap: {slot.capacity_qt - slot.booked_qt} qt left
+                      <div className="mt-2 pt-1 border-t border-slate-100">
+                        <span className="text-[9px] uppercase font-bold text-slate-400 block">Govt MSP</span>
+                        <span className="text-xs font-black text-emerald-800 font-mono">
+                          ₹{crop.msp_price_inr.toFixed(0)}/Qt
+                        </span>
                       </div>
-                    </div>
-                  ))}
-                </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Step 2: Quantity Stepper & Quick Pills */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                2. Estimated Load / मात्रा (Quintals)
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">No typing required</span>
+            </div>
+
+            {/* Stepper Display */}
+            <div className="flex items-center justify-between bg-slate-50 border-2 border-slate-200 p-3 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setRequestedQty((prev) => Math.max(5, prev - 5))}
+                className="w-12 h-12 rounded-lg bg-white border border-slate-300 flex items-center justify-center text-slate-800 active:scale-95 transition shadow-xs"
+              >
+                <Minus className="w-5 h-5" />
+              </button>
+
+              <div className="text-center">
+                <div className="text-3xl font-black text-[#004625] font-mono leading-none">{requestedQty.toFixed(0)}</div>
+                <span className="text-xs text-slate-500 font-bold">Quintals ({requestedQty * 100} kg)</span>
               </div>
 
-              {/* Delivery Quantity Input */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Delivery Quantity (Quintals):
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="1"
-                      max={profile.remaining_ceiling_qt}
-                      value={requestedQty}
-                      onChange={(e) => setRequestedQty(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-bold text-white font-mono focus:border-emerald-500 focus:outline-none"
-                    />
-                    <span className="absolute right-3 top-2.5 text-xs text-slate-400 font-semibold">qt</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Maximum permissible: {profile.remaining_ceiling_qt.toFixed(1)} qt
-                  </p>
-                </div>
+              <button
+                type="button"
+                onClick={() => setRequestedQty((prev) => prev + 5)}
+                className="w-12 h-12 rounded-lg bg-emerald-700 text-white flex items-center justify-center active:scale-95 transition shadow-xs"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
+            </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                    Anticipated Gross Payout (MSP @ ₹2,275/qt):
-                  </label>
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2.5 text-sm font-mono font-bold text-emerald-400">
-                    ₹{(requestedQty * 2275).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Direct Benefit Transfer (DBT) directly into verified bank account
-                  </p>
-                </div>
-              </div>
-
-              {/* Feedback Alerts */}
-              {feedback && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs flex items-start space-x-2 ${
-                    feedback.type === 'success'
-                      ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-300'
-                      : 'bg-rose-950/40 border-rose-800/50 text-rose-300'
+            {/* Quick Pills */}
+            <div className="grid grid-cols-4 gap-2">
+              {[25, 50, 75, 100].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setRequestedQty(val)}
+                  className={`py-2 rounded-lg text-xs font-extrabold transition border active:scale-95 ${
+                    requestedQty === val
+                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm'
+                      : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  {feedback.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  )}
-                  <span>{feedback.message}</span>
-                </div>
-              )}
+                  {val} Qtl
+                </button>
+              ))}
+            </div>
+          </div>
 
-              {/* Submit Button */}
+          {/* Step 3: Cultivator Ownership Status (Tenant / Sharecropper Support) */}
+          <div className="space-y-3 bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                3. Cultivator Status / काश्तकार श्रेणी
+              </label>
+              <span className="text-[11px] text-emerald-700 font-bold">Land Tenure / भूमि अधिकार</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <button
-                type="submit"
-                disabled={isSubmitting || requestedQty <= 0 || requestedQty > profile.remaining_ceiling_qt}
-                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed text-slate-950 font-black text-xs uppercase tracking-wider py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 flex items-center justify-center space-x-2"
+                type="button"
+                onClick={() => setOwnershipStatus('OWNER')}
+                className={`p-3 rounded-xl border-2 text-left transition flex items-center justify-between cursor-pointer ${
+                  ownershipStatus === 'OWNER'
+                    ? 'border-emerald-700 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium'
+                }`}
               >
-                <span>{isSubmitting ? 'Acquiring Atomic Lock & Reserving...' : 'Confirm Atomic Slot Reservation'}</span>
-                <ArrowRight className="w-4 h-4" />
+                <div>
+                  <div className="text-xs font-black">Owner-Cultivator</div>
+                  <div className="text-[10px] text-slate-500">स्वयं की भूमि (Recorded Landowner)</div>
+                </div>
+                {ownershipStatus === 'OWNER' && <Check className="w-4 h-4 text-emerald-700" />}
               </button>
-            </form>
-          </div>
-        </div>
-      </div>
 
-      {/* Active Offline Cryptographic Gate Pass Card (When generated) */}
-      {activePass && (
-        <div className="bg-slate-800/60 border-2 border-emerald-500/40 rounded-2xl p-6 shadow-2xl space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/80 pb-3">
-            <div className="flex items-center space-x-2">
-              <QrCode className="w-5 h-5 text-emerald-400" />
-              <h3 className="text-sm font-bold text-white">Official Offline Cryptographic Gate Pass</h3>
-            </div>
-            <div className="flex items-center space-x-2">
-              <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
-                {activePass.current_state}
-              </span>
-              <span className="text-xs text-slate-400">{activePass.created_at}</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
-            {/* Mock QR Visual Representation */}
-            <div className="md:col-span-3 flex flex-col items-center justify-center p-3 bg-white rounded-xl shadow-inner">
-              <div className="w-32 h-32 border-4 border-slate-900 p-2 flex flex-col items-center justify-center bg-slate-100 rounded-lg">
-                <QrCode className="w-24 h-24 text-slate-900" />
-              </div>
-              <span className="text-[10px] text-slate-600 font-mono font-bold mt-2">GATE-SCAN READY</span>
-            </div>
-
-            {/* Pass Metadata */}
-            <div className="md:col-span-9 space-y-2 text-xs">
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setOwnershipStatus('TENANT')}
+                className={`p-3 rounded-xl border-2 text-left transition flex items-center justify-between cursor-pointer ${
+                  ownershipStatus === 'TENANT'
+                    ? 'border-emerald-700 bg-emerald-50 text-emerald-950 font-bold shadow-xs'
+                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-medium'
+                }`}
+              >
                 <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Transaction ID</span>
-                  <div className="font-mono font-bold text-emerald-300 mt-0.5">{activePass.transaction_id}</div>
+                  <div className="text-xs font-black">Tenant / Sharecropper</div>
+                  <div className="text-[10px] text-slate-500">बटाईदार / मौखिक पट्टा (Oral Lease)</div>
                 </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Scheduled Date/Time</span>
-                  <div className="text-slate-200 font-medium mt-0.5">
-                    {activePass.scheduled_date} ({activePass.scheduled_time})
-                  </div>
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-400 uppercase font-semibold">Authorized Qty</span>
-                  <div className="font-mono font-bold text-white mt-0.5">{activePass.quantity_qt.toFixed(2)} qt</div>
-                </div>
-              </div>
+                {ownershipStatus === 'TENANT' && <Check className="w-4 h-4 text-emerald-700" />}
+              </button>
+            </div>
 
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-semibold">
-                  HMAC-SHA256 Token Signature (Tamper-Proof)
-                </span>
-                <div className="bg-slate-900 font-mono text-[11px] text-slate-300 p-2 rounded-lg border border-slate-800 break-all select-all mt-1">
-                  {activePass.token_signature}
+            {ownershipStatus === 'TENANT' && (
+              <div className="space-y-3 pt-3 border-t border-slate-200 animate-in fade-in duration-200">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Landowner Name / भू-स्वामी का नाम <span className="text-rose-600">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={landownerName}
+                    onChange={(e) => setLandownerName(e.target.value)}
+                    placeholder="Enter legal landowner name"
+                    className="w-full h-10 bg-white border border-slate-300 rounded-xl px-3 text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-700"
+                    required={ownershipStatus === 'TENANT'}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Panchayat Self-Undertaking Certificate / पंचायत स्व-घोषणा पत्र
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,image/*"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        setCertificateFile(e.target.files[0]);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-600 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-emerald-100 file:text-emerald-800 hover:file:bg-emerald-200 cursor-pointer"
+                  />
+                  <span className="text-[10px] text-slate-500 mt-1 block">
+                    Upload signed Sarpanch / Panchayat certificate or oral lease declaration (PDF or Photo).
+                  </span>
+                </div>
+
+                <div className="flex items-start space-x-2.5 pt-1">
+                  <input
+                    type="checkbox"
+                    id="bona-fide-cert"
+                    checked={isBonaFideCertified}
+                    onChange={(e) => setIsBonaFideCertified(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 text-emerald-700 border-slate-300 rounded focus:ring-emerald-600 cursor-pointer"
+                  />
+                  <label htmlFor="bona-fide-cert" className="text-xs text-slate-800 font-semibold cursor-pointer">
+                    I certify that I am the bona fide cultivator of this crop under oral lease.
+                    <span className="block text-[10px] text-slate-500 font-normal mt-0.5">
+                      मैं प्रमाणित करता हूँ कि मैं मौखिक पट्टे के तहत इस फसल का वास्तविक काश्तकार हूँ।
+                    </span>
+                  </label>
                 </div>
               </div>
+            )}
+          </div>
 
-              <div className="flex items-center space-x-2 text-[11px] text-slate-400 pt-1">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>
-                  Present this QR token at the mandi entry gate. Offline gate scanners verify cryptographic authenticity without live internet connectivity.
-                </span>
-              </div>
+          {/* Step 4: Mandi & Date Selection */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-extrabold text-slate-800 mb-1">Target Mandi Yard / मंडी</label>
+              <select
+                value={selectedMandiId}
+                onChange={(e) => setSelectedMandiId(Number(e.target.value))}
+                className="w-full h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
+              >
+                {mandis.map((m) => (
+                  <option key={m.mandi_id} value={m.mandi_id}>
+                    {m.name} ({m.district})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-extrabold text-slate-800 mb-1">Scheduled Date / दिनांक</label>
+              <input
+                type="date"
+                value={scheduledDate}
+                onChange={(e) => setScheduledDate(e.target.value)}
+                className="w-full h-11 bg-slate-50 border border-slate-300 rounded-xl px-3 text-xs font-bold text-slate-800 focus:outline-none focus:border-emerald-700"
+              />
             </div>
           </div>
-        </div>
+
+          {/* Step 5: Available Procurement Slots */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
+                5. Select Time Slot / समय स्लॉट
+              </label>
+              <span className="text-[11px] text-slate-500 font-medium">Real APMC Hourly Capacity</span>
+            </div>
+
+            {isLoadingSlots ? (
+              <div className="p-4 text-center text-xs text-slate-500">Loading slots...</div>
+            ) : slots.length === 0 ? (
+              <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
+                No slots available for the selected date and mandi.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                {slots.map((s) => {
+                  const isSelected = selectedSlotId === s.slot_id;
+                  const isFull = s.remaining_capacity_qt < requestedQty;
+                  return (
+                    <button
+                      key={s.slot_id}
+                      type="button"
+                      disabled={isFull}
+                      onClick={() => setSelectedSlotId(s.slot_id)}
+                      className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col justify-between ${
+                        isFull
+                          ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed'
+                          : isSelected
+                          ? 'border-emerald-700 bg-emerald-50/50 shadow-md ring-2 ring-emerald-600/20'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-slate-900">
+                          {s.start_time} - {s.end_time}
+                        </span>
+                        {isSelected && <Check className="w-4 h-4 text-emerald-700" />}
+                      </div>
+                      <div className="mt-2 text-[11px] font-bold text-emerald-800 font-mono">
+                        {s.remaining_capacity_qt.toFixed(0)} Qt capacity left
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isSubmitting || slots.length === 0}
+            className="w-full h-14 min-h-[56px] rounded-xl bg-gradient-to-r from-[#004625] via-[#1e5e3a] to-[#257347] hover:brightness-105 active:scale-[0.98] transition-all text-white font-extrabold text-base flex items-center justify-between px-5 shadow-lg shadow-emerald-900/20 disabled:opacity-50"
+          >
+            <span>{isSubmitting ? 'Confirming with APMC...' : 'Reserve Slot & Generate Gate Pass'}</span>
+            <ArrowRight className="w-5 h-5 text-amber-200" />
+          </button>
+        </form>
+      </section>
+
+      {/* Digital Receipt Modal */}
+      {isReceiptOpen && activePass && (
+        <DigitalReceipt
+          data={{
+            transaction_id: activePass.transaction_id,
+            farmer_id: activePass.farmer_id,
+            farmer_name: profile?.name || `Farmer #${activePass.farmer_id}`,
+            mandi_id: activePass.mandi_id,
+            mandi_name: mandis.find((m) => m.mandi_id === activePass.mandi_id)?.name || `Mandi #${activePass.mandi_id}`,
+            crop_type: activePass.crop_type,
+            scheduled_date: activePass.scheduled_date,
+            scheduled_time: activePass.scheduled_time,
+            net_weight_qt: activePass.net_weight_qt,
+            gross_weight_qt: activePass.gross_weight_qt,
+            tare_weight_qt: activePass.tare_weight_qt,
+            rate_per_qt: activePass.rate_per_qt,
+            gross_amount_inr: activePass.gross_amount_inr,
+            deductions_inr: activePass.deductions_inr,
+            invoice_amount_inr: activePass.invoice_amount_inr,
+            invoice_id: activePass.invoice_id,
+            payout_block_hash: activePass.payout_block_hash,
+            dbt_reference_id: activePass.dbt_reference_id,
+            token_signature: activePass.token_signature,
+            current_state: activePass.current_state,
+            sync_status: activePass.sync_status || 'SYNCED',
+          }}
+          onClose={() => setIsReceiptOpen(false)}
+        />
       )}
     </div>
   );

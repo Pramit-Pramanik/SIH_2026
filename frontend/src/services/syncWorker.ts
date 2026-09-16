@@ -1,5 +1,5 @@
 import {
-  getPendingWALRecords,
+  getEligiblePendingWALRecords,
   markWALRecordSynced,
   markWALRecordFailed,
   LocalTransactionWAL
@@ -36,10 +36,10 @@ async function compressWithGzip(uint8Array: Uint8Array): Promise<{ data: Uint8Ar
 }
 
 /**
- * Synchronizes all pending IndexedDB WAL records with the cloud server.
+ * Synchronizes all eligible pending IndexedDB WAL records with the cloud server.
  */
 export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<SyncResult> {
-  const pending = await getPendingWALRecords();
+  const pending = await getEligiblePendingWALRecords();
   if (pending.length === 0) {
     return { success: true, syncedCount: 0, totalPending: 0 };
   }
@@ -82,6 +82,12 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
     'Accept': 'application/json'
   };
 
+  // Attach auth token if available in local session
+  const token = localStorage.getItem('mandiq_token');
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   if (isCompressed) {
     headers['Content-Type'] = 'application/octet-stream';
     headers['Content-Encoding'] = 'gzip';
@@ -100,9 +106,10 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
 
     if (!response.ok) {
       const errorText = await response.text();
+      const isTransient = response.status >= 500;
       for (const rec of pending) {
         if (rec.id !== undefined) {
-          await markWALRecordFailed(rec.id, `Server HTTP ${response.status}: ${errorText}`);
+          await markWALRecordFailed(rec.id, `Server HTTP ${response.status}: ${errorText}`, isTransient);
         }
       }
       return {
@@ -114,7 +121,7 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
     }
 
     const resultData = await response.json();
-    const resultMap = new Map<string, { status: string; message?: string }>();
+    const resultMap = new Map<string, { status: string; message?: string; server_receive_sequence?: number }>();
     if (Array.isArray(resultData.results)) {
       for (const r of resultData.results) {
         resultMap.set(r.client_mutation_id, r);
@@ -126,11 +133,12 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
       if (rec.id === undefined) continue;
       const res = resultMap.get(rec.client_mutation_id);
       if (res && (res.status === 'SYNCED' || res.status === 'CONFLICT_RESOLVED' || res.status === 'IGNORED_DUPLICATE')) {
-        await markWALRecordSynced(rec.id);
+        await markWALRecordSynced(rec.id, undefined, res.server_receive_sequence);
         syncedCount++;
       } else {
         const errMsg = res?.message || 'Sync rejected by server';
-        await markWALRecordFailed(rec.id, errMsg);
+        // Domain rejections from backend are permanent
+        await markWALRecordFailed(rec.id, errMsg, false);
       }
     }
 
@@ -141,9 +149,10 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    // Network/fetch errors are transient (disconnect, timeout)
     for (const rec of pending) {
       if (rec.id !== undefined) {
-        await markWALRecordFailed(rec.id, `Network/fetch error: ${message}`);
+        await markWALRecordFailed(rec.id, `Network/fetch error: ${message}`, true);
       }
     }
     return {
@@ -156,7 +165,7 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
 }
 
 /**
- * Initializes network listener for automatic reconnect synchronization.
+ * Initializes network listener and periodic sync interval for background WAL synchronization.
  * Returns an unmount/cleanup function.
  */
 export function initSyncWorker(
@@ -164,8 +173,8 @@ export function initSyncWorker(
 ): () => void {
   let isSyncing = false;
 
-  const handleOnline = async () => {
-    if (isSyncing) return;
+  const triggerSync = async () => {
+    if (isSyncing || !navigator.onLine) return;
     isSyncing = true;
     onSyncStatusChange?.(true);
 
@@ -179,9 +188,21 @@ export function initSyncWorker(
     }
   };
 
+  const handleOnline = () => {
+    triggerSync();
+  };
+
   window.addEventListener('online', handleOnline);
+
+  // Periodic sync attempt every 30 seconds if online
+  const intervalId = setInterval(() => {
+    if (navigator.onLine) {
+      triggerSync();
+    }
+  }, 30000);
 
   return () => {
     window.removeEventListener('online', handleOnline);
+    clearInterval(intervalId);
   };
 }
