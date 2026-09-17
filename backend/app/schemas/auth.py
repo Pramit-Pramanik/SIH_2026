@@ -8,6 +8,43 @@ class UserLoginRequest(BaseModel):
     password: str = Field(..., description="Plaintext password")
 
 
+class MobileOtpRequest(BaseModel):
+    """Payload for initiating mobile OTP login."""
+    mobile_number: str = Field(..., min_length=10, max_length=15, description="10-digit Indian mobile number")
+    role: str = Field(default="FARMER", description="Target portal role: FARMER, TRADER, or OFFICIAL")
+
+
+class MobileOtpResponse(BaseModel):
+    """Response returned upon OTP dispatch."""
+    status: str = Field(default="SUCCESS")
+    message: str = Field(..., description="User-facing status message")
+    mobile_number: str
+    otp_demo: str = Field(..., description="Pre-filled demo OTP for presentation convenience")
+    expires_in_seconds: int = Field(default=30)
+    linked_pass: Optional[dict] = Field(None, description="Linked Aadhaar & Mandi Pass details if found")
+
+
+class VerifyOtpRequest(BaseModel):
+    """Payload for verifying mobile OTP."""
+    mobile_number: str = Field(..., min_length=10, max_length=15)
+    otp: str = Field(..., min_length=4, max_length=8)
+    role: str = Field(default="FARMER")
+
+
+class FarmerMobileLookupResponse(BaseModel):
+    """Linked farmer profile and pass details for instant pre-fill."""
+    found: bool
+    farmer_id: Optional[int] = None
+    name: Optional[str] = None
+    name_hi: Optional[str] = None
+    mandi_pass_id: Optional[str] = None
+    mobile_number: str
+    aadhaar_masked: Optional[str] = None
+    land_area_hectares: Optional[float] = None
+    registered_crop_type: Optional[str] = None
+    mandi_name: Optional[str] = None
+
+
 class TokenResponse(BaseModel):
     """OAuth2 / JWT Bearer access token response."""
     access_token: str = Field(..., description="Cryptographically signed JWT access token")

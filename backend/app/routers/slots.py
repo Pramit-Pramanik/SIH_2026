@@ -14,7 +14,11 @@ from backend.app.schemas.slot import (
     SlotReservationResponse,
     SlotAvailabilityResponse
 )
-from backend.app.services.reservation_service import reserve_slot_atomic, get_slot_availability
+from backend.app.services.reservation_service import (
+    reserve_slot_atomic,
+    get_slot_availability,
+    cancel_slot_reservation
+)
 
 router = APIRouter(prefix="/slots", tags=["Procurement Slots"])
 
@@ -36,6 +40,35 @@ def list_slots(
         ProcurementSlot.scheduled_date == target_date
     ).order_by(ProcurementSlot.start_time.asc()).all()
 
+    # Dynamic Showcase Auto-Provisioning:
+    # If no slots exist for the target date, dynamically provision standard operational slots
+    if not slots:
+        from datetime import time
+        standard_hours = [9, 10, 11, 12, 14, 15, 16]
+        for hour in standard_hours:
+            new_slot = ProcurementSlot(
+                mandi_id=mandi_id,
+                scheduled_date=target_date,
+                start_time=time(hour, 0),
+                end_time=time(hour + 1, 0),
+                allocated_capacity_qt=500.0,
+                booked_capacity_qt=0.0,
+                version=1
+            )
+            db.add(new_slot)
+        try:
+            db.commit()
+            slots = db.query(ProcurementSlot).filter(
+                ProcurementSlot.mandi_id == mandi_id,
+                ProcurementSlot.scheduled_date == target_date
+            ).order_by(ProcurementSlot.start_time.asc()).all()
+        except Exception:
+            db.rollback()
+            slots = db.query(ProcurementSlot).filter(
+                ProcurementSlot.mandi_id == mandi_id,
+                ProcurementSlot.scheduled_date == target_date
+            ).order_by(ProcurementSlot.start_time.asc()).all()
+
     result = []
     for slot in slots:
         allocated = float(slot.allocated_capacity_qt)
@@ -54,6 +87,20 @@ def list_slots(
             )
         )
     return result
+
+
+@router.get(
+    "/mandi/{mandi_id}/date/{scheduled_date}",
+    response_model=List[SlotAvailabilityResponse],
+    summary="List Procurement Slots by Mandi and Date",
+    description="Retrieves available hourly procurement slots for a specific mandi and scheduled date via path parameters."
+)
+def list_slots_by_path(
+    mandi_id: int,
+    scheduled_date: date,
+    db: Session = Depends(get_db)
+) -> List[SlotAvailabilityResponse]:
+    return list_slots(mandi_id=mandi_id, scheduled_date=scheduled_date, db=db)
 
 
 @router.get(
@@ -87,3 +134,22 @@ def reserve_slot(
         farmer_id=payload.farmer_id,
         requested_qty_qt=payload.requested_qty_qt
     )
+
+
+@router.post(
+    "/cancel",
+    summary="Cancel Slot Reservation",
+    description="Cancels an unverified procurement slot appointment, restoring hourly capacity and farmer ceiling."
+)
+def cancel_reservation(
+    payload: dict,
+    db: Session = Depends(get_db)
+) -> dict:
+    txn_id = payload.get("transaction_id")
+    if not txn_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="transaction_id is required"
+        )
+    return cancel_slot_reservation(db=db, transaction_id=txn_id)
+

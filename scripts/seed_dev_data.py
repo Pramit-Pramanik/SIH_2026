@@ -21,7 +21,8 @@ from backend.app.models.farmer import Farmer
 from backend.app.models.slot import ProcurementSlot
 from backend.app.models.crop import Crop
 from backend.app.models.user import User
-from backend.app.core.security import hash_password
+from backend.app.models.log import ProcurementLog
+from backend.app.core.security import hash_password, generate_booking_signature
 
 
 def sha256_hex(val: str) -> str:
@@ -134,9 +135,9 @@ def seed_database() -> None:
                 "mobile_number": "9876543210",
                 "bank_account_hash": sha256_hex("BANK_ACC_RAMESH_2026"),
                 "ifsc_code": "SBIN0001040",
-                "land_area_hectares": 2.50,
+                "land_area_hectares": 12.50,
                 "registered_crop_type": "Wheat (HD-2967)",
-                "production_ceiling_qt": 100.00
+                "production_ceiling_qt": 600.00
             },
             {
                 "farmer_id": 2,
@@ -145,9 +146,9 @@ def seed_database() -> None:
                 "mobile_number": "9876543211",
                 "bank_account_hash": sha256_hex("BANK_ACC_BALVINDER_2026"),
                 "ifsc_code": "SBIN0001042",
-                "land_area_hectares": 4.00,
+                "land_area_hectares": 8.00,
                 "registered_crop_type": "Wheat (HD-2967)",
-                "production_ceiling_qt": 160.00
+                "production_ceiling_qt": 350.00
             },
             {
                 "farmer_id": 3,
@@ -156,9 +157,9 @@ def seed_database() -> None:
                 "mobile_number": "9876543212",
                 "bank_account_hash": sha256_hex("BANK_ACC_SURESH_2026"),
                 "ifsc_code": "PUNB0002050",
-                "land_area_hectares": 3.00,
+                "land_area_hectares": 6.00,
                 "registered_crop_type": "Mustard (Pusa Bold)",
-                "production_ceiling_qt": 120.00
+                "production_ceiling_qt": 250.00
             }
         ]
 
@@ -168,6 +169,10 @@ def seed_database() -> None:
                 farmer = Farmer(**f_info)
                 db.add(farmer)
                 print(f"  + Added Farmer: {f_info['name']} (Ceiling: {f_info['production_ceiling_qt']} qt)")
+            else:
+                if float(existing.production_ceiling_qt) < f_info["production_ceiling_qt"]:
+                    existing.production_ceiling_qt = f_info["production_ceiling_qt"]
+                    print(f"  + Updated Farmer Ceiling: {f_info['name']} -> {f_info['production_ceiling_qt']} qt")
         db.commit()
 
         # 4. Standard Operational Users
@@ -230,6 +235,130 @@ def seed_database() -> None:
                         slots_created += 1
         db.commit()
         print(f"  + Created {slots_created} procurement slots across mandis.")
+
+        # 6. Showcase Persistent Procurement Transactions
+        mandi_1_today_slots = db.query(ProcurementSlot).filter(
+            ProcurementSlot.mandi_id == 1,
+            ProcurementSlot.scheduled_date == today
+        ).order_by(ProcurementSlot.start_time.asc()).all()
+
+        slot_ids = [s.slot_id for s in mandi_1_today_slots]
+        s1 = slot_ids[0] if len(slot_ids) > 0 else 1
+        s2 = slot_ids[1] if len(slot_ids) > 1 else 2
+        s3 = slot_ids[2] if len(slot_ids) > 2 else 3
+        s4 = slot_ids[3] if len(slot_ids) > 3 else 4
+        s5 = slot_ids[4] if len(slot_ids) > 4 else 5
+        s6 = slot_ids[5] if len(slot_ids) > 5 else 6
+
+        showcase_txns = [
+            {
+                "transaction_id": "TXN-DEMO-1001",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "slot_id": s1,
+                "scheduled_date": today,
+                "crop_moisture_pct": None,
+                "gross_weight_qt": None,
+                "tare_weight_qt": None,
+                "net_weight_qt": 35.00,
+                "total_payout_inr": None,
+                "current_state": "GATE_ENTRY_VERIFIED",
+                "token_signature": generate_booking_signature(1, 1, s1, 35.0),
+                "payout_block_hash": None
+            },
+            {
+                "transaction_id": "TXN-DEMO-1002",
+                "farmer_id": 2,
+                "mandi_id": 1,
+                "slot_id": s2,
+                "scheduled_date": today,
+                "crop_moisture_pct": 13.80,
+                "gross_weight_qt": None,
+                "tare_weight_qt": None,
+                "net_weight_qt": 75.00,
+                "total_payout_inr": None,
+                "current_state": "QUALITY_APPROVED",
+                "token_signature": generate_booking_signature(2, 1, s2, 75.0),
+                "payout_block_hash": None
+            },
+            {
+                "transaction_id": "TXN-DEMO-1003",
+                "farmer_id": 3,
+                "mandi_id": 1,
+                "slot_id": s3,
+                "scheduled_date": today,
+                "crop_moisture_pct": 10.50,
+                "gross_weight_qt": 95.00,
+                "tare_weight_qt": 35.00,
+                "net_weight_qt": 60.00,
+                "total_payout_inr": None,
+                "current_state": "WEIGHED_TARE",
+                "token_signature": generate_booking_signature(3, 1, s3, 60.0),
+                "payout_block_hash": None
+            },
+            {
+                "transaction_id": "TXN-DEMO-1004",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "slot_id": s4,
+                "scheduled_date": today,
+                "crop_moisture_pct": 12.00,
+                "gross_weight_qt": 72.00,
+                "tare_weight_qt": 32.00,
+                "net_weight_qt": 40.00,
+                "total_payout_inr": 91000.00,
+                "current_state": "BILL_GENERATED",
+                "token_signature": generate_booking_signature(1, 1, s4, 40.0),
+                "payout_block_hash": None
+            },
+            {
+                "transaction_id": "TXN-DEMO-1005",
+                "farmer_id": 2,
+                "mandi_id": 1,
+                "slot_id": s5,
+                "scheduled_date": today,
+                "crop_moisture_pct": 13.00,
+                "gross_weight_qt": 100.00,
+                "tare_weight_qt": 35.00,
+                "net_weight_qt": 65.00,
+                "total_payout_inr": 147875.00,
+                "current_state": "PAYMENT_SETTLED",
+                "token_signature": generate_booking_signature(2, 1, s5, 65.0),
+                "payout_block_hash": sha256_hex("PFMS_SETTLED_DEMO_1005")
+            },
+            {
+                "transaction_id": "TXN-DEMO-1006",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "slot_id": s6,
+                "scheduled_date": today,
+                "crop_moisture_pct": 18.20,
+                "gross_weight_qt": None,
+                "tare_weight_qt": None,
+                "net_weight_qt": 55.00,
+                "total_payout_inr": None,
+                "current_state": "QUALITY_REJECTED",
+                "token_signature": generate_booking_signature(1, 1, s6, 55.0),
+                "payout_block_hash": None
+            },
+        ]
+
+        txns_seeded = 0
+        reset_mode = "--reset" in sys.argv
+        for t_info in showcase_txns:
+            existing = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == t_info["transaction_id"]).first()
+            if not existing:
+                txn = ProcurementLog(**t_info)
+                db.add(txn)
+                txns_seeded += 1
+                print(f"  + Added Showcase Transaction: {t_info['transaction_id']} (State: {t_info['current_state']})")
+            elif reset_mode:
+                for k, v in t_info.items():
+                    setattr(existing, k, v)
+                txns_seeded += 1
+                print(f"  + Reset Showcase Transaction: {t_info['transaction_id']} (State: {t_info['current_state']})")
+        db.commit()
+        print(f"  + Processed {txns_seeded} showcase prototype transactions.")
 
         print("[MandiQ Seed] Database seeding completed successfully.")
 

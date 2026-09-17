@@ -8,6 +8,7 @@ from backend.app.dependencies.auth import get_current_user
 from backend.app.models.user import User
 from backend.app.models.farmer import Farmer
 from backend.app.models.log import ProcurementLog
+from backend.app.models.slot import ProcurementSlot
 from backend.app.schemas.farmer import FarmerProfileResponse
 from backend.app.services.reservation_service import ACTIVE_PROCUREMENT_STATES
 
@@ -92,3 +93,42 @@ def get_farmer_by_id(
             detail=f"Farmer with ID {farmer_id} not found."
         )
     return compute_farmer_profile(db=db, farmer=farmer)
+
+
+@router.get(
+    "/{farmer_id}/latest-booking",
+    summary="Get Farmer Latest Active Procurement Booking",
+    description="Retrieves the most recent procurement transaction for a farmer from the database."
+)
+def get_farmer_latest_booking(
+    farmer_id: int,
+    db: Session = Depends(get_db)
+):
+    log = db.query(ProcurementLog).filter(
+        ProcurementLog.farmer_id == farmer_id
+    ).order_by(ProcurementLog.created_at.desc()).first()
+
+    if not log:
+        return {"has_booking": False, "booking": None}
+
+    farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
+    slot = db.query(ProcurementSlot).filter(ProcurementSlot.slot_id == log.slot_id).first()
+
+    time_str = f"{slot.start_time} - {slot.end_time}" if slot else "Morning Window"
+    return {
+        "has_booking": True,
+        "booking": {
+            "transaction_id": log.transaction_id,
+            "current_state": log.current_state,
+            "mandi_id": log.mandi_id,
+            "slot_id": log.slot_id,
+            "farmer_id": log.farmer_id,
+            "farmer_name": farmer.name if farmer else "Registered Farmer",
+            "crop_type": farmer.registered_crop_type if farmer else "Wheat",
+            "quantity_qt": float(log.net_weight_qt or 0.0),
+            "scheduled_date": str(log.scheduled_date),
+            "scheduled_time": time_str,
+            "token_signature": log.token_signature or ""
+        }
+    }
+

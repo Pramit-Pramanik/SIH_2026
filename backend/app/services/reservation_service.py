@@ -224,3 +224,42 @@ def reserve_slot_atomic(
             status_code=status.HTTP_409_CONFLICT,
             detail="Concurrent lock contention: slot is currently being updated. Please retry."
         )
+
+
+def cancel_slot_reservation(
+    db: Session,
+    transaction_id: str
+) -> dict:
+    """
+    Cancels an unverified procurement slot appointment, restoring hourly capacity and farmer ceiling.
+    """
+    log = db.query(ProcurementLog).filter(
+        ProcurementLog.transaction_id == transaction_id
+    ).first()
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction '{transaction_id}' not found."
+        )
+
+    if log.current_state != "SLOT_BOOKED":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot cancel appointment: transaction is already in state '{log.current_state}'."
+        )
+
+    slot = db.query(ProcurementSlot).filter(ProcurementSlot.slot_id == log.slot_id).first()
+    qty = float(log.net_weight_qt or 0.0)
+    if slot and qty > 0:
+        slot.booked_capacity_qt = max(0.0, float(slot.booked_capacity_qt) - qty)
+
+    log.current_state = "CANCELLED"
+    db.commit()
+
+    return {
+        "status": "SUCCESS",
+        "transaction_id": transaction_id,
+        "current_state": "CANCELLED",
+        "message": f"Slot booking '{transaction_id}' successfully cancelled and capacity restored."
+    }
+

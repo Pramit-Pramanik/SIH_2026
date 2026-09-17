@@ -13,7 +13,8 @@ from backend.app.schemas.quality import (
 )
 from backend.app.services.quality_service import (
     assess_quality_and_enqueue,
-    override_quality_and_admit
+    override_quality_and_admit,
+    get_quality_assessment
 )
 
 router = APIRouter(prefix="/quality", tags=["Quality Assessment & Assaying"])
@@ -54,4 +55,20 @@ def override_crop_quality(
     re-admitting the vehicle to the active priority queue.
     """
     return override_quality_and_admit(db=db, request=payload)
+
+
+@router.get(
+    "/{transaction_id}",
+    response_model=QualityAssessmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get quality assessment details for a transaction",
+    description="Retrieves current moisture assaying results and queue eligibility for a specific transaction."
+)
+def get_transaction_quality(
+    transaction_id: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(require_roles(["INSPECTOR", "SUPERVISOR", "ADMIN", "OPERATOR", "FARMER"]))
+) -> QualityAssessmentResponse:
+    return get_quality_assessment(db=db, transaction_id=transaction_id)
+
 

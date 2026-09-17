@@ -12,9 +12,11 @@ import {
   Database,
   Building2,
   LogOut,
-  Globe
+  Globe,
+  Zap
 } from 'lucide-react';
 import { AuthUser } from '../services/authService';
+import { getAuthHeaders, parseResponseSafe, checkBackendHealth } from '../services/api';
 
 export type StationTab =
   | 'farmer'
@@ -35,7 +37,7 @@ interface HeaderProps {
   setSelectedMandiId: (id: number) => void;
   effectiveOnline: boolean;
   isSimulatedOffline: boolean;
-  setIsSimulatedOffline: (val: boolean) => void;
+  setIsSimulatedOffline: (offline: boolean) => void;
   onOpenUSSD: () => void;
   onOpenE2E: () => void;
   pendingWALCount: number;
@@ -46,13 +48,13 @@ export const TABS: { id: StationTab; label: string; icon: React.ComponentType<{ 
   { id: 'farmer', label: 'Farmer Portal / किसान', icon: UserCheck },
   { id: 'gate', label: 'Gate Terminal / गेट', icon: Truck },
   { id: 'quality', label: 'Quality Gate / गुणवत्ता', icon: Layers },
-  { id: 'queue', label: 'Live DCDQ Queue / कतार', icon: Building2 },
+  { id: 'queue', label: 'Live DCDQ Queue / कतार', icon: Play },
   { id: 'weighbridge', label: 'Weighbridge / वजन', icon: Scale },
   { id: 'billing', label: 'Billing & DBT / बिलिंग', icon: FileText },
   { id: 'sync', label: 'Offline WAL / सिंक', icon: Database },
 ];
 
-export function Header({
+export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
   currentUser,
@@ -65,24 +67,59 @@ export function Header({
   onOpenUSSD,
   onOpenE2E,
   pendingWALCount,
-}: HeaderProps) {
+}) => {
+  const [isBackendConnected, setIsBackendConnected] = useState<boolean>(true);
+
   const [mandisList, setMandisList] = useState<{ mandi_id: number; name: string; district: string }[]>([
     { mandi_id: 1, name: 'Sehore APMC Mandi', district: 'Sehore, MP' },
     { mandi_id: 2, name: 'Karnal Grain Mandi', district: 'Karnal, HR' },
   ]);
 
   useEffect(() => {
-    fetch('/api/v1/mandis')
+    // Initial fetch of Mandis
+    fetch('/api/v1/mandis', { headers: getAuthHeaders() })
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setMandisList(data);
+          setIsBackendConnected(true);
         }
       })
       .catch(() => {
-        // Keep defaults
+        setIsBackendConnected(false);
       });
-  }, []);
+
+    // Periodic backend health probe (every 8 seconds)
+    const interval = setInterval(() => {
+      if (effectiveOnline) {
+        checkBackendHealth().then((healthy) => setIsBackendConnected(healthy));
+      }
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [effectiveOnline]);
+
+  const [isSimulatingDemo, setIsSimulatingDemo] = useState(false);
+
+  const handleQuickLiveDemo = async () => {
+    setIsSimulatingDemo(true);
+    try {
+      const res = await fetch('/api/v1/admin/simulate-showcase', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ mandi_id: Number(selectedMandiId || 1) }),
+      });
+      await parseResponseSafe(res, 'Live demo injection failed');
+      setIsBackendConnected(true);
+      setActiveTab('queue');
+    } catch (err) {
+      console.warn('Quick demo notice:', err);
+      checkBackendHealth().then(setIsBackendConnected);
+      setActiveTab('queue');
+    } finally {
+      setIsSimulatingDemo(false);
+    }
+  };
 
   // Filter tabs based on authoritative authenticated role
   const userRole = currentUser?.role || 'OPERATOR';
@@ -164,6 +201,17 @@ export function Header({
             <span className="font-bold text-[11px]">English / हिन्दी</span>
           </div>
 
+          {/* Quick Dynamic Showcase Traffic Launcher */}
+          <button
+            onClick={handleQuickLiveDemo}
+            disabled={isSimulatingDemo}
+            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white border border-amber-600 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer"
+            title="Inject live vehicles and switch to Dynamic Queue"
+          >
+            <Zap className={`w-3.5 h-3.5 ${isSimulatingDemo ? 'animate-bounce' : ''}`} />
+            <span className="hidden sm:inline">{isSimulatingDemo ? 'Simulating...' : '⚡ Live Demo'}</span>
+          </button>
+
           {/* Automated Phase 8 E2E Journey Launcher */}
           <button
             onClick={onOpenE2E}
@@ -200,19 +248,36 @@ export function Header({
 
           {/* Connection Status Pill */}
           <div
+            title={
+              !effectiveOnline
+                ? 'Offline WAL mode enabled. Mutations recorded locally in IndexedDB.'
+                : !isBackendConnected
+                ? 'MandiQ FastAPI backend is not running on port 8000. Start with: .venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --reload --port 8000'
+                : 'MandiQ Backend & e-NAM Cloud Connected'
+            }
             className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-              effectiveOnline
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                : 'bg-amber-50 text-amber-800 border-amber-300'
+              !effectiveOnline
+                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                : !isBackendConnected
+                ? 'bg-rose-50 text-rose-800 border-rose-300 animate-pulse'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-300'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                effectiveOnline ? 'bg-emerald-600 shadow-[0_0_6px_#059669]' : 'bg-amber-500 animate-ping'
+                !effectiveOnline
+                  ? 'bg-amber-500 animate-ping'
+                  : !isBackendConnected
+                  ? 'bg-rose-600 shadow-[0_0_6px_#e11d48]'
+                  : 'bg-emerald-600 shadow-[0_0_6px_#059669]'
               }`}
             ></span>
             <span className="text-[11px] font-mono font-bold">
-              {effectiveOnline ? 'ONLINE' : `OFFLINE (${pendingWALCount})`}
+              {!effectiveOnline
+                ? `OFFLINE (${pendingWALCount})`
+                : !isBackendConnected
+                ? 'BACKEND OFFLINE (8000)'
+                : 'ONLINE'}
             </span>
           </div>
         </div>

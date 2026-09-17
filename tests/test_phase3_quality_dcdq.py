@@ -469,3 +469,33 @@ def test_no_raw_secrets_exposed_in_quality_responses(client: TestClient, db_sess
     q_resp = client.get(f"/api/v1/queue/{mandi.mandi_id}")
     assert settings.MANDIQ_SECRET_HMAC_KEY not in q_resp.text
     assert settings.MANDIQ_PAYOUT_SECRET_KEY not in q_resp.text
+
+
+def test_queue_rehydrates_from_db_on_restart(client: TestClient, db_session: Session):
+    """
+    Verifies that when queue_manager state is cleared (simulating server restart or blackout),
+    GET /api/v1/queue/{mandi_id} auto-hydrates from the database for QUALITY_APPROVED transactions.
+    """
+    mandi, farmer, slot, reservation = setup_phase3_environment(db_session)
+    txn_id = reservation.transaction_id
+
+    # 1. Assess and approve
+    resp = client.post(
+        "/api/v1/quality/assess",
+        json={
+            "transaction_id": txn_id,
+            "crop_moisture_pct": 13.5
+        }
+    )
+    assert resp.status_code == 200
+
+    # 2. Simulate server restart by clearing in-memory queue
+    queue_manager.clear(mandi.mandi_id)
+    assert queue_manager.get_queue(mandi.mandi_id) == []
+
+    # 3. Request queue again -> must auto-hydrate from database
+    q_resp = client.get(f"/api/v1/queue/{mandi.mandi_id}")
+    assert q_resp.status_code == 200
+    items = q_resp.json()["items"]
+    assert len(items) >= 1
+    assert items[0]["transaction_id"] == txn_id

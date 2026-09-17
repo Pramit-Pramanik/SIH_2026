@@ -120,6 +120,13 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
     );
   };
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('mandiq_token');
+    const h: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) h['Authorization'] = `Bearer ${token}`;
+    return h;
+  };
+
   const runFullJourney = async () => {
     setIsRunning(true);
     setStages(INITIAL_STAGES.map(s => ({ ...s, status: 'PENDING', details: undefined, error: undefined })));
@@ -128,14 +135,16 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
     let tokenSig = 'HMAC-SHA256-SIMULATED-SIGNATURE-FOR-OFFLINE-PRESENTATION-FALLBACK';
     const farmerId = 1;
     const mandiId = 1;
-    const slotId = 1;
+    let slotId = 1;
 
     try {
       // 1. e-KYC
       updateStage(1, 'RUNNING');
       await new Promise(r => setTimeout(r, 450));
       try {
-        const resp = await fetch('/api/v1/mock/ekyc?aadhaar_hash=aadhaar_e2e_acceptance_hash_001');
+        const resp = await fetch('/api/v1/mock/ekyc?aadhaar_hash=aadhaar_e2e_acceptance_hash_001', {
+          headers: getAuthHeaders(),
+        });
         if (resp.ok) {
           const data = await resp.json();
           updateStage(1, 'SUCCESS', {
@@ -158,13 +167,24 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
         });
       }
 
-      // 2. Slot Reserve
+      // 2. Slot Reserve (Dynamically lookup today's available slot)
       updateStage(2, 'RUNNING');
       await new Promise(r => setTimeout(r, 450));
       try {
+        const todayStr = new Date().toISOString().split('T')[0];
+        const slotRes = await fetch(`/api/v1/slots?mandi_id=${mandiId}&scheduled_date=${todayStr}`, {
+          headers: getAuthHeaders(),
+        });
+        if (slotRes.ok) {
+          const slotsList = await slotRes.json();
+          if (slotsList.length > 0) {
+            slotId = slotsList[0].slot_id;
+          }
+        }
+
         const resp = await fetch('/api/v1/slots/reserve', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             mandi_id: mandiId,
             farmer_id: farmerId,
@@ -205,7 +225,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/gate/check-in', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             farmer_id: farmerId,
@@ -244,7 +264,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/quality/assess', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             crop_moisture_pct: 13.5,
@@ -278,7 +298,9 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       updateStage(5, 'RUNNING');
       await new Promise(r => setTimeout(r, 450));
       try {
-        const resp = await fetch(`/api/v1/queue/state?mandi_id=${mandiId}`);
+        const resp = await fetch(`/api/v1/queue/state?mandi_id=${mandiId}`, {
+          headers: getAuthHeaders(),
+        });
         if (resp.ok) {
           const data = await resp.json();
           updateStage(5, 'SUCCESS', {
@@ -307,7 +329,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/weighbridge/gross', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             gross_weight_qt: 100.0,
@@ -342,7 +364,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/weighbridge/tare', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             tare_weight_qt: 37.5,
@@ -380,7 +402,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/billing/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             rate_per_qt: 2275.0,
@@ -422,7 +444,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/payout/stage', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             invoice_amount_inr: 142187.50,
@@ -468,7 +490,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/mock/dbt/disburse', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             transaction_id: txnId,
             amount_inr: 142187.50,
@@ -505,7 +527,7 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
       try {
         const resp = await fetch('/api/v1/sync/wal', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: getAuthHeaders(),
           body: JSON.stringify({
             mutations: [
               {

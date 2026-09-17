@@ -11,8 +11,15 @@ import {
   Scale,
   Clock,
   Edit2,
-  Power
+  Power,
+  Zap,
+  RotateCcw,
+  Truck,
+  DollarSign,
+  Activity,
+  TrendingUp,
 } from 'lucide-react';
+import { parseResponseSafe, checkBackendHealth } from '../services/api';
 
 interface Mandi {
   mandi_id: number;
@@ -55,6 +62,23 @@ interface Slot {
   remaining_capacity_qt: number;
 }
 
+interface MandiMetrics {
+  mandi_id: number;
+  mandi_name: string;
+  total_registered_farmers: number;
+  active_transactions_total: number;
+  state_counts: Record<string, number>;
+  queued_vehicles_count: number;
+  total_volume_procured_qt: number;
+  total_payout_settled_inr: number;
+  quality_inspected_count: number;
+  quality_rejected_count: number;
+  quality_rejection_rate_pct: number;
+  active_weighbridges: number;
+  daily_capacity_qt: number;
+  timestamp: string;
+}
+
 interface AdminDashboardProps {
   selectedMandiId: number;
   effectiveOnline: boolean;
@@ -68,10 +92,14 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const [crops, setCrops] = useState<Crop[]>([]);
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [metrics, setMetrics] = useState<MandiMetrics | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [activeMandiForSlots, setActiveMandiForSlots] = useState<number>(selectedMandiId);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isBackendHealthy, setIsBackendHealthy] = useState<boolean | null>(null);
 
   // Modal / Form States
   const [isMandiModalOpen, setIsMandiModalOpen] = useState(false);
@@ -109,7 +137,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const loadMandis = async () => {
     try {
       const res = await fetch('/api/v1/mandis', { headers: getHeaders() });
-      if (res.ok) setMandis(await res.json());
+      if (res.ok) {
+        const data = await parseResponseSafe(res);
+        setMandis(data);
+      }
     } catch {
       // Keep existing
     }
@@ -118,7 +149,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const loadCrops = async () => {
     try {
       const res = await fetch('/api/v1/crops', { headers: getHeaders() });
-      if (res.ok) setCrops(await res.json());
+      if (res.ok) {
+        const data = await parseResponseSafe(res);
+        setCrops(data);
+      }
     } catch {
       // Keep existing
     }
@@ -127,7 +161,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const loadUsers = async () => {
     try {
       const res = await fetch('/api/v1/admin/users', { headers: getHeaders() });
-      if (res.ok) setUsers(await res.json());
+      if (res.ok) {
+        const data = await parseResponseSafe(res);
+        setUsers(data);
+      }
     } catch {
       // Keep existing
     }
@@ -135,24 +172,124 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
   const loadSlots = async () => {
     try {
-      const res = await fetch(`/api/v1/slots/mandi/${activeMandiForSlots}/date/${selectedDate}`, {
+      let res = await fetch(`/api/v1/slots/mandi/${activeMandiForSlots}/date/${selectedDate}`, {
         headers: getHeaders(),
       });
-      if (res.ok) setSlots(await res.json());
+      if (!res.ok) {
+        res = await fetch(`/api/v1/slots?mandi_id=${activeMandiForSlots}&scheduled_date=${selectedDate}`, {
+          headers: getHeaders(),
+        });
+      }
+      if (res.ok) {
+        const data = await parseResponseSafe(res);
+        setSlots(data);
+      } else {
+        setSlots([]);
+      }
     } catch {
       setSlots([]);
     }
   };
 
+  const loadMetrics = async () => {
+    try {
+      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const res = await fetch(`/api/v1/admin/metrics?mandi_id=${targetMandi}`, {
+        headers: getHeaders(),
+      });
+      if (res.ok) {
+        const data = await parseResponseSafe(res);
+        setMetrics(data);
+        setIsBackendHealthy(true);
+      }
+    } catch {
+      // Ignore
+    }
+  };
+
   const refreshAll = async () => {
     setIsLoading(true);
-    await Promise.all([loadMandis(), loadCrops(), loadUsers(), loadSlots()]);
-    setIsLoading(false);
+    try {
+      const healthy = await checkBackendHealth();
+      setIsBackendHealthy(healthy);
+      if (healthy) {
+        await Promise.all([loadMandis(), loadCrops(), loadUsers(), loadSlots(), loadMetrics()]);
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {
     refreshAll();
   }, [activeMandiForSlots, selectedDate]);
+
+  // Periodic metrics auto-polling (every 5 seconds)
+  useEffect(() => {
+    if (!effectiveOnline) return;
+    const interval = setInterval(() => {
+      loadMetrics();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [effectiveOnline, activeMandiForSlots, selectedMandiId]);
+
+  const handleSimulateShowcase = async () => {
+    setIsSimulating(true);
+    setFeedback(null);
+    try {
+      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const res = await fetch('/api/v1/admin/simulate-showcase', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ mandi_id: Number(targetMandi) }),
+      });
+      const data = await parseResponseSafe(res, 'Simulation injection failed');
+      setFeedback({
+        type: 'success',
+        message: data.message || 'Live showcase traffic successfully injected into database and priority queue!',
+      });
+      setIsBackendHealthy(true);
+      await refreshAll();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error simulating showcase traffic';
+      setFeedback({
+        type: 'error',
+        message: msg,
+      });
+      checkBackendHealth().then(setIsBackendHealthy);
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleResetShowcase = async () => {
+    setIsResetting(true);
+    setFeedback(null);
+    try {
+      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const res = await fetch('/api/v1/admin/reset-showcase', {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({ mandi_id: Number(targetMandi) }),
+      });
+      const data = await parseResponseSafe(res, 'Reset failed');
+      setFeedback({
+        type: 'success',
+        message: data.message || 'Showcase database and priority queue cleanly reset!',
+      });
+      setIsBackendHealthy(true);
+      await refreshAll();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error resetting showcase database';
+      setFeedback({
+        type: 'error',
+        message: msg,
+      });
+      checkBackendHealth().then(setIsBackendHealthy);
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   // Handle Create Mandi
   const handleCreateMandi = async (e: React.FormEvent) => {
@@ -290,6 +427,25 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         </div>
       </div>
 
+      {/* Backend Disconnected Warning Banner */}
+      {isBackendHealthy === false && (
+        <div className="p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-950 flex items-start space-x-3 shadow-xs">
+          <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
+          <div className="flex-1 text-xs">
+            <h4 className="font-black text-sm text-rose-900">MandiQ Backend API Is Offline (Port 8000)</h4>
+            <p className="mt-1 text-rose-800">
+              The Python FastAPI server is currently unreachable. Live yard telemetry, slot reservation, and DCDQ simulation require the backend process to be running.
+            </p>
+            <div className="mt-2 flex items-center space-x-2">
+              <span className="font-semibold text-rose-900">Start in terminal:</span>
+              <code className="bg-rose-100 text-rose-900 font-mono text-[11px] px-2.5 py-1 rounded border border-rose-200">
+                .venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
+              </code>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Feedback Banner */}
       {feedback && (
         <div
@@ -308,6 +464,118 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           <button onClick={() => setFeedback(null)} className="text-slate-400 hover:text-slate-700">✕</button>
         </div>
       )}
+
+      {/* Live Mandi Yard Operational Telemetry & Showcase Controls */}
+      <div className="bg-white border border-emerald-200/80 rounded-2xl p-5 shadow-xs space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center space-x-2">
+            <Activity className="w-4 h-4 text-emerald-700" />
+            <h3 className="text-sm font-black text-slate-900">
+              Live Mandi Yard Operational Telemetry
+            </h3>
+            {effectiveOnline && (
+              <span className="inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full text-[10px] font-black border border-emerald-200">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+                </span>
+                <span>Live Dynamic Stream (5s)</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleSimulateShowcase}
+              disabled={isSimulating}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+              title="Inject realistic vehicles across stages to demonstrate dynamic re-ranking"
+            >
+              <Zap className={`w-3.5 h-3.5 ${isSimulating ? 'animate-bounce' : ''}`} />
+              <span>{isSimulating ? 'Injecting...' : '⚡ Simulate Live Traffic'}</span>
+            </button>
+
+            <button
+              onClick={handleResetShowcase}
+              disabled={isResetting}
+              className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+              title="Reset showcase database to clean baseline"
+            >
+              <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+              <span>{isResetting ? 'Resetting...' : 'Reset Showcase'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Dynamic Metric Cards Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Queued in Yard</span>
+              <Truck className="w-3.5 h-3.5 text-emerald-700" />
+            </div>
+            <div className="text-xl font-black text-emerald-950">
+              {metrics?.queued_vehicles_count ?? 0}
+            </div>
+            <span className="text-[10px] font-medium text-emerald-800">DCDQ Sorted</span>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Active Lots</span>
+              <Activity className="w-3.5 h-3.5 text-slate-500" />
+            </div>
+            <div className="text-xl font-black text-slate-900">
+              {metrics?.active_transactions_total ?? 0}
+            </div>
+            <span className="text-[10px] font-medium text-slate-600">Total pipeline</span>
+          </div>
+
+          <div className="bg-teal-50/60 border border-teal-200/80 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Tonnage</span>
+              <Scale className="w-3.5 h-3.5 text-teal-700" />
+            </div>
+            <div className="text-xl font-black text-teal-950">
+              {metrics?.total_volume_procured_qt?.toFixed(1) ?? '0.0'}
+            </div>
+            <span className="text-[10px] font-medium text-teal-800">Quintals procured</span>
+          </div>
+
+          <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">DBT Disbursed</span>
+              <DollarSign className="w-3.5 h-3.5 text-emerald-700" />
+            </div>
+            <div className="text-lg font-black text-emerald-950 truncate">
+              ₹{(metrics?.total_payout_settled_inr ?? 0).toLocaleString('en-IN')}
+            </div>
+            <span className="text-[10px] font-medium text-emerald-800">PFMS Settled</span>
+          </div>
+
+          <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Rejection Rate</span>
+              <TrendingUp className="w-3.5 h-3.5 text-amber-700" />
+            </div>
+            <div className="text-xl font-black text-amber-950">
+              {metrics?.quality_rejection_rate_pct ?? 0}%
+            </div>
+            <span className="text-[10px] font-medium text-amber-800">&gt; 17% moisture</span>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <div className="flex items-center justify-between text-slate-600 mb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider">Farmers</span>
+              <Users className="w-3.5 h-3.5 text-slate-500" />
+            </div>
+            <div className="text-xl font-black text-slate-900">
+              {metrics?.total_registered_farmers ?? 0}
+            </div>
+            <span className="text-[10px] font-medium text-slate-600">AgriStack Verified</span>
+          </div>
+        </div>
+      </div>
 
       {/* Sub-Navigation Tabs */}
       <div className="flex bg-slate-200/70 p-1.5 rounded-2xl gap-1.5 border border-slate-300/60 max-w-2xl">

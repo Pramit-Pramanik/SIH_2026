@@ -48,17 +48,36 @@ export function QualityStation({
   const isHighMoistureBonus = moisturePct > 15.0 && moisturePct <= 17.0;
 
   useEffect(() => {
-    if (activeTxnId) {
-      setTransactionId(activeTxnId);
-      getLocalTransaction(activeTxnId).then((tx) => {
+    const targetId = activeTxnId || transactionId;
+    if (targetId) {
+      if (activeTxnId) setTransactionId(activeTxnId);
+      // 1. Check local Dexie first
+      getLocalTransaction(targetId).then((tx) => {
         if (tx && tx.payload) {
           if (typeof tx.payload.crop_moisture_pct === 'number') {
             setMoisturePct(tx.payload.crop_moisture_pct);
           }
         }
       });
+      // 2. Fetch authoritative database state if online
+      if (effectiveOnline) {
+        fetch(`/api/v1/quality/${targetId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data) {
+              if (typeof data.crop_moisture_pct === 'number') {
+                setMoisturePct(data.crop_moisture_pct);
+              }
+              setResult(data);
+              if (data.status === 'QUALITY_REJECTED') {
+                setShowOverride(true);
+              }
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [activeTxnId]);
+  }, [activeTxnId, transactionId, effectiveOnline]);
 
   const handleAssessQuality = async (e: React.FormEvent) => {
     e.preventDefault();

@@ -36,9 +36,11 @@ export function WeighbridgeStation({
   const netWeight = Math.max(0, Math.round((grossWeight - tareWeight) * 100) / 100);
 
   useEffect(() => {
-    if (activeTxnId) {
-      setTransactionId(activeTxnId);
-      getLocalTransaction(activeTxnId).then((tx) => {
+    const targetId = activeTxnId || transactionId;
+    if (targetId) {
+      if (activeTxnId) setTransactionId(activeTxnId);
+      // 1. Check local Dexie first
+      getLocalTransaction(targetId).then((tx) => {
         if (tx && tx.payload) {
           if (typeof tx.payload.gross_weight_qt === 'number') {
             setGrossWeight(tx.payload.gross_weight_qt);
@@ -48,8 +50,24 @@ export function WeighbridgeStation({
           }
         }
       });
+      // 2. Fetch authoritative database state if online
+      if (effectiveOnline) {
+        fetch(`/api/v1/weighbridge/${targetId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data) {
+              if (typeof data.gross_weight_qt === 'number' && data.gross_weight_qt > 0) {
+                setGrossWeight(data.gross_weight_qt);
+              }
+              if (typeof data.tare_weight_qt === 'number' && data.tare_weight_qt > 0) {
+                setTareWeight(data.tare_weight_qt);
+              }
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [activeTxnId]);
+  }, [activeTxnId, transactionId, effectiveOnline]);
 
   const handleCaptureGross = async () => {
     setIsSubmitting(true);

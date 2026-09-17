@@ -96,9 +96,11 @@ export function BillingPayoutStation({
   } | null>(null);
 
   useEffect(() => {
-    if (activeTxnId) {
-      setTransactionId(activeTxnId);
-      getLocalTransaction(activeTxnId).then((tx) => {
+    const targetId = activeTxnId || transactionId;
+    if (targetId) {
+      if (activeTxnId) setTransactionId(activeTxnId);
+      // 1. Check local Dexie first
+      getLocalTransaction(targetId).then((tx) => {
         if (tx && tx.payload) {
           if (typeof tx.payload.net_weight_qt === 'number') {
             setCachedNetWeight(tx.payload.net_weight_qt);
@@ -118,8 +120,34 @@ export function BillingPayoutStation({
           }
         }
       });
+      // 2. Fetch authoritative database state if online
+      if (effectiveOnline) {
+        fetch(`/api/v1/billing/${targetId}`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((billData) => {
+            if (billData && billData.invoice_id) {
+              setInvoice(billData);
+              if (typeof billData.net_weight_qt === 'number') setCachedNetWeight(billData.net_weight_qt);
+              if (typeof billData.rate_per_qt === 'number') setRatePerQt(billData.rate_per_qt);
+              if (typeof billData.deductions_inr === 'number') setDeductionsInr(billData.deductions_inr);
+              if (billData.crop_type) setCachedCropType(billData.crop_type);
+              if (billData.farmer_name) setCachedFarmerName(billData.farmer_name);
+            } else {
+              // Not billed yet: try weighbridge for net weight
+              fetch(`/api/v1/weighbridge/${targetId}`)
+                .then((wbRes) => (wbRes.ok ? wbRes.json() : null))
+                .then((wbData) => {
+                  if (wbData && typeof wbData.net_weight_qt === 'number' && wbData.net_weight_qt > 0) {
+                    setCachedNetWeight(wbData.net_weight_qt);
+                  }
+                })
+                .catch(() => {});
+            }
+          })
+          .catch(() => {});
+      }
     }
-  }, [activeTxnId]);
+  }, [activeTxnId, transactionId, effectiveOnline]);
 
   // Handle generating official J-Form joint-sale invoice
   const handleGenerateJForm = async () => {

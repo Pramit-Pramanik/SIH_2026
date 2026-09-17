@@ -1,5 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Building2, RefreshCw, Truck, Sparkles, CheckCircle2, AlertTriangle } from 'lucide-react';
+import {
+  Building2,
+  RefreshCw,
+  Truck,
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle,
+  Play,
+  Pause,
+  Zap,
+  RotateCcw,
+} from 'lucide-react';
+import { getAuthHeaders, parseResponseSafe } from '../services/api';
 
 interface QueueItem {
   rank: number;
@@ -26,6 +38,9 @@ export function QueueMonitor({
   const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDispatching, setIsDispatching] = useState(false);
+  const [isLivePolling, setIsLivePolling] = useState(true);
+  const [isSimulating, setIsSimulating] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [dispatchResult, setDispatchResult] = useState<{
     transaction_id: string;
     priority_score: number;
@@ -33,30 +48,103 @@ export function QueueMonitor({
     message: string;
   } | null>(null);
 
-  const fetchQueue = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      if (effectiveOnline) {
-        const resp = await fetch(`/api/v1/queue/${mandiId}`);
-        if (resp.ok) {
-          const data = await resp.json();
-          setQueueItems(data.items || []);
+  const fetchQueue = useCallback(
+    async (silent = false) => {
+      if (!silent) setIsLoading(true);
+      try {
+        if (effectiveOnline) {
+          const resp = await fetch(`/api/v1/queue/${mandiId}`, {
+            headers: getAuthHeaders(),
+          });
+          if (resp.ok) {
+            const data = await parseResponseSafe(resp);
+            setQueueItems(data.items || []);
+          } else {
+            setQueueItems([]);
+          }
         } else {
           setQueueItems([]);
         }
-      } else {
+      } catch {
         setQueueItems([]);
+      } finally {
+        if (!silent) setIsLoading(false);
       }
-    } catch {
-      setQueueItems([]);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [mandiId, effectiveOnline]);
+    },
+    [mandiId, effectiveOnline]
+  );
 
+  // Auto-polling effect (every 3 seconds when live feed is active)
   useEffect(() => {
     fetchQueue();
-  }, [fetchQueue]);
+    if (!effectiveOnline || !isLivePolling) return;
+
+    const interval = setInterval(() => {
+      fetchQueue(true);
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [fetchQueue, effectiveOnline, isLivePolling]);
+
+  const handleSimulateShowcase = async () => {
+    setIsSimulating(true);
+    setDispatchResult(null);
+    try {
+      const resp = await fetch('/api/v1/admin/simulate-showcase', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ mandi_id: Number(mandiId || 1) }),
+      });
+      const data = await parseResponseSafe(resp, 'Simulation injection failed');
+      setDispatchResult({
+        transaction_id: 'SHOWCASE-SIMULATION',
+        priority_score: 0,
+        new_state: 'INJECTED',
+        message: data.message || 'Showcase traffic injected. Live DCDQ re-ordered queue.',
+      });
+      await fetchQueue(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Simulation error';
+      setDispatchResult({
+        transaction_id: '',
+        priority_score: 0,
+        new_state: 'FAILED',
+        message: msg,
+      });
+    } finally {
+      setIsSimulating(false);
+    }
+  };
+
+  const handleResetShowcase = async () => {
+    setIsResetting(true);
+    setDispatchResult(null);
+    try {
+      const resp = await fetch('/api/v1/admin/reset-showcase', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ mandi_id: Number(mandiId || 1) }),
+      });
+      const data = await parseResponseSafe(resp, 'Reset failed');
+      setDispatchResult({
+        transaction_id: 'RESET',
+        priority_score: 0,
+        new_state: 'RESET_SUCCESS',
+        message: data.message || 'Showcase queue reset to clean baseline.',
+      });
+      await fetchQueue(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Reset error';
+      setDispatchResult({
+        transaction_id: '',
+        priority_score: 0,
+        new_state: 'FAILED',
+        message: msg,
+      });
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const handleDispatchTop = async () => {
     setIsDispatching(true);
@@ -76,7 +164,7 @@ export function QueueMonitor({
         setDispatchResult(data);
         onVehicleDispatched?.(data.transaction_id);
         onDispatchVehicle?.(data);
-        fetchQueue();
+        fetchQueue(false);
       } else {
         // Offline dispatch from local queue items
         const top = queueItems[0];
@@ -108,36 +196,83 @@ export function QueueMonitor({
 
   return (
     <div className="space-y-6">
-      {/* Banner */}
-      <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+      {/* Banner & Showcase Action Controls */}
+      <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 border border-emerald-200 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1">
             <Building2 className="w-4 h-4" />
-            <span>Real-Time Yard Vector Engine</span>
+            <span>Dynamic Yard Vector Engine</span>
+            {effectiveOnline && isLivePolling && (
+              <span className="inline-flex items-center space-x-1.5 bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-[10px] font-black border border-emerald-300">
+                <span className="flex h-2 w-2 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
+                </span>
+                <span>Live Feed (3s)</span>
+              </span>
+            )}
           </div>
           <h2 className="text-xl font-black text-emerald-950">Live DCDQ Priority Queue (ZREVRANGE)</h2>
           <p className="text-xs text-slate-600 mt-0.5">
-            Dynamic re-ranking with anti-starvation waiting bonus and perishable moisture mitigation.
+            Real-time dynamic re-ranking with anti-starvation waiting bonus and perishable moisture mitigation.
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Live Feed Toggle */}
           <button
-            onClick={fetchQueue}
+            onClick={() => setIsLivePolling((prev) => !prev)}
+            className={`p-2 rounded-xl text-xs font-bold flex items-center space-x-1.5 transition border cursor-pointer ${
+              isLivePolling
+                ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'
+            }`}
+            title={isLivePolling ? 'Pause live auto-polling' : 'Enable live auto-polling (every 3s)'}
+          >
+            {isLivePolling ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <span>{isLivePolling ? 'Auto-Polling ON' : 'Paused'}</span>
+          </button>
+
+          {/* Refresh Button */}
+          <button
+            onClick={() => fetchQueue(false)}
             disabled={isLoading}
             className="p-2 rounded-xl bg-white hover:bg-slate-100 text-slate-700 transition border border-slate-300 shadow-xs cursor-pointer"
-            title="Refresh active queue"
+            title="Manual refresh"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-700' : ''}`} />
           </button>
 
+          {/* Live Simulation Button */}
+          <button
+            onClick={handleSimulateShowcase}
+            disabled={isSimulating}
+            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+            title="Inject realistic vehicles to demonstrate dynamic DCDQ re-ranking"
+          >
+            <Zap className={`w-3.5 h-3.5 ${isSimulating ? 'animate-bounce' : ''}`} />
+            <span>{isSimulating ? 'Injecting...' : '⚡ Simulate Live Traffic'}</span>
+          </button>
+
+          {/* Reset Button */}
+          <button
+            onClick={handleResetShowcase}
+            disabled={isResetting}
+            className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+            title="Reset queue and simulated vehicles back to clean state"
+          >
+            <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
+            <span>{isResetting ? 'Resetting...' : 'Reset'}</span>
+          </button>
+
+          {/* Dispatch Button */}
           <button
             onClick={handleDispatchTop}
             disabled={isDispatching || queueItems.length === 0}
-            className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 rounded-xl transition shadow-md shadow-emerald-700/20 flex items-center space-x-2 cursor-pointer"
+            className="bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider px-4 py-2 rounded-xl transition shadow-md shadow-emerald-700/20 flex items-center space-x-2 cursor-pointer"
           >
             <Truck className="w-4 h-4" />
-            <span>{isDispatching ? 'Popping ZPOPMAX...' : 'Dispatch Next to Weighbridge'}</span>
+            <span>{isDispatching ? 'Popping ZPOPMAX...' : 'Dispatch Next'}</span>
           </button>
         </div>
       </div>
@@ -159,7 +294,7 @@ export function QueueMonitor({
             )}
             <div>
               <span className="font-bold">{dispatchResult.message}</span>
-              {dispatchResult.transaction_id && (
+              {dispatchResult.transaction_id && dispatchResult.transaction_id !== 'RESET' && (
                 <span className="ml-2 font-mono text-[11px] bg-white px-2 py-0.5 rounded text-emerald-800 border border-emerald-200 font-bold">
                   {dispatchResult.transaction_id} &rarr; {dispatchResult.new_state}
                 </span>
@@ -169,32 +304,44 @@ export function QueueMonitor({
         </div>
       )}
 
-      {/* Active Queue Table */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-            <Sparkles className="w-4 h-4 text-emerald-700" />
-            <span>Vehicles in Yard Queue ({queueItems.length} awaiting weighbridge)</span>
-          </h3>
-          <span className="text-[11px] text-slate-500 font-mono font-medium">Ranked by Descending Composite Score (S_i)</span>
+      {/* Main Queue Card */}
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center space-x-2">
+            <Sparkles className="w-4 h-4 text-emerald-600" />
+            <h3 className="font-bold text-slate-800 text-sm">Active Vehicle Ranked Roster</h3>
+            <span className="bg-emerald-100 text-emerald-800 font-mono text-xs font-bold px-2 py-0.5 rounded-full">
+              {queueItems.length} vehicles waiting
+            </span>
+          </div>
+          <span className="text-[11px] text-slate-500 font-medium">
+            Tie-Breaking: Score (desc) &rarr; Arrival Timestamp (asc) &rarr; ID
+          </span>
         </div>
 
         {queueItems.length === 0 ? (
-          <div className="text-center py-12 text-slate-500 text-xs bg-slate-50 rounded-xl border border-slate-200 p-6 space-y-1">
-            <p className="font-bold text-slate-800 text-sm">
-              {effectiveOnline ? 'Queue Currently Empty' : 'Live Queue Feed Unavailable Offline'}
+          <div className="p-12 text-center text-slate-500 space-y-3">
+            <Truck className="w-12 h-12 text-slate-300 mx-auto" />
+            <p className="font-semibold text-sm">No vehicles currently waiting in priority queue.</p>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              Vehicles enter this queue dynamically once they pass Gate Check-In and receive Quality Approval (moisture &le; 17.0%).
             </p>
-            <p className="text-slate-500">
-              {effectiveOnline
-                ? 'No vehicles currently waiting in the priority queue. Admitted lots will appear here automatically.'
-                : 'Offline mode active. Admitted vehicles can be inspected in the Offline WAL monitor.'}
-            </p>
+            <div className="pt-2">
+              <button
+                onClick={handleSimulateShowcase}
+                disabled={isSimulating}
+                className="bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-xs inline-flex items-center space-x-1.5 transition cursor-pointer"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Inject Dynamic Showcase Traffic</span>
+              </button>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="border-b border-slate-200 text-slate-600 font-bold">
+                <tr className="bg-slate-100 text-slate-600 uppercase font-black tracking-wider text-[10px] border-b border-slate-200">
                   <th className="py-2.5 px-3">Rank</th>
                   <th className="py-2.5 px-3">Transaction ID</th>
                   <th className="py-2.5 px-3">Farmer ID</th>

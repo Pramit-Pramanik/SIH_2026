@@ -3,7 +3,8 @@ import { Truck, QrCode, ShieldCheck, AlertTriangle, CheckCircle2, ArrowRight } f
 import {
   executeLocalTransactionMutation,
   getLocalTransaction,
-  markWALRecordSynced
+  markWALRecordSynced,
+  markWALRecordFailed
 } from '../db/dexie';
 import { verifyOfflineGateEntry } from '../services/offlineCrypto';
 
@@ -27,7 +28,7 @@ export function GateTerminal({
   const [slotId, setSlotId] = useState<number>(1);
   const [quantityQt, setQuantityQt] = useState<number>(35.0);
   const [tokenSignature, setTokenSignature] = useState<string>(
-    'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+    '70a19fd45098476ad07e31556048d3603ae699ddce96b25bd2b6966567349259'
   );
 
   const [isVerifying, setIsVerifying] = useState(false);
@@ -38,11 +39,14 @@ export function GateTerminal({
     details?: Record<string, unknown>;
   } | null>(null);
 
-  // Hydrate from local transaction boundary
+  // Hydrate from local transaction boundary and server authoritative state
   useEffect(() => {
-    async function loadLocalTxn() {
+    async function loadTxn() {
       const targetId = activeTxnId || transactionId;
       if (!targetId) return;
+      if (activeTxnId) setTransactionId(activeTxnId);
+
+      // 1. Check local Dexie first
       try {
         const local = await getLocalTransaction(targetId);
         if (local) {
@@ -54,9 +58,34 @@ export function GateTerminal({
       } catch {
         // Continue with defaults
       }
+
+      // 2. Fetch authoritative database state if online
+      if (effectiveOnline) {
+        try {
+          const resp = await fetch(`/api/v1/gate/verify/${targetId}`);
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.farmer_id) setFarmerId(data.farmer_id);
+            if (data.slot_id) setSlotId(data.slot_id);
+            if (typeof data.quantity_qt === 'number' && data.quantity_qt > 0) {
+              setQuantityQt(data.quantity_qt);
+            }
+            if (data.status === 'VERIFIED') {
+              setFeedback({
+                type: 'success',
+                mode: 'AUTHORITATIVE_CLOUD',
+                message: `Gate Entry Verified for ${data.farmer_name} (${data.crop_type}). State: ${data.current_state}. Authorized for mandi yard staging entry.`,
+                details: data,
+              });
+            }
+          }
+        } catch {
+          // Offline fallback
+        }
+      }
     }
-    loadLocalTxn();
-  }, [activeTxnId, transactionId]);
+    loadTxn();
+  }, [activeTxnId, transactionId, effectiveOnline]);
 
   const handleVerifyGatePass = async (e: FormEvent) => {
     e.preventDefault();
@@ -129,9 +158,17 @@ export function GateTerminal({
           if (resp.ok) {
             await markWALRecordSynced(walResult.wal_id);
             isSyncedOnline = true;
+          } else {
+            const errData = await resp.json().catch(() => ({ detail: 'Gate verification failed.' }));
+            await markWALRecordFailed(walResult.wal_id, errData.detail || 'Gate check-in rejected.');
+            throw new Error(errData.detail || 'Gate check-in rejected.');
           }
-        } catch {
-          // Zero crash: fallback to offline WAL status
+        } catch (cloudErr) {
+          if (!window.navigator.onLine || !effectiveOnline) {
+            console.warn('Gate entry network dropped mid-flight; using local WAL record.', cloudErr);
+          } else {
+            throw cloudErr;
+          }
         }
       }
 

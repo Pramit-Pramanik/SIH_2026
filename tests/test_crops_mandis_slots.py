@@ -205,6 +205,12 @@ def test_slots_listing(client: TestClient, seed_test_data):
     assert res_single.status_code == 200
     assert res_single.json()["slot_id"] == slot_id
 
+    # Path-based slot querying for AdminDashboard
+    res_path_slots = client.get(f"/api/v1/slots/mandi/{mandi_id}/date/{today}")
+    assert res_path_slots.status_code == 200
+    assert len(res_path_slots.json()) == len(slots)
+    assert res_path_slots.json()[0]["slot_id"] == slot_id
+
 
 def test_admin_endpoints_rbac(client: TestClient, seed_test_data):
     # Admin token
@@ -249,3 +255,50 @@ def test_admin_endpoints_rbac(client: TestClient, seed_test_data):
     }
     res_mandi_denied = client.post("/api/v1/admin/mandis", json=mandi_payload, headers=headers_operator)
     assert res_mandi_denied.status_code == 403
+
+    # 5. Delete / Deactivate Crop as Admin -> OK
+    crop_id = res_crop.json()["crop_id"]
+    res_del = client.delete(f"/api/v1/admin/crops/{crop_id}", headers=headers_admin)
+    assert res_del.status_code == 200
+    assert res_del.json()["status"] == "SUCCESS"
+
+
+def test_gap_fixes_endpoints(client: TestClient, seed_test_data):
+    today = date.today().isoformat()
+    # 1. Test farmer latest booking endpoint
+    res_latest = client.get("/api/v1/farmers/1/latest-booking")
+    assert res_latest.status_code == 200
+    assert "has_booking" in res_latest.json()
+
+    # 2. Book a slot
+    slots_res = client.get(f"/api/v1/slots?mandi_id=1&scheduled_date={today}")
+    assert slots_res.status_code == 200
+    slot_id = slots_res.json()[0]["slot_id"]
+    initial_rem_cap = slots_res.json()[0]["remaining_capacity_qt"]
+
+    book_res = client.post(
+        "/api/v1/slots/reserve",
+        json={
+            "mandi_id": 1,
+            "slot_id": slot_id,
+            "farmer_id": 1,
+            "requested_qty_qt": 15.0
+        }
+    )
+    assert book_res.status_code == 201
+    txn_id = book_res.json()["transaction_id"]
+
+    # 3. Test quality inspection endpoint for newly booked lot
+    res_q = client.get(f"/api/v1/quality/{txn_id}")
+    assert res_q.status_code == 200
+    assert res_q.json()["transaction_id"] == txn_id
+
+    # 4. Cancel slot appointment before gate check-in
+    cancel_res = client.post("/api/v1/slots/cancel", json={"transaction_id": txn_id})
+    assert cancel_res.status_code == 200
+    assert cancel_res.json()["status"] == "SUCCESS"
+
+    # Verify slot capacity was restored
+    slots_after = client.get(f"/api/v1/slots?mandi_id=1&scheduled_date={today}")
+    assert slots_after.json()[0]["remaining_capacity_qt"] == initial_rem_cap
+

@@ -207,21 +207,85 @@ export function FarmerPortal({
     loadSlots();
   }, [selectedMandiId, scheduledDate]);
 
-  // 5. Hydrate active transaction from Dexie
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  // 5. Hydrate active transaction from Dexie and backend database
   const loadSavedPass = async () => {
     try {
       const latest = await getLatestLocalTransaction();
       if (latest && latest.transaction_id) {
         setActivePass(latest);
+        return;
       }
     } catch {
-      // Keep null
+      // Continue to API check
+    }
+
+    if (effectiveOnline) {
+      try {
+        const farmerId = profile?.farmer_id || 1;
+        const res = await fetch(`/api/v1/farmers/${farmerId}/latest-booking`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.has_booking && data.booking) {
+            setActivePass({
+              transaction_id: data.booking.transaction_id,
+              farmer_id: data.booking.farmer_id,
+              farmer_name: data.booking.farmer_name,
+              mandi_id: data.booking.mandi_id,
+              current_state: data.booking.current_state,
+              crop_type: data.booking.crop_type,
+              slot_id: data.booking.slot_id,
+              scheduled_date: data.booking.scheduled_date,
+              scheduled_time: data.booking.scheduled_time,
+              requested_qty_qt: data.booking.quantity_qt,
+              token_signature: data.booking.token_signature,
+              last_client_mutation_id: `mut-${Date.now()}`,
+              last_updated_ts: Date.now(),
+              sync_status: 'SYNCED',
+            });
+          }
+        }
+      } catch {
+        // Keep null
+      }
+    }
+  };
+
+  const handleCancelBooking = async (txnId: string) => {
+    if (!confirm('Are you sure you want to cancel this procurement appointment? Your slot capacity and ceiling will be restored.')) return;
+    setIsCancelling(true);
+    try {
+      const res = await fetch('/api/v1/slots/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction_id: txnId }),
+      });
+      if (res.ok) {
+        setFeedback({
+          type: 'success',
+          message: `Appointment #${txnId.slice(-6).toUpperCase()} successfully cancelled. Capacity restored to APMC yard.`,
+        });
+        setActivePass(null);
+        // Refresh profile & slots
+        const pRes = await fetch(`/api/v1/farmers/profile?farmer_id=${profile?.farmer_id || 1}`);
+        if (pRes.ok) setProfile(await pRes.json());
+        const sRes = await fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${scheduledDate}`);
+        if (sRes.ok) setSlots(await sRes.json());
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed to cancel appointment' }));
+        setFeedback({ type: 'error', message: err.detail || 'Cancellation failed' });
+      }
+    } catch {
+      setFeedback({ type: 'error', message: 'Network error cancelling appointment.' });
+    } finally {
+      setIsCancelling(false);
     }
   };
 
   useEffect(() => {
     loadSavedPass();
-  }, [activeTxnId]);
+  }, [activeTxnId, profile?.farmer_id, effectiveOnline]);
 
   // Handle Slot Booking Reservation
   const handleReserveSlot = async (e: FormEvent) => {
@@ -446,14 +510,27 @@ export function FarmerPortal({
                 Status: {activePass.current_state}
               </span>
 
-              <button
-                type="button"
-                onClick={() => setIsReceiptOpen(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
-              >
-                <Receipt className="w-3.5 h-3.5" />
-                <span>View J-Form Receipt</span>
-              </button>
+              <div className="flex items-center gap-2">
+                {activePass.current_state === 'SLOT_BOOKED' && (
+                  <button
+                    type="button"
+                    disabled={isCancelling}
+                    onClick={() => handleCancelBooking(activePass.transaction_id)}
+                    className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 font-bold text-xs flex items-center space-x-1 transition shadow-xs disabled:opacity-50"
+                  >
+                    <span>रद्द करें / Cancel Slot</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsReceiptOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
+                >
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>View J-Form Receipt</span>
+                </button>
+              </div>
             </div>
           </div>
         </section>

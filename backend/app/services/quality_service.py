@@ -235,6 +235,32 @@ def get_mandi_queue_list(
     """
     raw_queue = queue_manager.get_queue(mandi_id)
     if not raw_queue:
+        # Check database for active QUALITY_APPROVED transactions waiting for weighbridge
+        approved_logs = db.query(ProcurementLog).filter(
+            ProcurementLog.mandi_id == mandi_id,
+            ProcurementLog.current_state == "QUALITY_APPROVED"
+        ).all()
+        if approved_logs:
+            now_ts = time.time()
+            for log in approved_logs:
+                payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
+                moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
+                score = calculate_dcdq_priority_score(
+                    planned_arrival_ts=now_ts,
+                    actual_arrival_ts=now_ts,
+                    moisture_pct=moisture,
+                    elapsed_wait_minutes=15.0,
+                    demurrage_score=payload_qt / 10.0
+                )
+                queue_manager.enqueue(
+                    mandi_id=log.mandi_id,
+                    transaction_id=log.transaction_id,
+                    priority_score=score,
+                    arrival_ts=now_ts
+                )
+            raw_queue = queue_manager.get_queue(mandi_id)
+
+    if not raw_queue:
         return QueueListResponse(mandi_id=mandi_id, total_vehicles=0, items=[])
 
     txn_ids = [item[0] for item in raw_queue]
@@ -280,6 +306,11 @@ def dispatch_top_vehicle_from_queue(
         )
 
     dispatched = queue_manager.dispatch_pop(mandi_id)
+    if not dispatched:
+        # Check if database has active QUALITY_APPROVED transactions
+        get_mandi_queue_list(db, mandi_id)
+        dispatched = queue_manager.dispatch_pop(mandi_id)
+
     if not dispatched:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -350,3 +381,43 @@ def get_vehicle_queue_status(
         rank=rank,
         total_ahead=total_ahead
     )
+
+
+def get_quality_assessment(
+    db: Session,
+    transaction_id: str
+) -> QualityAssessmentResponse:
+    """
+    Retrieves the quality assessment details for a transaction.
+    """
+    log = db.query(ProcurementLog).filter(
+        ProcurementLog.transaction_id == transaction_id
+    ).first()
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction '{transaction_id}' not found."
+        )
+
+    moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
+    is_rejected = log.current_state == "QUALITY_REJECTED" or moisture > 17.0
+    status_str = "QUALITY_REJECTED" if is_rejected else "QUALITY_APPROVED"
+    eligible = not is_rejected
+
+    rank = queue_manager.get_rank(log.mandi_id, log.transaction_id)
+    score = queue_manager.get_score(log.mandi_id, log.transaction_id)
+
+    return QualityAssessmentResponse(
+        transaction_id=log.transaction_id,
+        crop_moisture_pct=moisture,
+        status=status_str,
+        eligible_for_queue=eligible,
+        advisory_notice=(
+            "Moisture exceeds 17.0% maximum allowable limit. Vehicle routed to drying apron."
+            if is_rejected else
+            "Quality approved. Lot verified for mandi processing."
+        ),
+        priority_score=score,
+        queue_position=rank
+    )
+

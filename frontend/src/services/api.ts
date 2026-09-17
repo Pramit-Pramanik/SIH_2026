@@ -81,7 +81,7 @@ export interface BookingResponse {
   farmer_remaining_ceiling_qt: number;
 }
 
-function getAuthHeaders(): Record<string, string> {
+export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('mandiq_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -90,6 +90,51 @@ function getAuthHeaders(): Record<string, string> {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
+}
+
+export async function parseResponseSafe<T = any>(res: Response, defaultMessage: string = 'Operation failed'): Promise<T> {
+  const text = await res.text();
+  let parsed: any = null;
+  if (text) {
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // Non-JSON response
+    }
+  }
+
+  if (!res.ok) {
+    if (parsed && (parsed.detail || parsed.message)) {
+      throw new Error(parsed.detail || parsed.message);
+    }
+    if (res.status >= 500) {
+      throw new Error(
+        `Backend server is unreachable or returned an error (HTTP ${res.status}). Ensure uvicorn is running on port 8000.`
+      );
+    }
+    if (res.status === 401) {
+      throw new Error('Authentication session expired or unauthorized. Please re-login.');
+    }
+    throw new Error(text || `${defaultMessage} (HTTP ${res.status})`);
+  }
+
+  return (parsed !== null ? parsed : {}) as T;
+}
+
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const res = await fetch('/api/v1/mandis', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return res.ok || res.status === 401;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchFarmerProfile(farmerId: number = 1): Promise<FarmerProfile> {
