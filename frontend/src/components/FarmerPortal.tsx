@@ -8,7 +8,8 @@ import {
   Minus,
   Building2,
   Check,
-  Receipt
+  Receipt,
+  Sparkles
 } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
@@ -28,6 +29,7 @@ interface FarmerPortalProps {
   effectiveOnline: boolean;
   currentUser?: AuthUser | null;
   demoFarmerId?: number | null;
+  onSelectDemoFarmer?: (farmerId: number | null) => void;
   onSlotReserved?: (txnId: string) => void;
   onTransactionCreated?: (txnId: string) => void;
   activeTxnId?: string | null;
@@ -81,6 +83,7 @@ export function FarmerPortal({
   effectiveOnline,
   currentUser,
   demoFarmerId,
+  onSelectDemoFarmer,
   onSlotReserved,
   onTransactionCreated,
   activeTxnId,
@@ -121,12 +124,12 @@ export function FarmerPortal({
   const [activePass, setActivePass] = useState<LocalTransactionState | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Determine effective farmer ID (FARMER role is strictly bound; Admin/Supervisor can use demoFarmerId)
+  // Determine effective farmer ID (FARMER role is strictly bound; Admin/Supervisor can use demoFarmerId, defaulting to 1)
   const isDemoRole = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPERVISOR');
   const isUnlinkedFarmer = !isDemoRole && currentUser?.role === 'FARMER' && !currentUser.farmer_id;
   const effectiveFarmerId = (!isDemoRole && currentUser?.role === 'FARMER')
     ? (currentUser.farmer_id || null)
-    : (demoFarmerId || currentUser?.farmer_id || null);
+    : (demoFarmerId || currentUser?.farmer_id || (isDemoRole ? 1 : null));
 
   // 1. Fetch Farmer Profile
   useEffect(() => {
@@ -674,6 +677,42 @@ export function FarmerPortal({
             {t('farmer.yardOperational')}
           </span>
         </div>
+
+        {/* Demo Role Farmer Quick Switcher */}
+        {isDemoRole && (
+          <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-2.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center space-x-1.5 text-amber-900 font-extrabold text-[11px]">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span>{t('demoTools.switchFarmerTitle')}:</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 1, label: 'F1: Ramesh Kumar' },
+                { id: 2, label: 'F2: Balwinder Singh' },
+                { id: 3, label: 'F3: Suresh Patel' },
+                { id: 4, label: 'F4: Rameshwar Singh' },
+              ].map((df) => {
+                const isActive = effectiveFarmerId === df.id;
+                return (
+                  <button
+                    key={df.id}
+                    type="button"
+                    onClick={() => {
+                      onSelectDemoFarmer?.(df.id);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      isActive
+                        ? 'bg-emerald-800 text-white shadow-xs ring-2 ring-emerald-600/30'
+                        : 'bg-white text-slate-700 border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300'
+                    }`}
+                  >
+                    {df.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* 2. Active Token Card (Stitch Physical Pass Metaphor) */}

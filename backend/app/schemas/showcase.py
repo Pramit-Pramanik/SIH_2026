@@ -7,7 +7,7 @@ class ShowcaseFarmerBooking(BaseModel):
     current_state: str
     scheduled_date: str
     scheduled_time: str
-    slot_id: int
+    slot_id: Optional[int] = None
     quantity_qt: float
     mandi_id: int
     mandi_name: str

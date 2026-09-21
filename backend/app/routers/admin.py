@@ -66,12 +66,12 @@ def get_showcase_farmers(
 
         active_booking = None
         if latest_log and latest_log.current_state not in ("PAYMENT_SETTLED", "CANCELLED", "QUALITY_REJECTED"):
-            slot = db.query(ProcurementSlot).filter(ProcurementSlot.slot_id == latest_log.slot_id).first()
+            slot = db.query(ProcurementSlot).filter(ProcurementSlot.slot_id == latest_log.slot_id).first() if latest_log.slot_id else None
             time_str = f"{slot.start_time} - {slot.end_time}" if slot else "Morning Window"
             active_booking = ShowcaseFarmerBooking(
                 transaction_id=latest_log.transaction_id,
                 current_state=latest_log.current_state,
-                scheduled_date=str(latest_log.scheduled_date),
+                scheduled_date=str(latest_log.scheduled_date or ""),
                 scheduled_time=time_str,
                 slot_id=latest_log.slot_id,
                 quantity_qt=float(latest_log.net_weight_qt or 0.0),

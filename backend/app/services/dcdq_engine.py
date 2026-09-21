@@ -1,6 +1,6 @@
 import math
 import os
-from typing import Optional
+from typing import Dict, Optional
 from backend.app.core.config import get_settings
 
 MOISTURE_ACCEPTANCE_THRESHOLD = 17.0

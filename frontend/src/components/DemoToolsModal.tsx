@@ -38,7 +38,7 @@ interface ShowcaseFarmerBooking {
   current_state: string;
   scheduled_date: string;
   scheduled_time: string;
-  slot_id: number;
+  slot_id?: number | null;
   quantity_qt: number;
   mandi_id: number;
   mandi_name: string;

@@ -327,6 +327,7 @@ function StationManager({
             effectiveOnline={effectiveOnline}
             currentUser={currentUser}
             demoFarmerId={demoFarmerId}
+            onSelectDemoFarmer={(fId) => setDemoFarmerId(fId)}
             onSlotReserved={(txnId: string) => {
               setActiveTxnId(txnId);
             }}
@@ -468,6 +469,11 @@ function MainApp() {
     fetchCurrentUser().then((user) => {
       if (user) {
         setCurrentUser(user);
+        if (user.farmer_id) {
+          setDemoFarmerId(user.farmer_id);
+        } else if (user.role === 'ADMIN' || user.role === 'SUPERVISOR') {
+          setDemoFarmerId((prev) => (prev !== null ? prev : 1));
+        }
       }
       setAuthChecking(false);
     });
@@ -511,6 +517,8 @@ function MainApp() {
           setCurrentUser(user);
           if (user.farmer_id) {
             setDemoFarmerId(user.farmer_id);
+          } else if (user.role === 'ADMIN' || user.role === 'SUPERVISOR') {
+            setDemoFarmerId(1);
           }
         }}
       />
