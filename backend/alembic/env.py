@@ -10,7 +10,7 @@ from alembic import context
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(BASE_DIR))
 
-from backend.app.core.config import get_settings
+from backend.app.core.config import get_settings, _resolve_sqlite_url
 from backend.app.db.base import Base
 import backend.app.models  # Registers all models with Base.metadata
 
@@ -29,6 +29,14 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 def get_url():
+    x_args = context.get_x_argument(as_dictionary=True)
+    if "url" in x_args and x_args["url"]:
+        return _resolve_sqlite_url(x_args["url"])
+    config_url = config.get_main_option("sqlalchemy.url")
+    if config_url and config_url.strip():
+        return _resolve_sqlite_url(config_url)
+    if os.environ.get("DATABASE_URL"):
+        return _resolve_sqlite_url(os.environ.get("DATABASE_URL"))
     settings = get_settings()
     return settings.DATABASE_URL
 

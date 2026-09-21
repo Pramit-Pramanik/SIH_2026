@@ -2,8 +2,9 @@ import {
   getEligiblePendingWALRecords,
   markWALRecordSynced,
   markWALRecordFailed,
-  LocalTransactionWAL
-} from '../db/dexie';
+  markWALRecordAuthRequired,
+  type LocalTransactionWAL
+} from '../db/dexie.ts';
 
 export interface SyncResult {
   success: boolean;
@@ -42,6 +43,30 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
   const pending = await getEligiblePendingWALRecords();
   if (pending.length === 0) {
     return { success: true, syncedCount: 0, totalPending: 0 };
+  }
+
+  // Inspect local session authentication state
+  const token = localStorage.getItem('mandiq_token');
+  const hasValidServerAuth = !!token && !token.startsWith('offline_pwa_token_');
+
+  // If no valid server JWT (missing token or offline provisional token),
+  // mutations must remain PENDING without incrementing retry count or failing.
+  if (!hasValidServerAuth) {
+    const reason = token?.startsWith('offline_pwa_token_')
+      ? 'Pending server re-authentication (offline provisional session)'
+      : 'Pending server authentication (no active server session)';
+
+    for (const rec of pending) {
+      if (rec.id !== undefined) {
+        await markWALRecordAuthRequired(rec.id, reason);
+      }
+    }
+    return {
+      success: false,
+      syncedCount: 0,
+      totalPending: pending.length,
+      error: reason
+    };
   }
 
   // Format payload for /api/v1/sync/wal
@@ -83,7 +108,6 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
   };
 
   // Attach auth token if available in local session
-  const token = localStorage.getItem('mandiq_token');
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
@@ -106,17 +130,25 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
 
     if (!response.ok) {
       const errorText = await response.text();
+      const isAuthError = response.status === 401 || response.status === 403;
       const isTransient = response.status >= 500;
+
       for (const rec of pending) {
         if (rec.id !== undefined) {
-          await markWALRecordFailed(rec.id, `Server HTTP ${response.status}: ${errorText}`, isTransient);
+          if (isAuthError) {
+            // A 401/403 caused by missing/expired authentication must NOT be treated as a permanent domain rejection.
+            // Mutation remains PENDING and recoverable.
+            await markWALRecordAuthRequired(rec.id, `Authentication required (HTTP ${response.status}): ${errorText}`);
+          } else {
+            await markWALRecordFailed(rec.id, `Server HTTP ${response.status}: ${errorText}`, isTransient);
+          }
         }
       }
       return {
         success: false,
         syncedCount: 0,
         totalPending: pending.length,
-        error: `HTTP ${response.status}: ${errorText}`
+        error: isAuthError ? `Authentication required (HTTP ${response.status})` : `HTTP ${response.status}: ${errorText}`
       };
     }
 

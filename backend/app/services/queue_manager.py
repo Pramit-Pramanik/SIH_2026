@@ -218,6 +218,23 @@ class QueueManager:
 
         return _in_memory_queue.zscore(queue_key, transaction_id)
 
+    def get_arrival_timestamp(self, mandi_id: int, transaction_id: str) -> Optional[float]:
+        """
+        Retrieves recorded arrival timestamp for a queued transaction.
+        """
+        queue_key = self.get_queue_key(mandi_id)
+        meta_key = self.get_meta_key(mandi_id)
+        r = self._get_redis()
+        if r is not None:
+            try:
+                val = r.hget(meta_key, transaction_id)
+                return float(val) if val is not None else None
+            except Exception:
+                pass
+
+        meta = _in_memory_queue._metadata.get(queue_key, {})
+        return meta.get(transaction_id)
+
     def queue_length(self, mandi_id: int) -> int:
         """
         Returns the count of active vehicles in the queue (ZCARD).
@@ -280,22 +297,74 @@ class QueueManager:
 
     def dispatch_pop(self, mandi_id: int) -> Optional[Tuple[str, float]]:
         """
-        Pops and dispatches the highest-priority vehicle from the queue (ZPOPMAX with tie-breaking).
-        Returns (transaction_id, priority_score) or None if the queue is empty.
+        Pops and dispatches the highest-priority vehicle from the queue (ZPOPMAX with deterministic tie-breaking).
+        Guarantees atomic pop via Redis Lua script so concurrent dispatchers cannot double-consume a vehicle.
+        Returns (transaction_id, priority_score) or None if the queue is empty or already consumed.
         """
         queue_key = self.get_queue_key(mandi_id)
         meta_key = self.get_meta_key(mandi_id)
         r = self._get_redis()
 
         if r is not None:
+            lua_script = """
+            local queue_key = KEYS[1]
+            local meta_key = KEYS[2]
+
+            local raw_members = redis.call('ZREVRANGE', queue_key, 0, -1, 'WITHSCORES')
+            if not raw_members or #raw_members == 0 then
+                return nil
+            end
+
+            local best_member = nil
+            local best_score = -1e18
+            local best_arrival = 1e18
+
+            for i = 1, #raw_members, 2 do
+                local member = raw_members[i]
+                local score = tonumber(raw_members[i+1])
+                local arrival_raw = redis.call('HGET', meta_key, member)
+                local arrival = arrival_raw and tonumber(arrival_raw) or 0.0
+
+                if best_member == nil then
+                    best_member = member
+                    best_score = score
+                    best_arrival = arrival
+                else
+                    if score > best_score then
+                        best_member = member
+                        best_score = score
+                        best_arrival = arrival
+                    elseif score == best_score then
+                        if arrival < best_arrival then
+                            best_member = member
+                            best_score = score
+                            best_arrival = arrival
+                        elseif arrival == best_arrival then
+                            if member < best_member then
+                                best_member = member
+                                best_score = score
+                                best_arrival = arrival
+                            end
+                        end
+                    end
+                end
+            end
+
+            if best_member ~= nil then
+                local rem = redis.call('ZREM', queue_key, best_member)
+                if rem > 0 then
+                    redis.call('HDEL', meta_key, best_member)
+                    return {best_member, tostring(best_score)}
+                end
+            end
+
+            return nil
+            """
             try:
-                ranked = self.get_queue(mandi_id, start=0, stop=0)
-                if not ranked:
-                    return None
-                winner_id, winner_score = ranked[0]
-                r.zrem(queue_key, winner_id)
-                r.hdel(meta_key, winner_id)
-                return winner_id, winner_score
+                result = r.eval(lua_script, 2, queue_key, meta_key)
+                if result and len(result) >= 2:
+                    return str(result[0]), float(result[1])
+                return None
             except Exception:
                 pass
 

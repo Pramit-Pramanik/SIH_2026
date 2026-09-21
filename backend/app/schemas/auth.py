@@ -54,6 +54,7 @@ class TokenResponse(BaseModel):
     username: str = Field(..., description="Username")
     role: str = Field(..., description="Assigned operational role (ADMIN, SUPERVISOR, INSPECTOR, OPERATOR, FARMER)")
     mandi_id: Optional[int] = Field(None, description="Assigned APMC Mandi ID")
+    farmer_id: Optional[int] = Field(None, description="Linked Farmer ID if user role is FARMER")
     full_name: str = Field(..., description="Full display name of user")
 
 
@@ -64,6 +65,7 @@ class UserResponse(BaseModel):
     full_name: str = Field(..., description="Full display name")
     role: str = Field(..., description="Operational role")
     mandi_id: Optional[int] = Field(None, description="Assigned APMC Mandi ID")
+    farmer_id: Optional[int] = Field(None, description="Linked Farmer ID if user role is FARMER")
     is_active: bool = Field(..., description="Whether user account is active")
 
 

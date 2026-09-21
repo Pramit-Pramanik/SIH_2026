@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { LocalTransactionWAL, LocalTransaction, getAllLocalTransactions } from '../db/dexie';
 import { SyncResult } from '../services/syncWorker';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface WALSyncMonitorProps {
   effectiveOnline: boolean;
@@ -39,6 +40,7 @@ export function WALSyncMonitor({
   onRefreshWAL,
   onCreateMutation,
 }: WALSyncMonitorProps) {
+  const { t } = useLanguage();
   const [selectedRecord, setSelectedRecord] = useState<LocalTransactionWAL | null>(null);
   const [selectedTxn, setSelectedTxn] = useState<LocalTransaction | null>(null);
   const [filterStatus, setFilterStatus] = useState<'ALL' | 'PENDING' | 'SYNCED' | 'FAILED'>('ALL');
@@ -66,14 +68,13 @@ export function WALSyncMonitor({
           <div>
             <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-800 bg-slate-200 border border-slate-300 px-3 py-1 rounded-md mb-2">
               <Database className="w-3.5 h-3.5" />
-              <span>Offline Storage & Sync Status</span>
+              <span>{t('walMonitor.bannerTag')}</span>
             </div>
             <h2 className="text-2xl font-black text-slate-950 tracking-tight">
-              Client Mutation Ledger & Sync Engine
+              {t('walMonitor.title')}
             </h2>
             <p className="text-sm text-slate-600 mt-1 max-w-3xl">
-              Local-first IndexedDB ledger preserves ACID mutation safety on edge devices during rural APMC power & network outages.
-              Upon reconnect, mutations are Gzip-compressed, uploaded to <code className="text-emerald-800 font-bold font-mono">/api/v1/sync/wal</code>, and reconciled via authoritative server monotonic sequence.
+              {t('walMonitor.description')}
             </p>
           </div>
 
@@ -81,7 +82,7 @@ export function WALSyncMonitor({
             <button
               onClick={() => onRefreshWAL()}
               className="p-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 transition border border-slate-300 hover:text-slate-900 shadow-xs cursor-pointer"
-              title="Refresh local WAL records"
+              title={t('walMonitor.refreshButton')}
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
@@ -94,12 +95,12 @@ export function WALSyncMonitor({
               {isSyncing ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin text-white" />
-                  <span>Syncing Batch...</span>
+                  <span>{t('walMonitor.syncingBatch')}</span>
                 </>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>Sync Pending WAL ({pendingCount})</span>
+                  <span>{t('walMonitor.syncBatch')} ({pendingCount})</span>
                 </>
               )}
             </button>
@@ -111,43 +112,43 @@ export function WALSyncMonitor({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-            <span>Total Mutations</span>
+            <span>{t('walMonitor.totalMutations')}</span>
             <HardDrive className="w-4 h-4 text-slate-400" />
           </div>
           <div className="text-2xl font-black text-slate-900 mt-1.5 font-mono">{walRecords.length}</div>
-          <div className="text-[10px] text-slate-500 mt-1 font-semibold">IndexedDB transactionsWAL</div>
+          <div className="text-[10px] text-slate-500 mt-1 font-semibold">{t('walMonitor.indexedDbWal')}</div>
         </div>
 
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-            <span>Pending Sync</span>
+            <span>{t('walMonitor.pendingSync')}</span>
             <Clock className={`w-4 h-4 ${pendingCount > 0 ? 'text-amber-600' : 'text-slate-400'}`} />
           </div>
           <div className={`text-2xl font-black mt-1.5 font-mono ${pendingCount > 0 ? 'text-amber-700' : 'text-slate-500'}`}>
             {pendingCount}
           </div>
-          <div className="text-[10px] text-slate-500 mt-1 font-semibold">Queued for server replication</div>
+          <div className="text-[10px] text-slate-500 mt-1 font-semibold">{t('walMonitor.queuedReplication')}</div>
         </div>
 
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-            <span>Reconciled</span>
+            <span>{t('walMonitor.reconciled')}</span>
             <CheckCircle2 className="w-4 h-4 text-emerald-700" />
           </div>
           <div className="text-2xl font-black text-emerald-800 mt-1.5 font-mono">{syncedCount}</div>
-          <div className="text-[10px] text-slate-500 mt-1 font-semibold">Acknowledged by server</div>
+          <div className="text-[10px] text-slate-500 mt-1 font-semibold">{t('walMonitor.acknowledgedServer')}</div>
         </div>
 
         <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-xs">
           <div className="text-slate-500 text-xs font-bold uppercase tracking-wider flex items-center justify-between">
-            <span>Network Rail</span>
+            <span>{t('walMonitor.networkRail')}</span>
             <Zap className={`w-4 h-4 ${effectiveOnline ? 'text-emerald-700' : 'text-amber-600'}`} />
           </div>
           <div className={`text-sm font-black mt-2 truncate ${effectiveOnline ? 'text-emerald-800' : 'text-amber-700'}`}>
-            {effectiveOnline ? 'LIVE CLOUD LINK' : 'OFFLINE AIR-GAP'}
+            {effectiveOnline ? t('walMonitor.liveCloudLink') : t('walMonitor.offlineAirGap')}
           </div>
           <div className="text-[10px] text-slate-500 mt-1 font-semibold">
-            {effectiveOnline ? 'Direct REST & Gzip WAL' : 'IndexedDB Local Fallback'}
+            {effectiveOnline ? t('walMonitor.directRestGzip') : t('walMonitor.indexedDbLocalFallback')}
           </div>
         </div>
       </div>
@@ -157,10 +158,10 @@ export function WALSyncMonitor({
         <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2.5">
           <div className="flex items-center space-x-2">
             <Zap className="w-4 h-4 text-amber-600" />
-            <h3 className="text-sm font-extrabold text-slate-900">Generate Local Offline WAL Mutations</h3>
+            <h3 className="text-sm font-extrabold text-slate-900">{t('walMonitor.generateMutations')}</h3>
           </div>
           <span className="text-[11px] text-slate-500 font-medium">
-            Click to inject test entries into IndexedDB without cloud connection
+            {t('walMonitor.generateMutationsSubtitle')}
           </span>
         </div>
 
@@ -286,7 +287,7 @@ export function WALSyncMonitor({
             }`}
           >
             <HardDrive className="w-3.5 h-3.5" />
-            <span>WAL Mutation Ledger ({walRecords.length})</span>
+            <span>{t('walMonitor.tabLedger')} ({walRecords.length})</span>
           </button>
 
           <button
@@ -301,7 +302,7 @@ export function WALSyncMonitor({
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Materialized State Mirror ({localTxns.length})</span>
+            <span>{t('walMonitor.tabMaterialized')} ({localTxns.length})</span>
           </button>
         </div>
 
@@ -316,6 +317,14 @@ export function WALSyncMonitor({
                   : status === 'SYNCED'
                   ? syncedCount
                   : failedCount;
+              const statusLabel =
+                status === 'ALL'
+                  ? t('common.all')
+                  : status === 'PENDING'
+                  ? t('walMonitor.statusPending')
+                  : status === 'SYNCED'
+                  ? t('walMonitor.statusSynced')
+                  : t('walMonitor.statusFailed');
               return (
                 <button
                   key={status}
@@ -326,7 +335,7 @@ export function WALSyncMonitor({
                       : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-300'
                   }`}
                 >
-                  {status} ({count})
+                  {statusLabel} ({count})
                 </button>
               );
             })}
@@ -340,27 +349,26 @@ export function WALSyncMonitor({
           <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
             <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
               <HardDrive className="w-4 h-4 text-emerald-700" />
-              <span>IndexedDB transactionsWAL Mutation Stream ({filteredRecords.length})</span>
+              <span>{t('walMonitor.tabLedger')} ({filteredRecords.length})</span>
             </h3>
           </div>
 
           {filteredRecords.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-sm">
-              No WAL mutation records match the selected filter. Use the mutation buttons above to create mutations.
+              {t('walMonitor.noRecordsFound')}
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider font-bold">
-                    <th className="py-2.5 px-3">Local ID</th>
-                    <th className="py-2.5 px-3">Client Mutation ID</th>
-                    <th className="py-2.5 px-3">Transaction</th>
-                    <th className="py-2.5 px-3">Target State</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3">Created</th>
-                    <th className="py-2.5 px-3">Retries</th>
-                    <th className="py-2.5 px-3 text-right">Details</th>
+                    <th className="py-2.5 px-3">#</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.colMutationId')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.colEntityId')}</th>
+                    <th className="py-2.5 px-3">{t('sync.targetState')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.colStatus')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.colTimestamp')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('common.details')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -443,13 +451,13 @@ export function WALSyncMonitor({
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 uppercase text-[10px] tracking-wider font-bold">
-                    <th className="py-2.5 px-3">Transaction ID</th>
-                    <th className="py-2.5 px-3">Current State</th>
-                    <th className="py-2.5 px-3">Farmer</th>
-                    <th className="py-2.5 px-3">Mandi</th>
-                    <th className="py-2.5 px-3">Sync Status</th>
-                    <th className="py-2.5 px-3">Last Updated</th>
-                    <th className="py-2.5 px-3 text-right">Details</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.transactionId')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.currentState')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.farmer')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.mandi')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.syncStatus')}</th>
+                    <th className="py-2.5 px-3">{t('walMonitor.lastUpdated')}</th>
+                    <th className="py-2.5 px-3 text-right">{t('walMonitor.details')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -515,10 +523,10 @@ export function WALSyncMonitor({
               <FileCode className="w-5 h-5 text-emerald-700" />
               <div>
                 <h4 className="text-sm font-extrabold text-slate-900">
-                  WAL Payload Inspector — Record #{selectedRecord.id}
+                  {t('walMonitor.payloadInspector')} — #{selectedRecord.id}
                 </h4>
                 <p className="text-xs text-slate-500 font-mono">
-                  Mutation UUID: {selectedRecord.client_mutation_id}
+                  {t('walMonitor.mutationUuid')}: {selectedRecord.client_mutation_id}
                 </p>
               </div>
             </div>
@@ -532,16 +540,16 @@ export function WALSyncMonitor({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 font-mono">
-              <div className="text-slate-500 text-[11px] uppercase font-bold">Metadata Attributes</div>
-              <div><span className="text-slate-500">Transaction ID:</span> <span className="text-slate-900 font-bold">{selectedRecord.transaction_id}</span></div>
-              <div><span className="text-slate-500">Farmer ID:</span> <span className="text-slate-900 font-bold">{selectedRecord.farmer_id}</span></div>
-              <div><span className="text-slate-500">Mandi ID:</span> <span className="text-slate-900 font-bold">{selectedRecord.mandi_id}</span></div>
-              <div><span className="text-slate-500">Target State:</span> <span className="text-emerald-800 font-bold">{selectedRecord.current_state}</span></div>
-              <div><span className="text-slate-500">HMAC Integrity:</span> <span className="text-slate-700 text-[10px] break-all">{selectedRecord.hmac_signature}</span></div>
+              <div className="text-slate-500 text-[11px] uppercase font-bold">{t('walMonitor.metadataAttributes')}</div>
+              <div><span className="text-slate-500">{t('walMonitor.transactionId')}:</span> <span className="text-slate-900 font-bold">{selectedRecord.transaction_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.colFarmerId')}:</span> <span className="text-slate-900 font-bold">{selectedRecord.farmer_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.colMandiId')}:</span> <span className="text-slate-900 font-bold">{selectedRecord.mandi_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.targetState')}:</span> <span className="text-emerald-800 font-bold">{selectedRecord.current_state}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.hmacIntegrity')}:</span> <span className="text-slate-700 text-[10px] break-all">{selectedRecord.hmac_signature}</span></div>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-              <div className="text-slate-500 text-[11px] uppercase font-bold font-mono">Parsed Payload JSON</div>
+              <div className="text-slate-500 text-[11px] uppercase font-bold font-mono">{t('walMonitor.parsedPayload')}</div>
               <pre className="text-slate-900 font-mono text-[11px] overflow-x-auto bg-white p-3 rounded-lg border border-slate-200 max-h-40">
                 {JSON.stringify(
                   selectedRecord.payload || JSON.parse(selectedRecord.payload_json || '{}'),
@@ -562,10 +570,10 @@ export function WALSyncMonitor({
               <Layers className="w-5 h-5 text-emerald-700" />
               <div>
                 <h4 className="text-sm font-extrabold text-slate-900">
-                  Materialized Transaction — {selectedTxn.transaction_id}
+                  {t('walMonitor.materializedTransaction')} — {selectedTxn.transaction_id}
                 </h4>
                 <p className="text-xs text-slate-500 font-mono">
-                  State: {selectedTxn.current_state} | Sync: {selectedTxn.sync_status}
+                  {t('walMonitor.currentState')}: {selectedTxn.current_state} | {t('walMonitor.syncStatus')}: {selectedTxn.sync_status}
                 </p>
               </div>
             </div>
@@ -579,17 +587,17 @@ export function WALSyncMonitor({
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2 font-mono">
-              <div className="text-slate-500 text-[11px] uppercase font-bold">State Attributes</div>
-              <div><span className="text-slate-500">Transaction ID:</span> <span className="text-slate-900 font-bold">{selectedTxn.transaction_id}</span></div>
-              <div><span className="text-slate-500">Current State:</span> <span className="text-emerald-800 font-bold">{selectedTxn.current_state}</span></div>
-              <div><span className="text-slate-500">Farmer ID:</span> <span className="text-slate-900 font-bold">{selectedTxn.farmer_id}</span></div>
-              <div><span className="text-slate-500">Mandi ID:</span> <span className="text-slate-900 font-bold">{selectedTxn.mandi_id}</span></div>
-              <div><span className="text-slate-500">Sync Status:</span> <span className="text-slate-900 font-bold">{selectedTxn.sync_status}</span></div>
-              <div><span className="text-slate-500">Last Mutation ID:</span> <span className="text-slate-700 text-[11px]">{selectedTxn.last_mutation_id || 'N/A'}</span></div>
+              <div className="text-slate-500 text-[11px] uppercase font-bold">{t('walMonitor.stateAttributes')}</div>
+              <div><span className="text-slate-500">{t('walMonitor.transactionId')}:</span> <span className="text-slate-900 font-bold">{selectedTxn.transaction_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.currentState')}:</span> <span className="text-emerald-800 font-bold">{selectedTxn.current_state}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.colFarmerId')}:</span> <span className="text-slate-900 font-bold">{selectedTxn.farmer_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.colMandiId')}:</span> <span className="text-slate-900 font-bold">{selectedTxn.mandi_id}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.syncStatus')}:</span> <span className="text-slate-900 font-bold">{selectedTxn.sync_status}</span></div>
+              <div><span className="text-slate-500">{t('walMonitor.lastMutationId')}:</span> <span className="text-slate-700 text-[11px]">{selectedTxn.last_mutation_id || 'N/A'}</span></div>
             </div>
 
             <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
-              <div className="text-slate-500 text-[11px] uppercase font-bold font-mono">Aggregated Payload JSON</div>
+              <div className="text-slate-500 text-[11px] uppercase font-bold font-mono">{t('walMonitor.aggregatedPayload')}</div>
               <pre className="text-slate-900 font-mono text-[11px] overflow-x-auto bg-white p-3 rounded-lg border border-slate-200 max-h-40">
                 {JSON.stringify(selectedTxn.payload, null, 2)}
               </pre>

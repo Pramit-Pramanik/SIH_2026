@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface USSDPhoneModalProps {
   isOpen: boolean;
@@ -6,12 +7,11 @@ interface USSDPhoneModalProps {
 }
 
 export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
+  const { t } = useLanguage();
   const [phoneNumber, setPhoneNumber] = useState('9876543210');
   const [currentText, setCurrentText] = useState('*247#');
   const [history, setHistory] = useState<string>('');
-  const [screenMessage, setScreenMessage] = useState<string>(
-    'MandiQ Feature Phone Simulator\nDial *247# to begin zero-data session.'
-  );
+  const [screenMessage, setScreenMessage] = useState<string>(() => t('ussd.dialPrompt'));
   const [sessionActive, setSessionActive] = useState<boolean>(false);
   const [sessionId, setSessionId] = useState<string>(() => `ussd-sess-${Date.now()}`);
   const [loading, setLoading] = useState<boolean>(false);
@@ -52,7 +52,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
       });
 
       if (!response.ok) {
-        setScreenMessage(`Error HTTP ${response.status}:\nSession timed out.`);
+        setScreenMessage(`Error HTTP ${response.status}:\n${t('ussd.networkTimeout')}`);
         setSessionActive(false);
         return;
       }
@@ -68,7 +68,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
       }
       setCurrentText('');
     } catch {
-      setScreenMessage('Network / MAP signaling timeout.\nCheck connectivity.');
+      setScreenMessage(t('ussd.networkTimeout'));
       setSessionActive(false);
     } finally {
       setLoading(false);
@@ -87,7 +87,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
     setSessionActive(false);
     setHistory('');
     setCurrentText('*247#');
-    setScreenMessage('Session ended.\nDial *247# to begin.');
+    setScreenMessage(t('ussd.sessionEnded'));
   };
 
   return (
@@ -96,7 +96,8 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
         {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 text-lg font-bold p-1 rounded"
+          aria-label={t('common.close')}
+          className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 text-lg font-bold p-1 rounded cursor-pointer"
         >
           &times;
         </button>
@@ -104,10 +105,10 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
         {/* Feature Phone Title */}
         <div className="text-center mb-4">
           <div className="text-xs font-extrabold text-emerald-800 uppercase tracking-wider">
-            Zero-Data Cellular Simulator
+            {t('ussd.simulatorTitle')}
           </div>
           <div className="text-sm font-black text-slate-900">
-            GSM MAP Layer (*247#)
+            {t('ussd.simulatorSubtitle')}
           </div>
         </div>
 
@@ -117,15 +118,15 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
           <div className="bg-[#0b1a10] border-2 border-[#16361f] rounded-xl p-3 font-mono text-emerald-400 text-xs min-h-[160px] max-h-[220px] overflow-y-auto flex flex-col justify-between shadow-inner">
             <div className="flex justify-between border-b border-emerald-900/60 pb-1 text-[10px] text-emerald-500 font-bold">
               <span>GSM-4G [||||]</span>
-              <span>{sessionActive ? 'MAP ACTIVE' : 'STANDBY'}</span>
+              <span>{sessionActive ? t('ussd.activeCallState') : t('ussd.standbyState')}</span>
             </div>
 
             <pre className="whitespace-pre-wrap leading-relaxed my-2 font-mono text-[11px] text-emerald-300 font-semibold">
-              {loading ? 'Transmitting signaling packet...' : screenMessage}
+              {loading ? t('ussd.transmittingPacket') : screenMessage}
             </pre>
 
             <div className="border-t border-emerald-900/60 pt-1 flex items-center justify-between text-[10px]">
-              <span className="text-emerald-500 font-bold">Input:</span>
+              <span className="text-emerald-500 font-bold">{t('ussd.inputLabel')}</span>
               <span className="font-bold text-emerald-200">{currentText || '_'}</span>
             </div>
           </div>
@@ -135,15 +136,15 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
             <button
               onClick={() => handleSend()}
               disabled={loading}
-              className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs"
+              className="bg-emerald-700 hover:bg-emerald-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs cursor-pointer"
             >
-              SEND / DIAL
+              {t('ussd.sendDial')}
             </button>
             <button
               onClick={handleEndSession}
-              className="bg-rose-700 hover:bg-rose-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs"
+              className="bg-rose-700 hover:bg-rose-800 text-white font-extrabold py-2 rounded-xl text-xs transition shadow-xs cursor-pointer"
             >
-              END / EXIT
+              {t('ussd.endCall')}
             </button>
           </div>
 
@@ -153,7 +154,7 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
               <button
                 key={key}
                 onClick={() => handleKeypadPress(key)}
-                className="bg-white hover:bg-slate-100 text-slate-900 font-mono font-black py-2.5 rounded-xl text-sm transition active:scale-95 shadow-xs border border-slate-300"
+                className="bg-white hover:bg-slate-100 text-slate-900 font-mono font-black py-2.5 rounded-xl text-sm transition active:scale-95 shadow-xs border border-slate-300 cursor-pointer"
               >
                 {key}
               </button>
@@ -163,16 +164,16 @@ export function USSDPhoneModal({ isOpen, onClose }: USSDPhoneModalProps) {
           <div className="mt-2 text-center">
             <button
               onClick={handleClear}
-              className="text-[10px] text-slate-500 hover:text-slate-800 font-bold uppercase tracking-wider"
+              className="text-[10px] text-slate-500 hover:text-slate-800 font-bold uppercase tracking-wider cursor-pointer"
             >
-              Clear Input
+              {t('ussd.clearInput')}
             </button>
           </div>
         </div>
 
         {/* Info footer */}
         <div className="text-[11px] text-slate-600 text-center mt-3 flex items-center justify-center space-x-1.5 font-medium">
-          <span>Caller:</span>
+          <span>{t('ussd.callerLabel')}</span>
           <input
             type="text"
             value={phoneNumber}

@@ -1,16 +1,18 @@
 {
   "short_name": "MandiQ",
-  "name": "MandiQ APMC Platform",
+  "name": "MandiQ — APMC Yard & Queue Management",
+  "description": "Digital APMC Yard, Dynamic Quality Assaying & Offline-First Queue Platform",
   "icons": [
     {
-      "src": "favicon.ico",
-      "sizes": "64x64 32x32 24x24 16x16",
-      "type": "image/x-icon"
+      "src": "/vite.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
     }
   ],
   "start_url": "/",
-  "background_color": "#ffffff",
-  "theme_color": "#15803d",
+  "background_color": "#f4f7f4",
+  "theme_color": "#1e5e3a",
   "display": "standalone",
   "orientation": "portrait"
 }

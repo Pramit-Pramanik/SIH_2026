@@ -7,19 +7,20 @@ import {
   ShieldCheck,
   Building2,
   Lock,
-  Wallet
 } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
-  markWALRecordSynced,
-  markWALRecordFailed,
-  getLocalTransaction,
 } from '../db/dexie';
+import { getAuthHeaders } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
+import { useAuthoritativeTransaction } from '../context/TransactionContext';
+import { AuthUser } from '../services/authService';
 
 interface BillingPayoutStationProps {
-  mandiId: number;
+  mandiId?: number;
   effectiveOnline: boolean;
   activeTxnId: string | null;
+  currentUser?: AuthUser | null;
   onBillingComplete?: (txnId: string, invoiceAmount: number) => void;
 }
 
@@ -58,29 +59,34 @@ interface MockDbtResponse {
 }
 
 export function BillingPayoutStation({
-  mandiId,
   effectiveOnline,
   activeTxnId,
+  currentUser,
   onBillingComplete,
 }: BillingPayoutStationProps) {
-  const [transactionId, setTransactionId] = useState(activeTxnId || 'TXN-DEMO-1001');
-  const [ratePerQt, setRatePerQt] = useState<number>(2275.0); // Official Wheat MSP
+  const { t } = useLanguage();
+  const {
+    activeTxnId: contextTxnId,
+    activeTransaction,
+    resolutionStatus,
+    resolutionError,
+    setActiveTxnId,
+    refreshTransaction,
+  } = useAuthoritativeTransaction();
+
+  const [manualTxnInput, setManualTxnInput] = useState('');
+  const [ratePerQt, setRatePerQt] = useState<number>(2275.0);
   const [deductionsInr, setDeductionsInr] = useState<number>(0.0);
   const [inspectorNotes, setInspectorNotes] = useState<string>('Standard FAQ lot verified at weighbridge.');
-
-  // Cached attributes from previous pipeline stages in Dexie
-  const [cachedNetWeight, setCachedNetWeight] = useState<number>(50.0);
-  const [cachedCropType, setCachedCropType] = useState<string>('Wheat');
-  const [cachedFarmerName, setCachedFarmerName] = useState<string>('Local Registered Farmer');
 
   // Invoice State
   const [invoice, setInvoice] = useState<JFormInvoice | null>(null);
   const [isGeneratingBill, setIsGeneratingBill] = useState(false);
 
-  // Dual-Signature Staging State
-  const [inspectorId, setInspectorId] = useState<number>(101);
+  // Dual-Signature Staging State: Authoritative staff resolution
+  const [inspectorId, setInspectorId] = useState<number>(currentUser?.user_id && currentUser.role === 'INSPECTOR' ? currentUser.user_id : 0);
   const [inspectorSig, setInspectorSig] = useState<string>('');
-  const [operatorId, setOperatorId] = useState<number>(202);
+  const [operatorId, setOperatorId] = useState<number>(currentUser?.user_id && currentUser.role === 'OPERATOR' ? currentUser.user_id : 0);
   const [operatorSig, setOperatorSig] = useState<string>('');
   const [isStagingPayout, setIsStagingPayout] = useState(false);
   const [payoutResult, setPayoutResult] = useState<PayoutResponse | null>(null);
@@ -95,95 +101,174 @@ export function BillingPayoutStation({
     details?: Record<string, unknown>;
   } | null>(null);
 
+  const targetTxnId = activeTransaction?.transaction_id || contextTxnId || activeTxnId;
+
+  // Resolve Authoritative Crop MSP from server and listen to live Admin MSP updates (Phase 3 & Phase 7)
   useEffect(() => {
-    const targetId = activeTxnId || transactionId;
-    if (targetId) {
-      if (activeTxnId) setTransactionId(activeTxnId);
-      // 1. Check local Dexie first
-      getLocalTransaction(targetId).then((tx) => {
-        if (tx && tx.payload) {
-          if (typeof tx.payload.net_weight_qt === 'number') {
-            setCachedNetWeight(tx.payload.net_weight_qt);
-          } else if (
-            typeof tx.payload.gross_weight_qt === 'number' &&
-            typeof tx.payload.tare_weight_qt === 'number'
-          ) {
-            setCachedNetWeight(
-              Math.max(0, tx.payload.gross_weight_qt - tx.payload.tare_weight_qt)
+    const fetchAuthoritativeCropMsp = () => {
+      if (activeTransaction && effectiveOnline) {
+        const cropName = activeTransaction.crop_type || 'Wheat';
+        fetch('/api/v1/crops', { headers: getAuthHeaders() })
+          .then((res) => (res.ok ? res.json() : []))
+          .then((cropsList: Array<{ crop_name: string; msp_price_inr: number }>) => {
+            const match = cropsList.find(
+              (c) => c.crop_name.toLowerCase().includes(cropName.toLowerCase()) || cropName.toLowerCase().includes(c.crop_name.toLowerCase())
             );
-          }
-          if (typeof tx.payload.crop_type === 'string') {
-            setCachedCropType(tx.payload.crop_type);
-          }
-          if (typeof tx.payload.farmer_name === 'string') {
-            setCachedFarmerName(tx.payload.farmer_name);
-          }
-        }
-      });
-      // 2. Fetch authoritative database state if online
-      if (effectiveOnline) {
-        fetch(`/api/v1/billing/${targetId}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((billData) => {
-            if (billData && billData.invoice_id) {
-              setInvoice(billData);
-              if (typeof billData.net_weight_qt === 'number') setCachedNetWeight(billData.net_weight_qt);
-              if (typeof billData.rate_per_qt === 'number') setRatePerQt(billData.rate_per_qt);
-              if (typeof billData.deductions_inr === 'number') setDeductionsInr(billData.deductions_inr);
-              if (billData.crop_type) setCachedCropType(billData.crop_type);
-              if (billData.farmer_name) setCachedFarmerName(billData.farmer_name);
-            } else {
-              // Not billed yet: try weighbridge for net weight
-              fetch(`/api/v1/weighbridge/${targetId}`)
-                .then((wbRes) => (wbRes.ok ? wbRes.json() : null))
-                .then((wbData) => {
-                  if (wbData && typeof wbData.net_weight_qt === 'number' && wbData.net_weight_qt > 0) {
-                    setCachedNetWeight(wbData.net_weight_qt);
-                  }
-                })
-                .catch(() => {});
+            if (match && typeof match.msp_price_inr === 'number') {
+              setRatePerQt(match.msp_price_inr);
             }
           })
-          .catch(() => {});
+          .catch((err) => {
+            console.warn('[BillingPayoutStation] Could not resolve crops for MSP rate:', err);
+          });
       }
-    }
-  }, [activeTxnId, transactionId, effectiveOnline]);
-
-  // Handle generating official J-Form joint-sale invoice
-  const handleGenerateJForm = async () => {
-    setIsGeneratingBill(true);
-    setFeedback(null);
-    const estimatedNet = cachedNetWeight;
-    const grossAmount = estimatedNet * ratePerQt;
-    const invoiceAmount = Math.max(0, grossAmount - deductionsInr);
-    const simInvoiceId = `JFORM-OFFLINE-${Date.now().toString().slice(-6)}`;
-
-    const offlineInvoice: JFormInvoice = {
-      invoice_id: simInvoiceId,
-      transaction_id: transactionId,
-      farmer_id: 1,
-      farmer_name: cachedFarmerName,
-      mandi_id: mandiId,
-      crop_type: cachedCropType,
-      net_weight_qt: estimatedNet,
-      rate_per_qt: ratePerQt,
-      gross_amount_inr: grossAmount,
-      deductions_inr: deductionsInr,
-      invoice_amount_inr: invoiceAmount,
-      current_state: 'BILL_GENERATED',
-      generated_at: new Date().toISOString(),
-      message: 'Saved locally in IndexedDB transactionsWAL.',
     };
 
-    const mutationId = `mut-bill-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    fetchAuthoritativeCropMsp();
+
+    window.addEventListener('mandiq:crops-changed', fetchAuthoritativeCropMsp);
+    return () => {
+      window.removeEventListener('mandiq:crops-changed', fetchAuthoritativeCropMsp);
+    };
+  }, [activeTransaction?.crop_type, effectiveOnline]);
+
+  // Load existing billing invoice if already generated
+  useEffect(() => {
+    if (targetTxnId && effectiveOnline) {
+      fetch(`/api/v1/billing/${targetTxnId}`, {
+        headers: getAuthHeaders(),
+      })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((billData: JFormInvoice | null) => {
+          if (billData && billData.invoice_id) {
+            setInvoice(billData);
+            if (typeof billData.rate_per_qt === 'number') setRatePerQt(billData.rate_per_qt);
+            if (typeof billData.deductions_inr === 'number') setDeductionsInr(billData.deductions_inr);
+          }
+        })
+        .catch((err) => {
+          console.warn('[BillingPayoutStation] Could not load existing invoice:', err);
+        });
+    }
+
+    // Resolve authoritative operational staff IDs if Admin or Supervisor
+    if (effectiveOnline && currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPERVISOR')) {
+      fetch('/api/v1/admin/users', { headers: getAuthHeaders() })
+        .then((res) => (res.ok ? res.json() : []))
+        .then((users: Array<{ user_id: number; role: string }>) => {
+          const insp = users.find((u) => u.role === 'INSPECTOR');
+          const oper = users.find((u) => u.role === 'OPERATOR');
+          if (insp) setInspectorId((prev) => (prev > 0 ? prev : insp.user_id));
+          if (oper) setOperatorId((prev) => (prev > 0 ? prev : oper.user_id));
+        })
+        .catch((err) => {
+          console.warn('[BillingPayoutStation] Could not load admin users for staff IDs:', err);
+        });
+    }
+  }, [targetTxnId, effectiveOnline, currentUser]);
+
+  const authoritativeNetWeight = activeTransaction?.net_weight_qt ?? null;
+  const isReadyForBilling = activeTransaction && (activeTransaction.current_state === 'WEIGHED_TARE' || activeTransaction.current_state === 'BILL_GENERATED');
+  const hasValidNetWeight = typeof authoritativeNetWeight === 'number' && authoritativeNetWeight > 0;
+
+  // Handle generating official J-Form joint-sale invoice (Phase 7)
+  const handleGenerateJForm = async () => {
+    if (!activeTransaction || !targetTxnId) {
+      setFeedback({ type: 'error', message: t('common.noActiveTransaction') });
+      return;
+    }
+
+    if (!hasValidNetWeight) {
+      setFeedback({
+        type: 'error',
+        message: t('common.jformMissingNetWeight'),
+      });
+      return;
+    }
+
+    if (!isReadyForBilling) {
+      setFeedback({
+        type: 'error',
+        message: `Transaction is in state '${activeTransaction.current_state}'. Vehicle must be in 'WEIGHED_TARE' before generating J-Form.`,
+      });
+      return;
+    }
+
+    setIsGeneratingBill(true);
+    setFeedback(null);
+
+    const grossAmount = authoritativeNetWeight * ratePerQt;
+    const invoiceAmount = Math.max(0, grossAmount - deductionsInr);
+    const mutationId = `mut-bill-${Date.now()}`;
 
     try {
-      // 1. Transaction boundary: atomically update WAL and local transactions mirror
-      const walRecord = await executeLocalTransactionMutation({
+      if (effectiveOnline) {
+        // Authoritative Cloud Call FIRST (Phase 7.5)
+        const resp = await fetch('/api/v1/billing/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            transaction_id: targetTxnId,
+            rate_per_qt: ratePerQt,
+            deductions_inr: deductionsInr,
+            inspector_notes: inspectorNotes,
+          }),
+        });
+
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'J-Form billing rejected by server');
+        }
+
+        // Commit synced state to IndexedDB
+        await executeLocalTransactionMutation({
+          client_mutation_id: mutationId,
+          transaction_id: targetTxnId,
+          farmer_id: activeTransaction.farmer_id,
+          mandi_id: activeTransaction.mandi_id,
+          current_state: 'BILL_GENERATED',
+          payload_json: JSON.stringify(data),
+          payload: data,
+          hmac_signature: `BILL_SIG_${Date.now()}`,
+          client_timestamp: Date.now(),
+        });
+
+        setInvoice(data);
+        setFeedback({
+          type: 'success',
+          message: `Official J-Form invoice generated: ₹${data.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}. State: ${data.current_state}. Ready for dual-signature payout staging.`,
+          details: data,
+        });
+
+        onBillingComplete?.(targetTxnId, data.invoice_amount_inr);
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: data }));
+        await refreshTransaction();
+        return;
+      }
+
+      // Offline fallback
+      const offlineInvoice: JFormInvoice = {
+        invoice_id: `JFORM-OFFLINE-${Date.now().toString().slice(-6)}`,
+        transaction_id: targetTxnId,
+        farmer_id: activeTransaction.farmer_id,
+        farmer_name: activeTransaction.farmer_name || `Farmer #${activeTransaction.farmer_id}`,
+        mandi_id: activeTransaction.mandi_id,
+        crop_type: activeTransaction.crop_type || 'Wheat',
+        net_weight_qt: authoritativeNetWeight,
+        rate_per_qt: ratePerQt,
+        gross_amount_inr: grossAmount,
+        deductions_inr: deductionsInr,
+        invoice_amount_inr: invoiceAmount,
+        current_state: 'BILL_GENERATED',
+        generated_at: new Date().toISOString(),
+        message: t('common.savedLocallyWal'),
+      };
+
+      await executeLocalTransactionMutation({
         client_mutation_id: mutationId,
-        transaction_id: transactionId,
-        farmer_id: 1,
-        mandi_id: mandiId,
+        transaction_id: targetTxnId,
+        farmer_id: activeTransaction.farmer_id,
+        mandi_id: activeTransaction.mandi_id,
         current_state: 'BILL_GENERATED',
         payload_json: JSON.stringify(offlineInvoice),
         payload: offlineInvoice as unknown as Record<string, unknown>,
@@ -191,71 +276,13 @@ export function BillingPayoutStation({
         client_timestamp: Date.now(),
       });
 
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/billing/generate', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: transactionId,
-              rate_per_qt: ratePerQt > 0 ? ratePerQt : undefined,
-              deductions_inr: deductionsInr,
-              inspector_notes: inspectorNotes.trim() || undefined,
-            }),
-          });
-
-          if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({ detail: 'Failed to generate J-Form' }));
-            await markWALRecordFailed(walRecord.id, errData.detail || 'J-Form billing generation rejected.');
-            throw new Error(errData.detail || 'J-Form billing generation rejected.');
-          }
-
-          const data: JFormInvoice = await resp.json();
-          await markWALRecordSynced(walRecord.id, data as unknown as Record<string, unknown>);
-          setInvoice(data);
-          setFeedback({
-            type: 'success',
-            message: `Official J-Form Invoice ${data.invoice_id} successfully generated!`,
-            details: {
-              InvoiceID: data.invoice_id,
-              Farmer: data.farmer_name,
-              Crop: data.crop_type,
-              NetWeight: `${data.net_weight_qt} qt`,
-              Rate: `₹${data.rate_per_qt}/qt`,
-              Deductions: `₹${data.deductions_inr.toFixed(2)}`,
-              NetPayable: `₹${data.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-              Status: data.current_state,
-            },
-          });
-
-          if (onBillingComplete) {
-            onBillingComplete(data.transaction_id, data.invoice_amount_inr);
-          }
-          return;
-        } catch (cloudErr) {
-          if (!window.navigator.onLine || !effectiveOnline) {
-            console.warn('Billing generation network dropped mid-flight; using local WAL record.', cloudErr);
-          } else {
-            throw cloudErr;
-          }
-        }
-      }
-
-      // Offline fallback
       setInvoice(offlineInvoice);
       setFeedback({
-        type: 'warning',
-        message: `Network Offline: J-Form recorded locally in Dexie WAL (${simInvoiceId})!`,
-        details: {
-          Status: 'PENDING_SERVER_SYNC',
-          Storage: 'Client IndexedDB WAL',
-          NetPayable: `₹${invoiceAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-        },
+        type: 'success',
+        message: `[OFFLINE WAL] J-Form invoice (₹${invoiceAmount.toFixed(2)}) saved to IndexedDB transactionsWAL.`,
       });
-
-      if (onBillingComplete) {
-        onBillingComplete(transactionId, invoiceAmount);
-      }
+      onBillingComplete?.(targetTxnId, invoiceAmount);
+      await refreshTransaction();
     } catch (err: unknown) {
       setFeedback({
         type: 'error',
@@ -266,95 +293,138 @@ export function BillingPayoutStation({
     }
   };
 
-  // Handle staging dual-signature DBT payout
+  // Handle staging dual-signature DBT payout (Phase 9)
   const handleStagePayout = async () => {
     if (!invoice) {
       setFeedback({
         type: 'error',
-        message: 'Please generate or fetch a valid J-Form invoice first.',
+        message: t('common.generateJformFirst'),
       });
       return;
     }
 
+    const isAdmin = currentUser?.role === 'ADMIN';
+
+    // Role-bound signature resolution (Phase 9)
+    let finalInspectorSig = inspectorSig.trim();
+    let finalOperatorSig = operatorSig.trim();
+
+    if (!finalInspectorSig || !finalOperatorSig) {
+      if (!isAdmin) {
+        setFeedback({
+          type: 'error',
+          message: t('common.dualSigAdminNotice'),
+        });
+        return;
+      }
+
+      // Admin prototype convenience: call demo-signatures
+      try {
+        const authToken = localStorage.getItem('mandiq_token');
+        const demoRes = await fetch('/api/v1/payout/demo-signatures', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+          body: JSON.stringify({
+            transaction_id: invoice.transaction_id,
+            invoice_amount_inr: invoice.invoice_amount_inr,
+            inspector_id: inspectorId,
+            operator_id: operatorId,
+          }),
+        });
+
+        if (!demoRes.ok) {
+          const err = await demoRes.json().catch(() => ({}));
+          throw new Error(err.detail || 'Failed to generate demo signatures.');
+        }
+
+        const demoData = await demoRes.json();
+        finalInspectorSig = demoData.inspector_sig_hash;
+        finalOperatorSig = demoData.operator_sig_hash;
+        setInspectorSig(finalInspectorSig);
+        setOperatorSig(finalOperatorSig);
+      } catch (sigErr: unknown) {
+        setFeedback({
+          type: 'error',
+          message: sigErr instanceof Error ? sigErr.message : 'Could not obtain demo signatures.',
+        });
+        return;
+      }
+    }
+
     setIsStagingPayout(true);
     setFeedback(null);
-    const mutationId = `mut-payout-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-    const payload = {
-      transaction_id: invoice.transaction_id,
-      amount_inr: invoice.invoice_amount_inr,
-      inspector_id: inspectorId,
-      operator_id: operatorId,
-    };
+    const mutationId = `mut-payout-${Date.now()}`;
 
     try {
-      // 1. Transaction boundary: atomically update WAL and local transactions mirror
-      const walRecord = await executeLocalTransactionMutation({
+      if (effectiveOnline) {
+        const authToken = localStorage.getItem('mandiq_token');
+        const resp = await fetch('/api/v1/payout/stage', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}) },
+          body: JSON.stringify({
+            transaction_id: invoice.transaction_id,
+            invoice_amount_inr: invoice.invoice_amount_inr,
+            inspector_id: inspectorId,
+            operator_id: operatorId,
+            inspector_sig_hash: finalInspectorSig,
+            operator_sig_hash: finalOperatorSig,
+          }),
+        });
+
+        if (!resp.ok) {
+          const errData = await resp.json().catch(() => ({ detail: 'Dual-signature verification rejected.' }));
+          throw new Error(errData.detail || 'Payout staging failed.');
+        }
+
+        const data: PayoutResponse = await resp.json();
+
+        // ONLY mark PAYMENT_SETTLED after authoritative backend success (Phase 9.3)
+        await executeLocalTransactionMutation({
+          client_mutation_id: mutationId,
+          transaction_id: invoice.transaction_id,
+          farmer_id: invoice.farmer_id,
+          mandi_id: invoice.mandi_id,
+          current_state: 'PAYMENT_SETTLED',
+          payload_json: JSON.stringify(data),
+          payload: data as unknown as Record<string, unknown>,
+          hmac_signature: `PAYOUT_SIG_${Date.now()}`,
+          client_timestamp: Date.now(),
+        });
+
+        setPayoutResult(data);
+        setFeedback({
+          type: 'success',
+          message: `DBT Payout Staged & Settled! Block Hash: ${data.payout_block_hash.slice(0, 16)}...`,
+          details: {
+            Status: data.status,
+            Amount: `₹${data.amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+            BlockHash: data.payout_block_hash,
+            State: data.current_state,
+          },
+        });
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: data }));
+        await refreshTransaction();
+        return;
+      }
+
+      // Offline fallback
+      await executeLocalTransactionMutation({
         client_mutation_id: mutationId,
         transaction_id: invoice.transaction_id,
         farmer_id: invoice.farmer_id,
-        mandi_id: mandiId,
-        current_state: 'PAYMENT_SETTLED',
-        payload_json: JSON.stringify(payload),
-        payload,
+        mandi_id: invoice.mandi_id,
+        current_state: 'DBT_PAYMENT_INITIATED',
+        payload_json: JSON.stringify(invoice),
+        payload: invoice as unknown as Record<string, unknown>,
         hmac_signature: `OFFLINE_PAYOUT_SIG_${Date.now()}`,
         client_timestamp: Date.now(),
       });
 
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/payout/stage', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: invoice.transaction_id,
-              invoice_amount_inr: invoice.invoice_amount_inr,
-              inspector_id: inspectorId,
-              inspector_sig_hash: inspectorSig.trim() || 'SAMPLE_INSPECTOR_SIG_FOR_DEMO',
-              operator_id: operatorId,
-              operator_sig_hash: operatorSig.trim() || 'SAMPLE_OPERATOR_SIG_FOR_DEMO',
-            }),
-          });
-
-          if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({ detail: 'Dual-signature verification rejected.' }));
-            await markWALRecordFailed(walRecord.id, errData.detail || 'Payout staging failed.');
-            throw new Error(errData.detail || 'Payout staging failed.');
-          }
-
-          const data: PayoutResponse = await resp.json();
-          await markWALRecordSynced(walRecord.id, data as unknown as Record<string, unknown>);
-          setPayoutResult(data);
-          setFeedback({
-            type: 'success',
-            message: 'Dual-Signature DBT Payout Staged & Authorized!',
-            details: {
-              Status: data.status,
-              Transaction: data.transaction_id,
-              PayoutBlockHash: `${data.payout_block_hash.substring(0, 24)}...`,
-              State: data.current_state,
-              DBTReference: data.dbt_reference_id || 'Pending PFMS Batch',
-            },
-          });
-          return;
-        } catch (cloudErr) {
-          if (!window.navigator.onLine || !effectiveOnline) {
-            console.warn('Payout staging network dropped mid-flight; using local WAL record.', cloudErr);
-          } else {
-            throw cloudErr;
-          }
-        }
-      }
-
-      // Offline fallback
       setFeedback({
         type: 'warning',
-        message: 'Offline Blackout Mode: Dual-signature payout queued in Dexie WAL.',
-        details: {
-          Transaction: invoice.transaction_id,
-          Status: 'QUEUED_FOR_MERGE',
-          State: 'PAYMENT_SETTLED',
-        },
+        message: t('common.dbtOfflineWal'),
       });
+      await refreshTransaction();
     } catch (err: unknown) {
       setFeedback({
         type: 'error',
@@ -367,19 +437,46 @@ export function BillingPayoutStation({
 
   // Direct Mock DBT Payout Settlement (PFMS / NPCI simulation)
   const handleTriggerMockDbt = async () => {
+    if (!activeTransaction) return;
     setIsCallingDbt(true);
     setFeedback(null);
     try {
-      const amount = invoice ? invoice.invoice_amount_inr : 142187.5;
+      const amount = invoice?.invoice_amount_inr ?? activeTransaction.total_payout_inr;
+      if (!amount || amount <= 0) {
+        setFeedback({
+          type: 'error',
+          message: 'Cannot trigger DBT disbursement: Please generate a J-Form invoice first.',
+        });
+        setIsCallingDbt(false);
+        return;
+      }
+
+      let bankIfsc = 'SBIN0001040';
+      let bankHash = 'd6a89c4f6b8a213e4590cf2318ea1b3799c82405a8f4c2b9a7d3e1f0e219b456';
+      if (effectiveOnline && activeTransaction.farmer_id) {
+        try {
+          const profileRes = await fetch(`/api/v1/farmers/profile?farmer_id=${activeTransaction.farmer_id}`, {
+            headers: getAuthHeaders(),
+          });
+          if (profileRes.ok) {
+            const pData = await profileRes.json();
+            if (pData.ifsc_code) bankIfsc = pData.ifsc_code;
+            if (pData.bank_account_hash) bankHash = pData.bank_account_hash;
+          }
+        } catch (profileErr) {
+          console.warn('[BillingPayoutStation] Profile lookup for bank details deferred:', profileErr);
+        }
+      }
+
       if (effectiveOnline) {
         const resp = await fetch('/api/v1/mock/dbt-payout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
           body: JSON.stringify({
-            farmer_id: invoice ? invoice.farmer_id : 1,
+            farmer_id: activeTransaction.farmer_id,
             transaction_amount_inr: amount,
-            bank_ifsc: 'SBIN0001040',
-            account_number_hash: 'd6a89c4f6b8a213e4590cf2318ea1b3799c82405a8f4c2b9a7d3e1f0e219b456',
+            bank_ifsc: bankIfsc,
+            account_number_hash: bankHash,
           }),
         });
 
@@ -391,7 +488,7 @@ export function BillingPayoutStation({
         setMockDbtResult(dbtData);
         setFeedback({
           type: 'success',
-          message: 'Direct Benefit Transfer (DBT) confirmed by PFMS Settlement Rail!',
+          message: t('common.dbtPfmsConfirmed'),
           details: {
             Status: dbtData.status,
             Rail: dbtData.settlement_rail,
@@ -409,7 +506,7 @@ export function BillingPayoutStation({
         setMockDbtResult(dbtData);
         setFeedback({
           type: 'warning',
-          message: 'Offline Blackout: Direct Benefit Transfer (DBT) recorded locally in Dexie. Will reconcile when online.',
+          message: t('common.dbtOfflineRecorded'),
           details: {
             Status: dbtData.status,
             Rail: dbtData.settlement_rail,
@@ -428,37 +525,111 @@ export function BillingPayoutStation({
     }
   };
 
+  // Preflight validation rendering (Phase 7.2)
+  if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
+    return (
+      <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
+        <Receipt className="w-16 h-16 text-emerald-600 mx-auto" />
+        <h2 className="text-xl font-black text-slate-800">{t('billing.title')}</h2>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
+          <div className="flex items-center space-x-1.5 font-bold text-amber-950">
+            <AlertTriangle className="w-4 h-4 text-amber-700" />
+            <span>{t('billing.title')} — {t('common.noData')}</span>
+          </div>
+          <p className="text-slate-600">
+            {resolutionError || 'Please complete weighbridge net settlement before generating J-Form billing.'}
+          </p>
+        </div>
+        <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
+          <input
+            type="text"
+            value={manualTxnInput}
+            onChange={(e) => setManualTxnInput(e.target.value.trim())}
+            placeholder="e.g. TXN-..."
+            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
+          />
+          <button
+            onClick={() => {
+              if (manualTxnInput) setActiveTxnId(manualTxnInput);
+            }}
+            disabled={!manualTxnInput}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
+          >
+            Load
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Station Header */}
       <div className="bg-gradient-to-r from-emerald-50 to-green-50 border border-emerald-200 rounded-2xl p-6 shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 border border-emerald-300 px-3 py-1 rounded-md mb-2">
               <Receipt className="w-3.5 h-3.5" />
-              <span>Billing & DBT Payment Disbursal</span>
+              <span>{t('billing.title')}</span>
             </div>
             <h2 className="text-2xl font-black text-emerald-950 tracking-tight">
-              Settlement & Payout Accounting Terminal
+              {t('billing.subtitle')}
             </h2>
             <p className="text-sm text-slate-600 mt-1 max-w-3xl">
-              Generates legally binding digital J-Form joint receipts applying authoritative Agmarknet MSP.
-              Requires dual cryptographic HMAC signatures (Inspector + Operator) before releasing DBT funds to farmer bank accounts.
+              {t('billing.dualSignatureRequired')}
             </p>
           </div>
 
           <div className="flex items-center space-x-3">
             <div className="bg-white border border-emerald-200 shadow-xs px-4 py-2.5 rounded-xl text-right">
               <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
-                Wheat MSP Baseline
+                {activeTransaction.crop_type || 'Wheat'} {t('billing.mspPrice')}
               </div>
               <div className="text-lg font-black text-emerald-800">
-                ₹2,275.00 <span className="text-xs text-slate-500 font-normal">/ quintal</span>
+                ₹{ratePerQt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} <span className="text-xs text-slate-500 font-normal">/ {t('common.quintals')}</span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      {/* State Notice if not ready for billing */}
+      {!isReadyForBilling && (
+        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+            <div>
+              <span className="font-bold">{t('common.status')}: </span>
+              <span>
+                Transaction is currently in state <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-200">{activeTransaction.current_state}</code>.
+                Vehicle must complete weighbridge tare weighing ('WEIGHED_TARE') before J-Form billing.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Alert */}
+      {feedback && (
+        <div
+          className={`p-4 rounded-xl border text-xs flex items-center justify-between shadow-xs ${
+            feedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : feedback.type === 'warning'
+              ? 'bg-amber-50 border-amber-300 text-amber-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+            )}
+            <span className="font-bold">{feedback.message}</span>
+          </div>
+        </div>
+      )}
 
       {/* Grid: J-Form Generator and Dual-Signature Payout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -468,28 +639,35 @@ export function BillingPayoutStation({
             <div className="flex items-center space-x-2.5 mb-4 border-b border-slate-200 pb-3">
               <FileText className="w-5 h-5 text-emerald-700" />
               <h3 className="text-base font-extrabold text-slate-900">
-                1. Digital J-Form Joint-Sale Receipt
+                1. {t('billing.jformTitle')}
               </h3>
             </div>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Procurement Transaction ID
+                  {t('farmer.activeToken')}
                 </label>
                 <input
                   type="text"
-                  value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
-                  placeholder="e.g. TXN-DEMO-1001"
+                  value={activeTransaction.transaction_id}
+                  disabled
+                  className="w-full bg-slate-100 border border-slate-300 rounded-xl px-4 py-2.5 text-sm font-mono text-slate-700 cursor-not-allowed"
                 />
+              </div>
+
+              {/* Authoritative Net Weight from Weighbridge */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex items-center justify-between text-xs">
+                <span className="text-slate-600 font-medium">{t('billing.netWeight')}:</span>
+                <span className="font-mono font-black text-slate-900 text-sm">
+                  {hasValidNetWeight ? `${authoritativeNetWeight?.toFixed(2)} Qt` : 'Not Weighed Yet'}
+                </span>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Procurement Rate (₹/qt)
+                    {t('billing.mspPrice')} (₹/{t('common.quintals')})
                   </label>
                   <input
                     type="number"
@@ -499,12 +677,12 @@ export function BillingPayoutStation({
                     onChange={(e) => setRatePerQt(parseFloat(e.target.value) || 0)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">Government MSP rate</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">{t('farmer.govtMsp')}</span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Deductions (₹ INR)
+                    {t('billing.mandiDeductions')} (₹)
                   </label>
                   <input
                     type="number"
@@ -514,13 +692,13 @@ export function BillingPayoutStation({
                     onChange={(e) => setDeductionsInr(parseFloat(e.target.value) || 0)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-2 text-sm font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-emerald-600 transition"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">Moisture or handling cut</span>
+                  <span className="text-[10px] text-slate-500 mt-1 block font-semibold">{t('billing.deductionsCut')}</span>
                 </div>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Inspector Remarks
+                  {t('billing.inspectorRemarks')}
                 </label>
                 <textarea
                   rows={2}
@@ -535,18 +713,18 @@ export function BillingPayoutStation({
           <div className="mt-6 pt-4 border-t border-slate-200">
             <button
               onClick={handleGenerateJForm}
-              disabled={isGeneratingBill || !transactionId.trim()}
+              disabled={isGeneratingBill || !hasValidNetWeight || !isReadyForBilling}
               className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-md shadow-emerald-700/20 cursor-pointer"
             >
               {isGeneratingBill ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                  <span>Computing J-Form Invoice...</span>
+                  <span>{t('billing.generating')}</span>
                 </>
               ) : (
                 <>
                   <Receipt className="w-4 h-4" />
-                  <span>Generate J-Form Invoice</span>
+                  <span>{t('billing.generateButton')}</span>
                 </>
               )}
             </button>
@@ -575,20 +753,20 @@ export function BillingPayoutStation({
                   </label>
                   <input
                     type="number"
-                    value={inspectorId}
-                    onChange={(e) => setInspectorId(parseInt(e.target.value) || 101)}
+                    value={inspectorId || ''}
+                    onChange={(e) => setInspectorId(parseInt(e.target.value) || 0)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Inspector HMAC-SHA256
+                    {t('billing.inspectorHmac')}
                   </label>
                   <input
                     type="text"
                     value={inspectorSig}
                     onChange={(e) => setInspectorSig(e.target.value)}
-                    placeholder="Enter or auto-verify HMAC"
+                    placeholder={t('billing.enterOrVerifyHmac')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 placeholder:text-slate-400"
                   />
                 </div>
@@ -601,27 +779,27 @@ export function BillingPayoutStation({
                   </label>
                   <input
                     type="number"
-                    value={operatorId}
-                    onChange={(e) => setOperatorId(parseInt(e.target.value) || 202)}
+                    value={operatorId || ''}
+                    onChange={(e) => setOperatorId(parseInt(e.target.value) || 0)}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Operator HMAC-SHA256
+                    {t('billing.operatorHmac')}
                   </label>
                   <input
                     type="text"
                     value={operatorSig}
                     onChange={(e) => setOperatorSig(e.target.value)}
-                    placeholder="Enter or auto-verify HMAC"
+                    placeholder={t('billing.enterOrVerifyHmac')}
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:outline-none focus:bg-white focus:border-indigo-600 placeholder:text-slate-400"
                   />
                 </div>
               </div>
 
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3 flex items-center justify-between text-xs">
-                <span className="text-indigo-900 font-semibold">Target Invoice Amount:</span>
+                <span className="text-indigo-900 font-semibold">{t('billing.targetInvoiceAmount')}:</span>
                 <span className="text-indigo-950 font-mono font-black">
                   {invoice ? `₹${invoice.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` : 'Generate J-Form First'}
                 </span>
@@ -638,12 +816,12 @@ export function BillingPayoutStation({
               {isStagingPayout ? (
                 <>
                   <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                  <span>Verifying Cryptographic Signatures...</span>
+                  <span>{t('billing.verifyingSignatures')}</span>
                 </>
               ) : (
                 <>
                   <Lock className="w-4 h-4" />
-                  <span>Stage Dual-Signature DBT Payout</span>
+                  <span>{t('billing.stageDualSignature')}</span>
                 </>
               )}
             </button>
@@ -654,8 +832,32 @@ export function BillingPayoutStation({
               className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2 px-4 rounded-xl text-xs transition flex items-center justify-center space-x-2 border border-slate-300 cursor-pointer"
             >
               <Building2 className="w-3.5 h-3.5 text-emerald-700" />
-              <span>Simulate PFMS / NPCI Aadhaar Settlement Direct Rail</span>
+              <span>{t('billing.simulatePfms')}</span>
             </button>
+
+            {payoutResult && (
+              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs space-y-1">
+                <div className="font-bold text-indigo-950 flex items-center space-x-1">
+                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-700" />
+                  <span>Settlement: {payoutResult.status} ({payoutResult.current_state})</span>
+                </div>
+                <div className="font-mono text-[10px] text-indigo-800 break-all">
+                  Hash: {payoutResult.payout_block_hash}
+                </div>
+              </div>
+            )}
+
+            {mockDbtResult && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs space-y-1">
+                <div className="font-bold text-emerald-950 flex items-center space-x-1">
+                  <Building2 className="w-3.5 h-3.5 text-emerald-700" />
+                  <span>PFMS Direct Settlement: {mockDbtResult.status}</span>
+                </div>
+                <div className="font-mono text-[10px] text-emerald-800">
+                  Ref: {mockDbtResult.payout_reference_id} • Rail: {mockDbtResult.settlement_rail}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -670,116 +872,43 @@ export function BillingPayoutStation({
               </div>
               <div>
                 <h3 className="text-base font-extrabold text-slate-900 flex items-center space-x-2">
-                  <span>Official Form J — Sale Intimation & Receipt</span>
+                  <span>{t('billing.officialFormJ')}</span>
                   <span className="px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold">
                     {invoice.current_state}
                   </span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Invoice ID: <span className="font-mono font-bold text-emerald-800">{invoice.invoice_id}</span> | Txn: <span className="font-mono text-slate-600">{invoice.transaction_id}</span>
+                  Invoice Ref: <span className="font-mono font-bold text-slate-700">{invoice.invoice_id}</span> • Mandi ID: #{invoice.mandi_id}
                 </p>
               </div>
             </div>
 
             <div className="text-right">
-              <div className="text-xs text-slate-500 font-semibold">Total Net Amount Payable</div>
-              <div className="text-2xl font-black text-emerald-800 font-mono">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">{t('billing.totalDisbursement')}</span>
+              <span className="text-2xl font-black text-emerald-800 font-mono">
                 ₹{invoice.invoice_amount_inr.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-              </div>
+              </span>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div className="text-slate-500 text-[10px] uppercase font-bold">Farmer Name</div>
-              <div className="text-slate-900 font-bold mt-1 truncate">{invoice.farmer_name}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs py-2">
+            <div>
+              <span className="text-slate-500 block">{t('billing.farmerName')}</span>
+              <span className="font-bold text-slate-800">{invoice.farmer_name}</span>
             </div>
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div className="text-slate-500 text-[10px] uppercase font-bold">Commodity / Net Qty</div>
-              <div className="text-slate-900 font-bold mt-1">{invoice.crop_type} ({invoice.net_weight_qt} qt)</div>
+            <div>
+              <span className="text-slate-500 block">{t('billing.cropName')}</span>
+              <span className="font-bold text-slate-800">{invoice.crop_type}</span>
             </div>
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div className="text-slate-500 text-[10px] uppercase font-bold">Rate Per Quintal</div>
-              <div className="text-slate-900 font-bold mt-1">₹{invoice.rate_per_qt.toFixed(2)}</div>
+            <div>
+              <span className="text-slate-500 block">{t('billing.netWeight')}</span>
+              <span className="font-bold font-mono text-slate-800">{invoice.net_weight_qt.toFixed(2)} {t('common.quintals')}</span>
             </div>
-            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-              <div className="text-slate-500 text-[10px] uppercase font-bold">Total Deductions</div>
-              <div className="text-rose-700 font-bold mt-1">-₹{invoice.deductions_inr.toFixed(2)}</div>
+            <div>
+              <span className="text-slate-500 block">{t('billing.mspPrice')}</span>
+              <span className="font-bold font-mono text-slate-800">₹{invoice.rate_per_qt.toFixed(2)}/{t('common.quintals')}</span>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Payout & Settlement Receipt Card */}
-      {(payoutResult || mockDbtResult) && (
-        <div className="bg-white border border-indigo-200 rounded-2xl p-6 shadow-sm space-y-3">
-          <div className="flex items-center space-x-2 text-indigo-700">
-            <Wallet className="w-5 h-5" />
-            <h4 className="text-sm font-extrabold text-slate-900">Government DBT Settlement Confirmation</h4>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-            {payoutResult && (
-              <div className="bg-indigo-50/60 p-3.5 rounded-xl border border-indigo-200 col-span-2">
-                <div className="text-indigo-900 text-[10px] uppercase font-bold mb-1">Cryptographic Payout Block Hash</div>
-                <div className="text-indigo-950 text-[11px] font-bold break-all">{payoutResult.payout_block_hash}</div>
-                <div className="mt-2 text-[10px] text-slate-600">
-                  Status: <span className="text-emerald-800 font-bold">{payoutResult.status}</span> | State: {payoutResult.current_state}
-                </div>
-              </div>
-            )}
-
-            {mockDbtResult && (
-              <div className="bg-emerald-50/60 p-3.5 rounded-xl border border-emerald-200">
-                <div className="text-emerald-900 text-[10px] uppercase font-bold mb-1">PFMS Aadhaar Reference</div>
-                <div className="text-emerald-800 font-black text-sm">{mockDbtResult.payout_reference_id}</div>
-                <div className="mt-2 text-[10px] text-slate-600">
-                  Settlement Rail: {mockDbtResult.settlement_rail}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Feedback Toast / Alert */}
-      {feedback && (
-        <div
-          className={`p-4 rounded-xl border text-sm flex items-start justify-between shadow-xs ${
-            feedback.type === 'success'
-              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-              : feedback.type === 'warning'
-              ? 'bg-amber-50 border-amber-300 text-amber-950'
-              : 'bg-rose-50 border-rose-300 text-rose-950'
-          }`}
-        >
-          <div className="space-y-1">
-            <div className="flex items-center space-x-2">
-              {feedback.type === 'success' ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-700 flex-shrink-0" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0" />
-              )}
-              <span className="font-bold">{feedback.message}</span>
-            </div>
-
-            {feedback.details && (
-              <div className="mt-2 text-xs font-mono space-y-0.5 opacity-90 pl-6">
-                {Object.entries(feedback.details).map(([key, value]) => (
-                  <div key={key}>
-                    <span className="text-slate-600">{key}:</span>{' '}
-                    <span className="text-slate-900 font-bold">{String(value)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setFeedback(null)}
-            className="text-xs text-slate-400 hover:text-slate-700 ml-4 font-bold"
-          >
-            ✕
-          </button>
         </div>
       )}
     </div>

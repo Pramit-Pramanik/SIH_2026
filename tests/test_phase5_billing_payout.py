@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from backend.app.core.security import (
     get_payout_secret_key,
     compute_role_signature,
-    compute_payout_block_hash
+    compute_payout_block_hash,
+    create_access_jwt
 )
+from backend.app.models.user import User
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
@@ -479,22 +481,61 @@ def test_idempotent_repeated_payout_and_billing(client: TestClient, db_session: 
 
 def test_custom_rate_and_deductions_calculation(client: TestClient, db_session: Session):
     """
-    Tests custom rate per quintal and deductions:
-    - Net weight = 40.00 qt
-    - Rate = ₹2,500.00 / qt
-    - Deductions = ₹1,000.00
-    - Gross = ₹100,000.00
-    - Net Invoice = ₹99,000.00
+    Tests authoritative MSP rate enforcement and administrative rate override:
+    1. Unauthorized attempt to override rate to ₹2,500.00 is rejected with HTTP 403.
+    2. Authenticated supervisor/admin override succeeds:
+       - Net weight = 40.00 qt
+       - Rate = ₹2,500.00 / qt
+       - Deductions = ₹1,000.00
+       - Gross = ₹100,000.00
+       - Net Invoice = ₹99,000.00
+       - is_rate_overridden = True
     """
     mandi, farmer, slot, txn_id = setup_weighed_lot_environment(db_session, net_weight=40.00)
 
-    bill_resp = client.post(
+    # 1. Unauthenticated or non-supervisor client cannot override authoritative MSP
+    unauth_resp = client.post(
         "/api/v1/billing/generate",
         json={
             "transaction_id": txn_id,
             "rate_per_qt": 2500.00,
             "deductions_inr": 1000.00,
-            "inspector_notes": "Custom high-protein lot premium"
+            "inspector_notes": "Attempt unauthenticated rate override"
+        }
+    )
+    assert unauth_resp.status_code == 403
+    assert "Unauthorized rate override" in unauth_resp.json()["detail"]
+
+    # 2. Authenticated supervisor/admin can authorize rate override
+    sup_user = db_session.query(User).filter(User.role.in_(["SUPERVISOR", "ADMIN"])).first()
+    if not sup_user:
+        sup_user = User(
+            username="sup_billing_auth",
+            hashed_password="hashed_pw_test",
+            full_name="Billing Supervisor",
+            role="SUPERVISOR",
+            is_active=True
+        )
+        db_session.add(sup_user)
+        db_session.commit()
+        db_session.refresh(sup_user)
+
+    sup_jwt = create_access_jwt({
+        "sub": str(sup_user.user_id),
+        "user_id": sup_user.user_id,
+        "username": sup_user.username,
+        "role": sup_user.role
+    })
+
+    bill_resp = client.post(
+        "/api/v1/billing/generate",
+        headers={"Authorization": f"Bearer {sup_jwt}"},
+        json={
+            "transaction_id": txn_id,
+            "rate_per_qt": 2500.00,
+            "deductions_inr": 1000.00,
+            "inspector_notes": "Custom high-protein lot premium authorized by supervisor",
+            "rate_override_reason": "High protein grade premium"
         }
     )
     assert bill_resp.status_code == 200
@@ -502,6 +543,8 @@ def test_custom_rate_and_deductions_calculation(client: TestClient, db_session: 
     assert data["gross_amount_inr"] == 100000.00
     assert data["deductions_inr"] == 1000.00
     assert data["invoice_amount_inr"] == 99000.00
+    assert data["is_rate_overridden"] is True
+    assert data["standard_msp_rate"] == 2275.00
 
 
 def test_standalone_mock_dbt_endpoint(client: TestClient):

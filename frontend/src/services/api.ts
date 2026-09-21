@@ -121,17 +121,46 @@ export async function parseResponseSafe<T = any>(res: Response, defaultMessage: 
   return (parsed !== null ? parsed : {}) as T;
 }
 
-export async function checkBackendHealth(): Promise<boolean> {
+export interface HealthStatus {
+  online: boolean;
+  status: 'healthy' | 'degraded' | 'offline';
+  databaseConnected: boolean;
+  redisConnected: boolean;
+}
+
+export async function fetchSystemHealth(): Promise<HealthStatus> {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch('/api/v1/mandis', {
-      method: 'GET',
-      headers: getAuthHeaders(),
+    const timeoutId = setTimeout(() => controller.abort(), 2500);
+    const res = await fetch('/api/v1/health', {
       signal: controller.signal,
     });
     clearTimeout(timeoutId);
-    return res.ok || res.status === 401;
+    if (!res.ok) {
+      return { online: false, status: 'offline', databaseConnected: false, redisConnected: false };
+    }
+    const data = await res.json();
+    return {
+      online: true,
+      status: data.status,
+      databaseConnected: data.database?.status === 'connected',
+      redisConnected: data.redis?.status === 'connected',
+    };
+  } catch {
+    return { online: false, status: 'offline', databaseConnected: false, redisConnected: false };
+  }
+}
+
+export async function checkBackendHealth(): Promise<boolean> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3500);
+    const res = await fetch('/api/v1/health', {
+      method: 'GET',
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    return res.ok;
   } catch {
     return false;
   }

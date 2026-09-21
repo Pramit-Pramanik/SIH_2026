@@ -29,27 +29,37 @@ def setup_mandi_and_farmer(
     queue_manager.clear(1)
     _processed_mutations.clear()
 
-    mandi = Mandi(
-        name="Karnal Agri Terminal",
-        district="Karnal",
-        state="Haryana",
-        daily_capacity_qt=daily_capacity_qt,
-        active_weighbridges=4,
-        is_operational=True
-    )
-    farmer = Farmer(
-        aadhaar_hash="aadhaar_e2e_acceptance_hash_001",
-        name="Rameshwar Singh",
-        mobile_number="9876543210",
-        bank_account_hash="b201f893cd7718919e2e",
-        ifsc_code="SBIN0001042",
-        land_area_hectares=4.00,
-        registered_crop_type=crop_type,
-        production_ceiling_qt=production_ceiling_qt
-    )
-    db.add_all([mandi, farmer])
+    mandi = db.query(Mandi).filter(Mandi.name == "Karnal Agri Terminal").first()
+    if not mandi:
+        mandi = Mandi(
+            name="Karnal Agri Terminal",
+            district="Karnal",
+            state="Haryana",
+            daily_capacity_qt=daily_capacity_qt,
+            active_weighbridges=4,
+            is_operational=True
+        )
+        db.add(mandi)
+        db.commit()
+        db.refresh(mandi)
+
+    farmer = db.query(Farmer).filter(Farmer.aadhaar_hash == "aadhaar_e2e_acceptance_hash_001").first()
+    if not farmer:
+        farmer = Farmer(
+            aadhaar_hash="aadhaar_e2e_acceptance_hash_001",
+            name="Rameshwar Singh",
+            mobile_number="9876543210",
+            bank_account_hash="b201f893cd7718919e2e",
+            ifsc_code="SBIN0001042",
+            land_area_hectares=4.00,
+            registered_crop_type=crop_type,
+            production_ceiling_qt=production_ceiling_qt
+        )
+        db.add(farmer)
+    else:
+        farmer.production_ceiling_qt = production_ceiling_qt
+        farmer.cumulative_booked_qt = 0.00
     db.commit()
-    db.refresh(mandi)
     db.refresh(farmer)
 
     slot = ProcurementSlot(

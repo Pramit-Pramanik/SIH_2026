@@ -1,26 +1,35 @@
 import { useState, useEffect } from 'react';
-import { Scale, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Scale, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
-  markWALRecordSynced,
-  markWALRecordFailed,
-  getLocalTransaction,
 } from '../db/dexie';
+import { getAuthHeaders } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
+import { useAuthoritativeTransaction } from '../context/TransactionContext';
 
 interface WeighbridgeStationProps {
-  mandiId: number;
+  mandiId?: number;
   effectiveOnline: boolean;
   activeTxnId: string | null;
   onWeighmentComplete: (txnId: string, netWeight: number) => void;
 }
 
 export function WeighbridgeStation({
-  mandiId,
   effectiveOnline,
   activeTxnId,
   onWeighmentComplete,
 }: WeighbridgeStationProps) {
-  const [transactionId, setTransactionId] = useState(activeTxnId || 'TXN-DEMO-1001');
+  const { t } = useLanguage();
+  const {
+    activeTxnId: contextTxnId,
+    activeTransaction,
+    resolutionStatus,
+    resolutionError,
+    setActiveTxnId,
+    refreshTransaction,
+  } = useAuthoritativeTransaction();
+
+  const [manualTxnInput, setManualTxnInput] = useState('');
   const [mode, setMode] = useState<'two_step' | 'unified'>('two_step');
   const [grossWeight, setGrossWeight] = useState<number>(85.0);
   const [tareWeight, setTareWeight] = useState<number>(35.0);
@@ -35,41 +44,37 @@ export function WeighbridgeStation({
 
   const netWeight = Math.max(0, Math.round((grossWeight - tareWeight) * 100) / 100);
 
+  // Sync state from authoritative transaction
   useEffect(() => {
-    const targetId = activeTxnId || transactionId;
-    if (targetId) {
-      if (activeTxnId) setTransactionId(activeTxnId);
-      // 1. Check local Dexie first
-      getLocalTransaction(targetId).then((tx) => {
-        if (tx && tx.payload) {
-          if (typeof tx.payload.gross_weight_qt === 'number') {
-            setGrossWeight(tx.payload.gross_weight_qt);
-          }
-          if (typeof tx.payload.tare_weight_qt === 'number') {
-            setTareWeight(tx.payload.tare_weight_qt);
-          }
-        }
-      });
-      // 2. Fetch authoritative database state if online
-      if (effectiveOnline) {
-        fetch(`/api/v1/weighbridge/${targetId}`)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (data) {
-              if (typeof data.gross_weight_qt === 'number' && data.gross_weight_qt > 0) {
-                setGrossWeight(data.gross_weight_qt);
-              }
-              if (typeof data.tare_weight_qt === 'number' && data.tare_weight_qt > 0) {
-                setTareWeight(data.tare_weight_qt);
-              }
-            }
-          })
-          .catch(() => {});
+    if (activeTransaction) {
+      if (typeof activeTransaction.gross_weight_qt === 'number' && activeTransaction.gross_weight_qt > 0) {
+        setGrossWeight(activeTransaction.gross_weight_qt);
+      }
+      if (typeof activeTransaction.tare_weight_qt === 'number' && activeTransaction.tare_weight_qt > 0) {
+        setTareWeight(activeTransaction.tare_weight_qt);
       }
     }
-  }, [activeTxnId, transactionId, effectiveOnline]);
+  }, [activeTransaction]);
+
+  const targetTxnId = activeTransaction?.transaction_id || contextTxnId || activeTxnId;
+  const canCaptureGross = activeTransaction && ['ROUTED_TO_WEIGHBRIDGE', 'QUALITY_APPROVED'].includes(activeTransaction.current_state);
+  const canCaptureTare = activeTransaction && activeTransaction.current_state === 'WEIGHED_GROSS';
+  const isAlreadyWeighed = activeTransaction && ['WEIGHED_TARE', 'BILL_GENERATED', 'PAYMENT_SETTLED'].includes(activeTransaction.current_state);
 
   const handleCaptureGross = async () => {
+    if (!activeTransaction || !targetTxnId) {
+      setFeedback({ type: 'error', message: t('common.noActiveTransaction') });
+      return;
+    }
+
+    if (!canCaptureGross && !canCaptureTare && !isAlreadyWeighed) {
+      setFeedback({
+        type: 'error',
+        message: `Transaction is in state '${activeTransaction.current_state}'. Vehicle must be routed to weighbridge before gross capture.`,
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     setFeedback(null);
     const mutationId = `mut-gross-${Date.now()}`;
@@ -80,12 +85,50 @@ export function WeighbridgeStation({
     };
 
     try {
-      // 1. Transaction boundary in IndexedDB
-      const walRecord = await executeLocalTransactionMutation({
+      if (effectiveOnline) {
+        // Authoritative Cloud Call FIRST (Phase 6.1, 6.2)
+        const resp = await fetch('/api/v1/weighbridge/gross', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            transaction_id: targetTxnId,
+            gross_weight_qt: grossWeight,
+            scale_id: scaleId,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Gross weighment rejected by server');
+        }
+
+        // Commit synced state to IndexedDB
+        await executeLocalTransactionMutation({
+          client_mutation_id: mutationId,
+          transaction_id: targetTxnId,
+          farmer_id: activeTransaction.farmer_id,
+          mandi_id: activeTransaction.mandi_id,
+          current_state: 'WEIGHED_GROSS',
+          payload_json: JSON.stringify(payload),
+          payload,
+          hmac_signature: `WB_GROSS_SIG_${Date.now()}`,
+          client_timestamp: Date.now(),
+        });
+
+        setFeedback({
+          type: 'success',
+          message: `Gross weight recorded: ${grossWeight.toFixed(2)} qt. State: ${data.current_state}. Now proceed to unload grain and capture tare weight.`,
+          details: data,
+        });
+        await refreshTransaction();
+        return;
+      }
+
+      // Offline fallback
+      await executeLocalTransactionMutation({
         client_mutation_id: mutationId,
-        transaction_id: transactionId,
-        farmer_id: 1,
-        mandi_id: mandiId,
+        transaction_id: targetTxnId,
+        farmer_id: activeTransaction.farmer_id,
+        mandi_id: activeTransaction.mandi_id,
         current_state: 'WEIGHED_GROSS',
         payload_json: JSON.stringify(payload),
         payload,
@@ -93,44 +136,11 @@ export function WeighbridgeStation({
         client_timestamp: Date.now(),
       });
 
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/weighbridge/gross', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: transactionId,
-              gross_weight_qt: grossWeight,
-              scale_id: scaleId,
-            }),
-          });
-          const data = await resp.json();
-          if (!resp.ok) {
-            await markWALRecordFailed(walRecord.id, data.detail || 'Gross weighment rejected');
-            throw new Error(data.detail || 'Gross weighment rejected');
-          }
-
-          await markWALRecordSynced(walRecord.id, data);
-          setFeedback({
-            type: 'success',
-            message: `Gross weight recorded: ${grossWeight.toFixed(2)} qt. State: ${data.current_state}. Now proceed to unload grain and capture tare weight.`,
-            details: data,
-          });
-          return;
-        } catch (cloudErr) {
-          if (!window.navigator.onLine || !effectiveOnline) {
-            console.warn('Gross weighment network dropped mid-flight; using local WAL record.', cloudErr);
-          } else {
-            throw cloudErr;
-          }
-        }
-      }
-
-      // Offline fallback
       setFeedback({
         type: 'success',
         message: `[OFFLINE WAL] Gross weight (${grossWeight.toFixed(2)} qt) saved to IndexedDB transactionsWAL.`,
       });
+      await refreshTransaction();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error capturing gross weight' });
     } finally {
@@ -139,8 +149,21 @@ export function WeighbridgeStation({
   };
 
   const handleCaptureTare = async () => {
+    if (!activeTransaction || !targetTxnId) {
+      setFeedback({ type: 'error', message: t('common.noActiveTransaction') });
+      return;
+    }
+
     if (tareWeight >= grossWeight) {
-      setFeedback({ type: 'error', message: 'Physical Invariant Violation: Tare weight cannot be >= Gross weight.' });
+      setFeedback({ type: 'error', message: t('common.tareWeightError') });
+      return;
+    }
+
+    if (!canCaptureTare && !isAlreadyWeighed) {
+      setFeedback({
+        type: 'error',
+        message: `Transaction is in state '${activeTransaction.current_state}'. Gross weight must be captured before tare weight.`,
+      });
       return;
     }
 
@@ -156,12 +179,53 @@ export function WeighbridgeStation({
     };
 
     try {
-      // 1. Transaction boundary in IndexedDB
-      const walRecord = await executeLocalTransactionMutation({
+      if (effectiveOnline) {
+        // Authoritative Cloud Call FIRST (Phase 6.4)
+        const resp = await fetch('/api/v1/weighbridge/tare', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            transaction_id: targetTxnId,
+            tare_weight_qt: tareWeight,
+            scale_id: scaleId,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Tare weighment rejected by server');
+        }
+
+        // Commit synced state to IndexedDB
+        await executeLocalTransactionMutation({
+          client_mutation_id: mutationId,
+          transaction_id: targetTxnId,
+          farmer_id: activeTransaction.farmer_id,
+          mandi_id: activeTransaction.mandi_id,
+          current_state: 'WEIGHED_TARE',
+          payload_json: JSON.stringify(payload),
+          payload,
+          hmac_signature: `WB_TARE_SIG_${Date.now()}`,
+          client_timestamp: Date.now(),
+        });
+
+        setFeedback({
+          type: 'success',
+          message: `Tare weight recorded: ${tareWeight.toFixed(2)} qt. Net Settlement: ${data.net_weight_qt.toFixed(2)} qt. State: ${data.current_state}. Ready for J-Form billing.`,
+          details: data,
+        });
+
+        onWeighmentComplete(targetTxnId, data.net_weight_qt);
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: data }));
+        await refreshTransaction();
+        return;
+      }
+
+      // Offline fallback
+      await executeLocalTransactionMutation({
         client_mutation_id: mutationId,
-        transaction_id: transactionId,
-        farmer_id: 1,
-        mandi_id: mandiId,
+        transaction_id: targetTxnId,
+        farmer_id: activeTransaction.farmer_id,
+        mandi_id: activeTransaction.mandi_id,
         current_state: 'WEIGHED_TARE',
         payload_json: JSON.stringify(payload),
         payload,
@@ -169,46 +233,12 @@ export function WeighbridgeStation({
         client_timestamp: Date.now(),
       });
 
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/weighbridge/tare', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: transactionId,
-              tare_weight_qt: tareWeight,
-              scale_id: scaleId,
-            }),
-          });
-          const data = await resp.json();
-          if (!resp.ok) {
-            await markWALRecordFailed(walRecord.id, data.detail || 'Tare weighment rejected');
-            throw new Error(data.detail || 'Tare weighment rejected');
-          }
-
-          await markWALRecordSynced(walRecord.id, data);
-          setFeedback({
-            type: 'success',
-            message: `Weighment Complete! Net Delivered Weight = ${data.net_weight_qt.toFixed(2)} qt. Farmer yield ceiling verified under distributed lock.`,
-            details: data,
-          });
-          onWeighmentComplete(transactionId, data.net_weight_qt);
-          return;
-        } catch (cloudErr) {
-          if (!window.navigator.onLine || !effectiveOnline) {
-            console.warn('Tare weighment network dropped mid-flight; using local WAL record.', cloudErr);
-          } else {
-            throw cloudErr;
-          }
-        }
-      }
-
-      // Offline fallback
       setFeedback({
         type: 'success',
-        message: `[OFFLINE WAL] Tare weight saved to IndexedDB transactionsWAL. Net weight: ${netWeight.toFixed(2)} qt settled locally.`,
+        message: `[OFFLINE WAL] Tare weight (${tareWeight.toFixed(2)} qt) saved to IndexedDB transactionsWAL. Net weight: ${netWeight.toFixed(2)} qt.`,
       });
-      onWeighmentComplete(transactionId, netWeight);
+      onWeighmentComplete(targetTxnId, netWeight);
+      await refreshTransaction();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error capturing tare weight' });
     } finally {
@@ -216,9 +246,14 @@ export function WeighbridgeStation({
     }
   };
 
-  const handleCaptureUnified = async () => {
+  const handleUnifiedWeighment = async () => {
+    if (!activeTransaction || !targetTxnId) {
+      setFeedback({ type: 'error', message: t('common.noActiveTransaction') });
+      return;
+    }
+
     if (tareWeight >= grossWeight) {
-      setFeedback({ type: 'error', message: 'Physical Invariant Violation: Tare weight cannot be >= Gross weight.' });
+      setFeedback({ type: 'error', message: t('common.tareWeightError') });
       return;
     }
 
@@ -234,12 +269,51 @@ export function WeighbridgeStation({
     };
 
     try {
-      // 1. Transaction boundary in IndexedDB
-      const walRecord = await executeLocalTransactionMutation({
+      if (effectiveOnline) {
+        const resp = await fetch('/api/v1/weighbridge/capture', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({
+            transaction_id: targetTxnId,
+            gross_weight_qt: grossWeight,
+            tare_weight_qt: tareWeight,
+            scale_id: scaleId,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(data.detail || 'Unified weighment rejected by server');
+        }
+
+        await executeLocalTransactionMutation({
+          client_mutation_id: mutationId,
+          transaction_id: targetTxnId,
+          farmer_id: activeTransaction.farmer_id,
+          mandi_id: activeTransaction.mandi_id,
+          current_state: 'WEIGHED_TARE',
+          payload_json: JSON.stringify(payload),
+          payload,
+          hmac_signature: `WB_UNIFIED_SIG_${Date.now()}`,
+          client_timestamp: Date.now(),
+        });
+
+        setFeedback({
+          type: 'success',
+          message: `Unified Weighment Captured: Gross=${grossWeight.toFixed(2)} qt, Tare=${tareWeight.toFixed(2)} qt, Net=${data.net_weight_qt.toFixed(2)} qt. State: ${data.current_state}.`,
+          details: data,
+        });
+        onWeighmentComplete(targetTxnId, data.net_weight_qt);
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: data }));
+        await refreshTransaction();
+        return;
+      }
+
+      // Offline fallback
+      await executeLocalTransactionMutation({
         client_mutation_id: mutationId,
-        transaction_id: transactionId,
-        farmer_id: 1,
-        mandi_id: mandiId,
+        transaction_id: targetTxnId,
+        farmer_id: activeTransaction.farmer_id,
+        mandi_id: activeTransaction.mandi_id,
         current_state: 'WEIGHED_TARE',
         payload_json: JSON.stringify(payload),
         payload,
@@ -247,47 +321,12 @@ export function WeighbridgeStation({
         client_timestamp: Date.now(),
       });
 
-      if (effectiveOnline) {
-        try {
-          const resp = await fetch('/api/v1/weighbridge/capture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              transaction_id: transactionId,
-              gross_weight_qt: grossWeight,
-              tare_weight_qt: tareWeight,
-              scale_id: scaleId,
-            }),
-          });
-          const data = await resp.json();
-          if (!resp.ok) {
-            await markWALRecordFailed(walRecord.id, data.detail || 'Unified weighment rejected');
-            throw new Error(data.detail || 'Unified weighment rejected');
-          }
-
-          await markWALRecordSynced(walRecord.id, data);
-          setFeedback({
-            type: 'success',
-            message: `Unified Weighment Captured: Gross=${grossWeight.toFixed(2)} qt, Tare=${tareWeight.toFixed(2)} qt, Net=${data.net_weight_qt.toFixed(2)} qt. State: ${data.current_state}.`,
-            details: data,
-          });
-          onWeighmentComplete(transactionId, data.net_weight_qt);
-          return;
-        } catch (cloudErr) {
-          if (!window.navigator.onLine || !effectiveOnline) {
-            console.warn('Unified weighment network dropped mid-flight; using local WAL record.', cloudErr);
-          } else {
-            throw cloudErr;
-          }
-        }
-      }
-
-      // Offline fallback
       setFeedback({
         type: 'success',
         message: `[OFFLINE WAL] Unified weighment saved to IndexedDB transactionsWAL. Net weight: ${netWeight.toFixed(2)} qt.`,
       });
-      onWeighmentComplete(transactionId, netWeight);
+      onWeighmentComplete(targetTxnId, netWeight);
+      await refreshTransaction();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error capturing weighment' });
     } finally {
@@ -295,173 +334,274 @@ export function WeighbridgeStation({
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Banner */}
-      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-xs">
-        <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-amber-800 mb-1">
-          <Scale className="w-4 h-4" />
-          <span>Weighbridge Terminal (Gross & Tare)</span>
+  // Preflight validation rendering (Phase 6.1)
+  if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
+    return (
+      <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
+        <Scale className="w-16 h-16 text-amber-500 mx-auto" />
+        <h2 className="text-xl font-black text-slate-800">{t('weighbridge.title')}</h2>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
+          <div className="flex items-center space-x-1.5 font-bold text-amber-950">
+            <AlertTriangle className="w-4 h-4 text-amber-700" />
+            <span>{t('weighbridge.title')} — {t('common.noData')}</span>
+          </div>
+          <p className="text-slate-600">
+            {resolutionError || 'Please dispatch a vehicle from the Live Priority Queue to perform weighbridge scale capture.'}
+          </p>
         </div>
-        <h2 className="text-xl font-black text-amber-950">Scale Telemetry Stream & Net Weight Settlement</h2>
-        <p className="text-xs text-slate-600 mt-0.5">
-          Load-cell telemetry capture with automatic farmer yield quota verification.
-        </p>
+        <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
+          <input
+            type="text"
+            value={manualTxnInput}
+            onChange={(e) => setManualTxnInput(e.target.value.trim())}
+            placeholder="e.g. TXN-..."
+            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
+          />
+          <button
+            onClick={() => {
+              if (manualTxnInput) setActiveTxnId(manualTxnInput);
+            }}
+            disabled={!manualTxnInput}
+            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
+          >
+            Load
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6 font-sans">
+      {/* Banner */}
+      <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-amber-800 mb-1">
+            <Scale className="w-4 h-4" />
+            <span>{t('weighbridge.title')}</span>
+          </div>
+          <h2 className="text-xl font-black text-amber-950">{t('weighbridge.subtitle')}</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            {t('weighbridge.scaleInvariance')}
+          </p>
+        </div>
+
+        <div className="text-right">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{t('common.activeTransaction')}</span>
+          <span className="font-mono font-black text-amber-900 bg-amber-100 px-2.5 py-1 rounded-md text-xs border border-amber-300">
+            {activeTransaction.transaction_id}
+          </span>
+        </div>
+      </div>
+
+      {/* State Notice if not in expected weighbridge states */}
+      {!canCaptureGross && !canCaptureTare && !isAlreadyWeighed && (
+        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+            <div>
+              <span className="font-bold">{t('common.status')}: </span>
+              <span>
+                Transaction is currently in state <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-200">{activeTransaction.current_state}</code>.
+                Vehicle must be in 'ROUTED_TO_WEIGHBRIDGE' or 'WEIGHED_GROSS' to capture scale weights.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Feedback Alert */}
+      {feedback && (
+        <div
+          className={`p-4 rounded-xl border text-xs flex items-center justify-between shadow-xs ${
+            feedback.type === 'success'
+              ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+              : 'bg-rose-50 border-rose-300 text-rose-950'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            {feedback.type === 'success' ? (
+              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+            ) : (
+              <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0" />
+            )}
+            <span className="font-bold">{feedback.message}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Mode Selector */}
+      <div className="flex space-x-2 bg-slate-100 p-1 rounded-xl max-w-sm">
+        <button
+          onClick={() => setMode('two_step')}
+          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+            mode === 'two_step' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          {t('weighbridge.twoStepWeighment')}
+        </button>
+        <button
+          onClick={() => setMode('unified')}
+          className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition cursor-pointer ${
+            mode === 'unified' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+          }`}
+        >
+          {t('weighbridge.unifiedWeighment')}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Main Controls */}
-        <div className="lg:col-span-8 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-              <Scale className="w-4 h-4 text-amber-700" />
-              <span>Scale Load Cell Telemetry</span>
-            </h3>
-
-            {/* Mode Switcher */}
-            <div className="flex space-x-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-xs">
-              <button
-                onClick={() => setMode('two_step')}
-                className={`px-2.5 py-1 rounded-md font-bold transition ${
-                  mode === 'two_step' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                2-Step (Gross &rarr; Tare)
-              </button>
-              <button
-                onClick={() => setMode('unified')}
-                className={`px-2.5 py-1 rounded-md font-bold transition ${
-                  mode === 'unified' ? 'bg-amber-600 text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                Unified Capture
-              </button>
-            </div>
+        {/* Left: Input & Capture Panels */}
+        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.activeToken')}:</label>
+            <input
+              type="text"
+              value={activeTransaction.transaction_id}
+              disabled
+              className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 cursor-not-allowed"
+            />
           </div>
 
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">Transaction ID:</label>
-              <input
-                type="text"
-                value={transactionId}
-                onChange={(e) => setTransactionId(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-amber-600 focus:outline-none"
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Gross Weight (Loaded Truck):</label>
-                <div className="relative">
+          {mode === 'two_step' ? (
+            <div className="space-y-4">
+              {/* Step 1: Gross Weight Capture */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-800">
+                    Step 1: Loaded Truck Gross Weight
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500 font-bold">Scale: {scaleId}</span>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.grossWeight')} (Quintals):</label>
                   <input
                     type="number"
-                    step="0.05"
-                    min="1"
+                    step="0.01"
+                    min="1.0"
                     value={grossWeight}
                     onChange={(e) => setGrossWeight(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-amber-600 focus:outline-none"
-                    required
+                    disabled={!canCaptureGross}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100"
                   />
-                  <span className="absolute right-3 top-2 text-xs text-slate-500 font-semibold">qt</span>
                 </div>
+                <button
+                  onClick={handleCaptureGross}
+                  disabled={isSubmitting || !canCaptureGross}
+                  className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2 rounded-xl transition shadow-xs flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>{isSubmitting ? 'Recording Gross...' : t('weighbridge.captureGross')}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Tare Weight (Empty Truck):</label>
-                <div className="relative">
+              {/* Step 2: Tare Weight Capture */}
+              <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-xs font-bold text-slate-800">
+                    Step 2: Unloaded Truck Tare Weight
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500 font-bold">Scale: {scaleId}</span>
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.tareWeight')} (Quintals):</label>
                   <input
                     type="number"
-                    step="0.05"
-                    min="0"
+                    step="0.01"
+                    min="0.0"
+                    max={grossWeight - 0.1}
                     value={tareWeight}
                     onChange={(e) => setTareWeight(parseFloat(e.target.value) || 0)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-amber-600 focus:outline-none"
-                    required
+                    disabled={!canCaptureTare}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none disabled:bg-slate-100"
                   />
-                  <span className="absolute right-3 top-2 text-xs text-slate-500 font-semibold">qt</span>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Calculated Net Delivered:</label>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs font-mono font-black text-amber-950">
-                  {netWeight.toFixed(2)} qt
-                </div>
+                <button
+                  onClick={handleCaptureTare}
+                  disabled={isSubmitting || !canCaptureTare}
+                  className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider py-2 rounded-xl transition shadow-xs flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>{isSubmitting ? 'Calculating Net...' : t('weighbridge.captureTare')}</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
-
-            {feedback && (
-              <div
-                className={`p-3.5 rounded-xl border text-xs flex items-start space-x-2 ${
-                  feedback.type === 'success'
-                    ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                    : 'bg-rose-50 border-rose-300 text-rose-950'
-                }`}
-              >
-                {feedback.type === 'success' ? (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-                ) : (
-                  <AlertTriangle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
-                )}
-                <span className="font-medium leading-relaxed">{feedback.message}</span>
+          ) : (
+            /* Unified Weight Mode */
+            <div className="p-4 rounded-xl border border-slate-200 bg-slate-50 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.grossWeight')}:</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={grossWeight}
+                    onChange={(e) => setGrossWeight(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.tareWeight')}:</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={tareWeight}
+                    onChange={(e) => setTareWeight(parseFloat(e.target.value) || 0)}
+                    className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none"
+                  />
+                </div>
               </div>
-            )}
 
-            {/* Action Buttons */}
-            {mode === 'two_step' ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={handleCaptureGross}
-                  disabled={isSubmitting || grossWeight <= 0}
-                  className="bg-slate-100 hover:bg-slate-200 border border-slate-300 text-slate-800 font-bold text-xs py-2.5 rounded-xl transition cursor-pointer"
-                >
-                  Step 1: Capture Gross ({grossWeight.toFixed(2)} qt)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCaptureTare}
-                  disabled={isSubmitting || tareWeight >= grossWeight}
-                  className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-amber-600/20 cursor-pointer"
-                >
-                  Step 2: Capture Tare (Net: {netWeight.toFixed(2)} qt)
-                </button>
-              </div>
-            ) : (
               <button
-                type="button"
-                onClick={handleCaptureUnified}
-                disabled={isSubmitting || tareWeight >= grossWeight}
-                className="w-full bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider py-3 rounded-xl transition shadow-md shadow-amber-600/20 flex items-center justify-center space-x-2 cursor-pointer"
+                onClick={handleUnifiedWeighment}
+                disabled={isSubmitting || Boolean(isAlreadyWeighed)}
+                className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-xs flex items-center justify-center space-x-2 cursor-pointer"
               >
-                <span>Record Unified Weighment (Net: {netWeight.toFixed(2)} qt)</span>
+                <span>{isSubmitting ? 'Recording Unified Telemetry...' : t('weighbridge.captureUnified')}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
-        {/* Info Card */}
-        <div className="lg:col-span-4 space-y-4">
-          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-            <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-700" />
-              <span>Weighbridge Operational Rules</span>
+        {/* Right: Net Weight Telemetry & Telemetry Summary */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-sm space-y-4">
+            <h3 className="text-sm font-extrabold text-amber-400 flex items-center space-x-2">
+              <Scale className="w-4 h-4" />
+              <span>{t('weighbridge.netWeight')}</span>
             </h3>
 
-            <div className="space-y-2 text-xs text-slate-600">
-              <p>
-                <strong className="text-slate-900">Physical Invariant:</strong> Tare weight must strictly be &lt; Gross weight ($Tare \ge Gross$ is rejected with HTTP 422).
+            {/* Calculated Net Display */}
+            <div className="bg-slate-950/70 p-5 rounded-2xl border border-slate-700/60 text-center space-y-1">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                {t('weighbridge.netWeight')}
+              </span>
+              <div className="font-mono text-3xl font-black text-amber-400">
+                {netWeight.toFixed(2)} <span className="text-base font-bold text-slate-300">{t('common.quintals')}</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-mono">
+                Gross ({grossWeight.toFixed(2)}) - Tare ({tareWeight.toFixed(2)})
               </p>
-              <p>
-                <strong className="text-slate-900">Yield Ceiling Enforcement:</strong> Net delivered weight plus prior delivered batches cannot exceed the farmer's registered production ceiling.
-              </p>
-              <p>
-                <strong className="text-slate-900">Distributed Lock Protection:</strong> Parallel weighments for the same farmer serialize under <code className="text-amber-900 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-mono font-bold">lock:weighbridge:farmer</code> to eliminate race conditions.
-              </p>
+            </div>
+
+            <div className="space-y-2 text-xs pt-1">
+              <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                <span className="text-slate-400">{t('queue.farmer')}:</span>
+                <span className="font-semibold text-slate-200">{activeTransaction.farmer_name || `Farmer #${activeTransaction.farmer_id}`}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                <span className="text-slate-400">{t('billing.mandiName')}:</span>
+                <span className="font-semibold text-slate-200">{activeTransaction.mandi_name || `Mandi #${activeTransaction.mandi_id}`}</span>
+              </div>
+              <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                <span className="text-slate-400">{t('billing.cropName')}:</span>
+                <span className="font-semibold text-slate-200">{activeTransaction.crop_type || 'Wheat'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">{t('common.status')}:</span>
+                <span className="font-mono font-bold text-amber-300">{activeTransaction.current_state}</span>
+              </div>
             </div>
           </div>
         </div>

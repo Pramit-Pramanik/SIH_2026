@@ -18,6 +18,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["MANDIQ_SECRET_HMAC_KEY"] = "test-hmac-secret-key-for-unit-tests-32char"
 os.environ["MANDIQ_PAYOUT_SECRET_KEY"] = "test-payout-secret-key-for-unit-tests-32char"
 os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+os.environ["MANDIQ_AUTH_ENFORCED"] = "false"
 
 from backend.app.core.config import get_settings, Settings
 from backend.app.db.base import Base
@@ -72,7 +73,11 @@ def db_session() -> Generator[Session, None, None]:
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """FastAPI TestClient with overridden get_db dependency."""
     def override_get_db():
-        yield db_session
+        session = TestingSessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
 
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as test_client:

@@ -1,5 +1,5 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from backend.app.dependencies.get_db import get_db
@@ -7,11 +7,40 @@ from backend.app.dependencies.auth import require_roles
 from backend.app.models.user import User
 from backend.app.schemas.payout import (
     DualSignaturePayoutStageRequest,
-    DualSignaturePayoutStageResponse
+    DualSignaturePayoutStageResponse,
+    DemoPayoutSignatureRequest,
 )
 from backend.app.services.payout_service import stage_dual_signature_payout
+from backend.app.core.config import get_settings
+from backend.app.core.security import get_payout_secret_key, compute_role_signature
 
 router = APIRouter(prefix="/payout", tags=["Dual-Signature DBT Payout Staging"])
+
+
+@router.post(
+    "/demo-signatures",
+    summary="Generate controlled prototype dual-signature approvals"
+)
+def create_demo_signatures(
+    payload: DemoPayoutSignatureRequest,
+    current_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
+) -> dict:
+    """Returns server-generated demo approvals without exposing the payout secret.
+
+    This route is intentionally unavailable in production and is restricted to
+    an authenticated administrator for the local judge demonstration.
+    """
+    if get_settings().ENVIRONMENT == "production":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+    secret_key = get_payout_secret_key()
+    return {
+        "inspector_sig_hash": compute_role_signature(
+            secret_key, payload.transaction_id, payload.invoice_amount_inr, payload.inspector_id, "INSPECTOR"
+        ),
+        "operator_sig_hash": compute_role_signature(
+            secret_key, payload.transaction_id, payload.invoice_amount_inr, payload.operator_id, "OPERATOR"
+        ),
+    }
 
 
 @router.post(
@@ -33,4 +62,3 @@ def stage_payout(
     - Fails closed with HTTP 403 if either signature is missing, forged, or amount is tampered.
     """
     return stage_dual_signature_payout(db=db, request=payload)
-

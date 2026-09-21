@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import time
-from typing import Optional
+from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -8,6 +8,7 @@ from backend.app.core.config import get_settings
 from backend.app.core.security import get_hmac_secret_key
 from backend.app.models.log import ProcurementLog
 from backend.app.models.mandi import Mandi
+from backend.app.models.user import User
 from backend.app.schemas.quality import (
     QualityAssessmentRequest,
     QualityAssessmentResponse,
@@ -83,6 +84,7 @@ def assess_quality_and_enqueue(
             transaction_id=log.transaction_id,
             crop_moisture_pct=moisture,
             status="QUALITY_REJECTED",
+            current_state="QUALITY_REJECTED",
             eligible_for_queue=False,
             advisory_notice=(
                 f"Vehicle routed to mandi drying apron due to excessive moisture "
@@ -91,6 +93,7 @@ def assess_quality_and_enqueue(
             priority_score=None,
             queue_position=None
         )
+
 
     # 2. Quality Approval & DCDQ Score Calculation (AC-006)
     log.crop_moisture_pct = moisture
@@ -139,6 +142,7 @@ def assess_quality_and_enqueue(
         transaction_id=log.transaction_id,
         crop_moisture_pct=moisture,
         status="QUALITY_APPROVED",
+        current_state="QUALITY_APPROVED",
         eligible_for_queue=True,
         advisory_notice="Quality approved. Vehicle added to active mandi dispatch queue.",
         priority_score=score,
@@ -146,24 +150,24 @@ def assess_quality_and_enqueue(
     )
 
 
+
 def override_quality_and_admit(
     db: Session,
-    request: QualityOverrideRequest
+    request: QualityOverrideRequest,
+    current_user: Optional[User] = None
 ) -> QualityOverrideResponse:
     """
     Authenticated supervisor override for a lot previously rejected due to high moisture (AC-007).
-    Requires valid supervisor token/secret and writes an auditable state transition back to QUALITY_APPROVED.
+    Requires authoritative SUPERVISOR or ADMIN role. Magic strings like 'SUPERVISOR-*' are rejected.
     """
-    # Enforce fail-closed cryptographic check for supervisor authorization
-    hmac_key = get_hmac_secret_key()
-    valid_key_str = hmac_key.decode("utf-8")
-
-    # Authorize if token matches the configured HMAC secret or supervisor authorization prefix
-    if request.supervisor_token != valid_key_str and not request.supervisor_token.startswith("SUPERVISOR-"):
+    if not current_user or current_user.role not in ("SUPERVISOR", "ADMIN"):
+        user_desc = f"User '{current_user.username}' with role '{current_user.role}'" if current_user else "Unauthenticated user"
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid supervisor authorization token."
+            detail=f"Access forbidden: {user_desc} is not authorized for supervisor override. Required role: SUPERVISOR or ADMIN."
         )
+
+    authorized_by = f"{current_user.role}:{current_user.username}"
 
     log = db.query(ProcurementLog).filter(
         ProcurementLog.transaction_id == request.transaction_id
@@ -219,11 +223,61 @@ def override_quality_and_admit(
     return QualityOverrideResponse(
         transaction_id=log.transaction_id,
         status="QUALITY_APPROVED",
-        override_reason=request.reason,
+        override_reason=f"[{authorized_by}] {request.reason}",
         priority_score=score,
         queue_position=rank,
-        message=f"Supervisor override accepted. Vehicle re-admitted to queue with rank {rank}."
+        message=f"Supervisor override authorized by {authorized_by}. Vehicle re-admitted to queue with rank {rank}."
     )
+
+
+def rerank_mandi_queue(
+    db: Session,
+    mandi_id: int,
+    current_time: Optional[float] = None
+) -> List[Tuple[str, float]]:
+    """
+    On-demand dynamic queue re-ranking (DCDQ Algorithm 1 Step 3, Option B).
+    Re-evaluates each queued vehicle's anti-starvation wait bonus W_i:
+        W_i = min(20.0, 0.1 * elapsed_wait_minutes)
+    where elapsed_wait_minutes = max(0.0, (current_time - actual_arrival_ts) / 60.0).
+    Re-indexes the updated priority score S_i into the Redis Sorted Set (ZSET)
+    and returns the re-ranked active queue.
+    """
+    raw_queue = queue_manager.get_queue(mandi_id)
+    if not raw_queue:
+        return []
+
+    now_ts = current_time if current_time is not None else time.time()
+    txn_ids = [item[0] for item in raw_queue]
+    logs = db.query(ProcurementLog).filter(ProcurementLog.transaction_id.in_(txn_ids)).all()
+    log_map = {log.transaction_id: log for log in logs}
+
+    for txn_id, _ in raw_queue:
+        log = log_map.get(txn_id)
+        if not log:
+            continue
+
+        arr_ts = queue_manager.get_arrival_timestamp(mandi_id, txn_id)
+        if arr_ts is None:
+            arr_ts = log.created_at.timestamp() if log.created_at else now_ts
+
+        elapsed_wait_min = max(0.0, (now_ts - arr_ts) / 60.0)
+        moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
+        payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
+
+        # Maintain appointment adherence baseline
+        planned_ts = arr_ts
+
+        new_score = calculate_dcdq_priority_score(
+            planned_arrival_ts=planned_ts,
+            actual_arrival_ts=arr_ts,
+            moisture_pct=moisture,
+            elapsed_wait_minutes=elapsed_wait_min,
+            demurrage_score=payload_qt / 10.0
+        )
+        queue_manager.update_score(mandi_id, txn_id, new_score)
+
+    return queue_manager.get_queue(mandi_id)
 
 
 def get_mandi_queue_list(
@@ -326,6 +380,19 @@ def dispatch_top_vehicle_from_queue(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Dispatched transaction '{txn_id}' record not found."
+        )
+
+    if log.current_state == "QUALITY_REJECTED":
+        # Vehicle must not be routed to weighbridge if quality was rejected
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot dispatch transaction '{txn_id}': lot was QUALITY_REJECTED and has not received an authorized supervisor override."
+        )
+
+    if log.current_state not in ("QUALITY_APPROVED", "IN_QA_QUEUE"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot dispatch transaction '{txn_id}' from state '{log.current_state}'. Transaction must be in 'QUALITY_APPROVED'."
         )
 
     log.current_state = "ROUTED_TO_WEIGHBRIDGE"

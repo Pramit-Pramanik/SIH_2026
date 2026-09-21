@@ -46,10 +46,12 @@ class QualityAssessmentResponse(BaseModel):
     transaction_id: str
     crop_moisture_pct: float
     status: str = Field(..., description="'QUALITY_APPROVED' or 'QUALITY_REJECTED'")
+    current_state: Optional[str] = Field(default=None, description="Active transaction state following assessment")
     eligible_for_queue: bool
     advisory_notice: Optional[str] = None
     priority_score: Optional[float] = None
     queue_position: Optional[int] = None
+
 
 
 class QualityOverrideRequest(BaseModel):
@@ -59,7 +61,10 @@ class QualityOverrideRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     transaction_id: str = Field(..., description="Transaction ID of the rejected lot")
-    supervisor_token: str = Field(..., description="Cryptographic supervisor authorization secret or token")
+    supervisor_token: Optional[str] = Field(
+        default=None,
+        description="Optional client reference token (authorization is strictly derived from authenticated user role)"
+    )
     reason: str = Field(..., min_length=5, description="Auditable justification for quality override")
     calibrated_moisture_pct: Optional[float] = Field(
         default=None,

@@ -68,6 +68,10 @@ dist/
 dist-ssr/
 *.local
 
+# Scratch & Artifacts
+scratch/
+artifacts/
+
 # Editor / IDE caches
 .vscode/
 .idea/

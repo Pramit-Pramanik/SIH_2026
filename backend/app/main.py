@@ -30,6 +30,7 @@ from backend.app.routers.mandis import router as mandis_router
 from backend.app.routers.crops import router as crops_router
 from backend.app.routers.farmers import router as farmers_router
 from backend.app.routers.admin import router as admin_router
+from backend.app.routers.transactions import router as transactions_router
 
 settings = get_settings()
 
@@ -42,6 +43,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     # 1. Enforce fail-closed cryptographic key safety unless in test environment
     settings.validate_secrets()
+
+    # Note: Database schema management is authoritatively handled by Alembic migrations.
+    # Application startup does not silently create or alter schemas outside migration control.
 
     yield
 
@@ -84,6 +88,7 @@ app.include_router(mandis_router, prefix="/api/v1")
 app.include_router(crops_router, prefix="/api/v1")
 app.include_router(farmers_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
+app.include_router(transactions_router, prefix="/api/v1")
 
 @app.get("/", tags=["Root"])
 def root() -> JSONResponse:

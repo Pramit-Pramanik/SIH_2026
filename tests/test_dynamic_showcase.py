@@ -53,11 +53,19 @@ def showcase_data(db_session: Session):
 
 def test_dynamic_slot_auto_provisioning(client: TestClient, showcase_data):
     """
-    Verifies that querying slots for an unseeded future date dynamically auto-provisions
-    all standard operational slots on the fly so slots are NEVER empty during a showcase.
+    Verifies that querying slots for an unseeded date defaults to pure read behavior
+    (empty list), while explicitly requesting auto_provision=true provisions all 7
+    standard operational slots dynamically for showcase presentation.
     """
     future_date = date.today() + timedelta(days=45)
-    resp = client.get(f"/api/v1/slots?mandi_id=1&scheduled_date={future_date}")
+
+    # 1. Ordinary read: no auto-provisioning side-effect
+    resp_read = client.get(f"/api/v1/slots?mandi_id=1&scheduled_date={future_date}")
+    assert resp_read.status_code == 200
+    assert resp_read.json() == []
+
+    # 2. Explicit showcase auto-provisioning
+    resp = client.get(f"/api/v1/slots?mandi_id=1&scheduled_date={future_date}&auto_provision=true")
     assert resp.status_code == 200
     data = resp.json()
     assert len(data) == 7

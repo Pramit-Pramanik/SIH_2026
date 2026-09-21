@@ -8,6 +8,7 @@ class SlotReservationRequest(BaseModel):
     slot_id: int = Field(..., gt=0, description="Target hourly procurement slot identifier")
     farmer_id: int = Field(..., gt=0, description="Registered farmer identifier")
     requested_qty_qt: float = Field(..., gt=0.0, description="Requested grain delivery quantity in quintals")
+    demo_run_id: str | None = Field(default=None, max_length=64, description="Controlled local-demo run marker")
 
 
 class BookingToken(BaseModel):

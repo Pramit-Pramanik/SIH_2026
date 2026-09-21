@@ -62,12 +62,16 @@ def calculate_moisture_risk(
 ) -> float:
     """
     Computes Crop Quality & Moisture Risk Index (M_i), bounded in [0.0, 20.0].
-    Piecewise formulation:
+
+    CANONICAL PROTOTYPE FORMULATION (continuous=False, AC-006 Standard):
     - M <= 14.0% -> M_i = 0.0
     - 14.0% < M <= 15.0% -> M_i = 2.0 * (M - 14.0)
-    - 15.0% < M <= 17.0% ->
-        continuous=True:  min(20.0, 2.0 + 2.0 * (exp(k * (capped - 15.0)) - 1.0))
-        continuous=False: min(20.0, 2.0 * exp(k * (capped - 14.0))) [Legacy AC-006]
+    - 15.0% < M <= 17.0% -> M_i = min(20.0, 2.0 * exp(k * (capped - 14.0)))
+    - M > 17.0% -> Exceeds procurement threshold; lot is disqualified via is_quality_rejected()
+
+    NON-PRIMARY / ANALYTICAL FORMULATION (continuous=True):
+    - 15.0% < M <= 17.0% -> min(20.0, 2.0 + 2.0 * (exp(k * (capped - 15.0)) - 1.0))
+      (retained for comparative continuity research at the 15.0% boundary)
     """
     if decay_k is None:
         decay_k = get_settings().MANDIQ_MOISTURE_DECAY_K
@@ -107,11 +111,20 @@ def calculate_dcdq_priority_score(
     continuous: bool = False
 ) -> float:
     """
+    CANONICAL PRODUCTION PROTOTYPE DCDQ CALCULATION.
+
     Computes the composite Dynamic Crop-Dehydration and Congestion Queue (DCDQ) Priority Score (S_i)
     for an arrived vehicle at the physical APMC mandi gate.
 
     Formula: S_i = alpha * A_i + beta * D_i + gamma * M_i + lambda * W_i
     Returns float score rounded to 4 decimal places. Higher S_i = Higher Priority.
+
+    Invariants:
+    - Early arrival (actual_arrival_ts <= planned_arrival_ts): Unpenalized, A_i = 40.0.
+    - Moisture risk (M_i): Piecewise curve per AC-006 standard (default continuous=False).
+    - Quality rejection: Handled upstream by is_quality_rejected(moisture_pct); lots with M > 17.0%
+      are disqualified from standard queue admission.
+    - Redis Ordering: Vehicles in Redis ZSET (mandi:queue:{mandi_id}) are ranked descending by S_i.
     """
     a_i = calculate_appointment_adherence(planned_arrival_ts, actual_arrival_ts)
     d_i = calculate_demurrage_score(demurrage_score=demurrage_score)
@@ -136,8 +149,13 @@ def calculate_priority_score(
     continuous: bool = True
 ) -> float:
     """
-    Computes the DCDQ priority score with continuous piecewise moisture formulation
-    and non-penalizing early arrival calculation.
+    [NON-PRIMARY / ANALYTICAL EXPERIMENTAL FORMULATION]
+
+    Retained strictly for research, simulation benchmarking, and boundary continuity analysis.
+    The primary and canonical production queue path exclusively uses calculate_dcdq_priority_score().
+
+    Computes priority score with continuous piecewise exponential moisture formulation
+    (continuous=True by default) and non-penalizing early arrival calculation.
     """
     if decay_k is None:
         decay_k = get_settings().MANDIQ_MOISTURE_DECAY_K

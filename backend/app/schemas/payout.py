@@ -17,6 +17,16 @@ class DualSignaturePayoutStageRequest(BaseModel):
     operator_sig_hash: str = Field(..., description="HMAC-SHA256 signature from Operator")
 
 
+class DemoPayoutSignatureRequest(BaseModel):
+    """Controlled local-demo request; signatures are intentionally absent."""
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: str
+    invoice_amount_inr: float = Field(..., gt=0.0)
+    inspector_id: int
+    operator_id: int
+
+
 class DualSignaturePayoutStageResponse(BaseModel):
     """
     Response schema returning payout staging authorization and block hash.

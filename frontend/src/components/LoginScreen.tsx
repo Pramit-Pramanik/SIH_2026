@@ -1,25 +1,27 @@
 import { useState, FormEvent } from 'react';
-import { ShieldCheck, User, Lock, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { ShieldCheck, User, Lock, ArrowRight, AlertCircle, Sparkles, Globe } from 'lucide-react';
 import { loginUser, fetchCurrentUser, AuthUser } from '../services/authService';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface LoginScreenProps {
   onLoginSuccess: (user: AuthUser) => void;
   effectiveOnline: boolean;
 }
 
-const PRESET_ROLES = [
-  { role: 'FARMER', label: 'Farmer', username: 'farmer', pass: 'Farmer@MandiQ2026' },
-  { role: 'OPERATOR', label: 'Operator', username: 'operator', pass: 'Operator@MandiQ2026' },
-  { role: 'INSPECTOR', label: 'Assayer', username: 'inspector', pass: 'Inspector@MandiQ2026' },
-  { role: 'SUPERVISOR', label: 'Supervisor', username: 'supervisor', pass: 'Supervisor@MandiQ2026' },
-  { role: 'ADMIN', label: 'Admin', username: 'admin', pass: 'Admin@MandiQ2026' },
-];
-
 export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProps) {
+  const { language, setLanguage, t } = useLanguage();
   const [username, setUsername] = useState('farmer');
   const [password, setPassword] = useState('Farmer@MandiQ2026');
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const PRESET_ACCOUNTS = [
+    { label: t('roles.farmer'), username: 'farmer', pass: 'Farmer@MandiQ2026' },
+    { label: t('roles.operator'), username: 'operator', pass: 'Operator@MandiQ2026' },
+    { label: t('roles.inspector'), username: 'inspector', pass: 'Inspector@MandiQ2026' },
+    { label: t('roles.supervisor'), username: 'supervisor', pass: 'Supervisor@MandiQ2026' },
+    { label: t('roles.admin'), username: 'admin', pass: 'Admin@MandiQ2026' },
+  ];
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -32,17 +34,17 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
       if (user) {
         onLoginSuccess(user);
       } else {
-        setErrorMessage('Session verification failed. Please try again.');
+        setErrorMessage(t('login.credentialsError'));
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Invalid username or password.';
+      const msg = err instanceof Error ? err.message : t('login.credentialsError');
       setErrorMessage(msg);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleSelectRole = (presetUser: string, presetPass: string) => {
+  const handleSelectAccount = (presetUser: string, presetPass: string) => {
     setUsername(presetUser);
     setPassword(presetPass);
     setErrorMessage(null);
@@ -50,20 +52,31 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
 
   return (
     <div className="min-h-screen bg-[#f4f7f4] text-slate-900 flex flex-col justify-between items-center p-4 sm:p-6 font-sans">
-      {/* Top minimal status bar */}
+      {/* Top status bar with Language Switcher */}
       <div className="w-full max-w-md flex items-center justify-between text-xs py-2 text-slate-500">
         <div className="flex items-center space-x-2">
           <span className={`w-2 h-2 rounded-full ${effectiveOnline ? 'bg-emerald-600 shadow-[0_0_8px_#059669]' : 'bg-amber-500'}`} />
           <span className="font-semibold text-slate-700">
-            {effectiveOnline ? 'Mandi Cloud Online' : 'Local Offline Mode (WAL)'}
+            {effectiveOnline ? t('common.online') : t('common.offline')}
           </span>
         </div>
-        <span className="font-bold text-emerald-800 bg-emerald-100/80 px-2.5 py-0.5 rounded-full text-[11px]">
-          e-NAM Verified
-        </span>
+
+        {/* Global Authoritative Language Selector */}
+        <div className="flex items-center gap-1.5 bg-white px-2.5 py-1 rounded-full border border-slate-200 shadow-sm">
+          <Globe className="w-3.5 h-3.5 text-emerald-700" />
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as 'en' | 'hi')}
+            className="text-xs font-bold text-slate-800 bg-transparent border-none focus:outline-none cursor-pointer"
+            aria-label={t('common.language')}
+          >
+            <option value="en">English</option>
+            <option value="hi">हिन्दी</option>
+          </select>
+        </div>
       </div>
 
-      {/* Main Single Clean Login Card */}
+      {/* Main Login Card */}
       <div className="w-full max-w-md my-auto">
         <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/60 border border-slate-200/80 space-y-6">
           {/* Brand & Title */}
@@ -72,38 +85,37 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
               🌾
             </div>
             <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center justify-center gap-1.5">
-              <span>MandiQ</span>
-              <span className="text-emerald-700 text-lg font-bold">/ मंडीक्यू</span>
+              <span>{t('common.appName')}</span>
             </h1>
             <p className="text-xs text-slate-500 font-medium">
-              Digital APMC Gate & Procurement Pass Portal
+              {t('login.subtitle')}
             </p>
           </div>
 
-          {/* Quick Role Switcher (Streamlined Segmented Bar) */}
+          {/* Quick Role Switcher */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between text-xs text-slate-500 px-1 font-semibold">
               <span className="flex items-center gap-1 text-slate-700">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600" />
-                <span>Quick Role Select</span>
+                <span>{t('login.quickDemoUsers')}</span>
               </span>
-              <span className="text-[10px] text-slate-400">Click to autofill</span>
             </div>
-            <div className="flex bg-slate-100 p-1 rounded-2xl gap-1">
-              {PRESET_ROLES.map((r) => {
-                const isActive = username.toLowerCase() === r.username.toLowerCase();
+            <div className="grid grid-cols-2 gap-1.5 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+              {PRESET_ACCOUNTS.map((acc) => {
+                const isActive = username.toLowerCase() === acc.username.toLowerCase();
                 return (
                   <button
-                    key={r.role}
+                    key={acc.username}
                     type="button"
-                    onClick={() => handleSelectRole(r.username, r.pass)}
-                    className={`flex-1 py-1.5 px-1 text-xs font-bold rounded-xl transition-all ${
+                    onClick={() => handleSelectAccount(acc.username, acc.pass)}
+                    className={`py-1.5 px-2 text-xs font-bold rounded-xl text-left transition-all ${
                       isActive
                         ? 'bg-emerald-800 text-white shadow-sm'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                        : 'bg-white text-slate-700 border border-slate-200/70 hover:bg-emerald-50 hover:border-emerald-300'
                     }`}
                   >
-                    {r.label}
+                    <div className="truncate">{acc.label}</div>
+                    <div className={`text-[10px] font-mono ${isActive ? 'text-emerald-200' : 'text-slate-400'}`}>{acc.username}</div>
                   </button>
                 );
               })}
@@ -122,7 +134,7 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-extrabold text-slate-700 mb-1.5" htmlFor="username">
-                Username / उपयोगकर्ता
+                {t('login.username')}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -136,14 +148,14 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
                   required
                   autoComplete="username"
                   className="w-full h-11 pl-10 pr-3.5 bg-slate-50 border border-slate-300 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-700/20 rounded-xl text-sm font-bold text-slate-900 focus:outline-none transition"
-                  placeholder="e.g. farmer, operator, admin"
+                  placeholder={t('login.usernamePlaceholder')}
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-extrabold text-slate-700 mb-1.5" htmlFor="password">
-                Password / पासवर्ड
+                {t('login.password')}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -157,7 +169,7 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
                   required
                   autoComplete="current-password"
                   className="w-full h-11 pl-10 pr-3.5 bg-slate-50 border border-slate-300 focus:border-emerald-700 focus:bg-white focus:ring-2 focus:ring-emerald-700/20 rounded-xl text-sm font-bold text-slate-900 focus:outline-none transition"
-                  placeholder="••••••••"
+                  placeholder={t('login.passwordPlaceholder')}
                 />
               </div>
             </div>
@@ -167,7 +179,7 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
               disabled={isLoading}
               className="w-full h-12 rounded-xl bg-emerald-800 hover:bg-emerald-900 active:scale-[0.99] transition-all text-white font-extrabold text-sm flex items-center justify-center space-x-2 shadow-md shadow-emerald-900/10 disabled:opacity-60 cursor-pointer"
             >
-              <span>{isLoading ? 'Verifying Session...' : 'Sign In to MandiQ'}</span>
+              <span>{isLoading ? t('login.signingIn') : t('login.signIn')}</span>
               <ArrowRight className="w-4 h-4 text-emerald-200" />
             </button>
           </form>
@@ -175,14 +187,14 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
           {/* Minimal security note */}
           <div className="flex items-center justify-center space-x-1.5 text-[11px] text-slate-500 font-medium">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-            <span>Cryptographically signed HMAC-SHA256 session</span>
+            <span>{t('login.hmacSession')}</span>
           </div>
         </div>
       </div>
 
       {/* Clean minimal footer */}
       <footer className="text-center text-xs text-slate-400 py-2">
-        MandiQ APMC Procurement System • National Standards
+        {t('login.footerStandards')}
       </footer>
     </div>
   );

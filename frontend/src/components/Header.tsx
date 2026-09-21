@@ -1,58 +1,38 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Wifi,
-  WifiOff,
-  Phone,
-  Play,
+  Building2,
   Layers,
-  UserCheck,
-  Truck,
   Scale,
   FileText,
   Database,
-  Building2,
+  Truck,
+  UserCheck,
+  Play,
   LogOut,
   Globe,
-  Zap
+  Sparkles
 } from 'lucide-react';
+import { HealthStatus, fetchSystemHealth, getAuthHeaders } from '../services/api';
 import { AuthUser } from '../services/authService';
-import { getAuthHeaders, parseResponseSafe, checkBackendHealth } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
-export type StationTab =
-  | 'farmer'
-  | 'gate'
-  | 'quality'
-  | 'queue'
-  | 'weighbridge'
-  | 'billing'
-  | 'sync'
-  | 'admin';
+export type StationTab = 'farmer' | 'gate' | 'quality' | 'queue' | 'weighbridge' | 'billing' | 'admin' | 'sync';
 
 interface HeaderProps {
   activeTab: StationTab;
   setActiveTab: (tab: StationTab) => void;
   currentUser: AuthUser | null;
   onLogout: () => void;
-  selectedMandiId: number;
+  selectedMandiId: number | null;
   setSelectedMandiId: (id: number) => void;
   effectiveOnline: boolean;
   isSimulatedOffline: boolean;
   setIsSimulatedOffline: (offline: boolean) => void;
   onOpenUSSD: () => void;
   onOpenE2E: () => void;
+  onOpenDemoTools: () => void;
   pendingWALCount: number;
 }
-
-export const TABS: { id: StationTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'admin', label: 'Admin Hub / व्यवस्थापक', icon: Building2 },
-  { id: 'farmer', label: 'Farmer Portal / किसान', icon: UserCheck },
-  { id: 'gate', label: 'Gate Terminal / गेट', icon: Truck },
-  { id: 'quality', label: 'Quality Gate / गुणवत्ता', icon: Layers },
-  { id: 'queue', label: 'Live DCDQ Queue / कतार', icon: Play },
-  { id: 'weighbridge', label: 'Weighbridge / वजन', icon: Scale },
-  { id: 'billing', label: 'Billing & DBT / बिलिंग', icon: FileText },
-  { id: 'sync', label: 'Offline WAL / सिंक', icon: Database },
-];
 
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
@@ -63,66 +43,57 @@ export const Header: React.FC<HeaderProps> = ({
   setSelectedMandiId,
   effectiveOnline,
   isSimulatedOffline,
-  setIsSimulatedOffline,
-  onOpenUSSD,
-  onOpenE2E,
+  onOpenDemoTools,
   pendingWALCount,
 }) => {
-  const [isBackendConnected, setIsBackendConnected] = useState<boolean>(true);
+  const { language, setLanguage, t, getMandiName } = useLanguage();
 
-  const [mandisList, setMandisList] = useState<{ mandi_id: number; name: string; district: string }[]>([
-    { mandi_id: 1, name: 'Sehore APMC Mandi', district: 'Sehore, MP' },
-    { mandi_id: 2, name: 'Karnal Grain Mandi', district: 'Karnal, HR' },
-  ]);
+  const [systemHealth, setSystemHealth] = useState<HealthStatus>({
+    online: true,
+    status: 'healthy',
+    databaseConnected: true,
+    redisConnected: true,
+  });
+
+  const [mandisList, setMandisList] = useState<{ mandi_id: number; name: string; district: string }[]>([]);
 
   useEffect(() => {
-    // Initial fetch of Mandis
-    fetch('/api/v1/mandis', { headers: getAuthHeaders() })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setMandisList(data);
-          setIsBackendConnected(true);
-        }
-      })
-      .catch(() => {
-        setIsBackendConnected(false);
-      });
+    const reloadMandis = () => {
+      fetch('/api/v1/mandis', { headers: getAuthHeaders() })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setMandisList(data);
+          }
+        })
+        .catch((err) => {
+          console.warn('[Header] Failed to reload mandis list:', err);
+        });
+    };
 
-    // Periodic backend health probe (every 8 seconds)
-    const interval = setInterval(() => {
+    reloadMandis();
+    window.addEventListener('mandiq:mandis-changed', reloadMandis);
+
+    const probeHealth = () => {
       if (effectiveOnline) {
-        checkBackendHealth().then((healthy) => setIsBackendConnected(healthy));
+        fetchSystemHealth().then((h) => {
+          setSystemHealth(h);
+        });
       }
-    }, 8000);
+    };
 
-    return () => clearInterval(interval);
+    probeHealth();
+    const interval = setInterval(probeHealth, 8000);
+    return () => {
+      window.removeEventListener('mandiq:mandis-changed', reloadMandis);
+      clearInterval(interval);
+    };
   }, [effectiveOnline]);
 
-  const [isSimulatingDemo, setIsSimulatingDemo] = useState(false);
-
-  const handleQuickLiveDemo = async () => {
-    setIsSimulatingDemo(true);
-    try {
-      const res = await fetch('/api/v1/admin/simulate-showcase', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ mandi_id: Number(selectedMandiId || 1) }),
-      });
-      await parseResponseSafe(res, 'Live demo injection failed');
-      setIsBackendConnected(true);
-      setActiveTab('queue');
-    } catch (err) {
-      console.warn('Quick demo notice:', err);
-      checkBackendHealth().then(setIsBackendConnected);
-      setActiveTab('queue');
-    } finally {
-      setIsSimulatingDemo(false);
-    }
-  };
-
-  // Filter tabs based on authoritative authenticated role
   const userRole = currentUser?.role || 'OPERATOR';
+  const isDemoAuthorized = userRole === 'ADMIN' || userRole === 'SUPERVISOR';
+
+  // Strict role-based navigation tabs
   const allowedTabs: StationTab[] =
     userRole === 'FARMER'
       ? ['farmer', 'queue']
@@ -130,13 +101,25 @@ export const Header: React.FC<HeaderProps> = ({
       ? ['gate', 'weighbridge', 'queue', 'sync']
       : userRole === 'INSPECTOR'
       ? ['quality', 'queue', 'sync']
-      : userRole === 'ADMIN'
+      : userRole === 'SUPERVISOR' || userRole === 'ADMIN'
       ? ['admin', 'farmer', 'gate', 'quality', 'queue', 'weighbridge', 'billing', 'sync']
       : ['farmer', 'gate', 'quality', 'queue', 'weighbridge', 'billing', 'sync'];
 
-  const visibleTabs = TABS.filter((t) => allowedTabs.includes(t.id));
+  const tabDefinitions: { id: StationTab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+    { id: 'admin', label: t('nav.admin'), icon: Building2 },
+    { id: 'farmer', label: t('nav.farmer'), icon: UserCheck },
+    { id: 'gate', label: t('nav.gate'), icon: Truck },
+    { id: 'quality', label: t('nav.quality'), icon: Layers },
+    { id: 'queue', label: t('nav.queue'), icon: Play },
+    { id: 'weighbridge', label: t('nav.weighbridge'), icon: Scale },
+    { id: 'billing', label: t('nav.billing'), icon: FileText },
+    { id: 'sync', label: t('nav.sync'), icon: Database },
+  ];
+
+  const visibleTabs = tabDefinitions.filter((tab) => allowedTabs.includes(tab.id));
+
   return (
-    <header className="border-b border-emerald-900/10 bg-white/95 sticky top-0 z-40 backdrop-blur shadow-xs">
+    <header className="border-b border-emerald-900/10 bg-white/95 sticky top-0 z-40 backdrop-blur shadow-xs font-sans">
       {/* Top Banner */}
       <div className="max-w-7xl mx-auto px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         {/* Brand & Mandi Selector */}
@@ -149,10 +132,10 @@ export const Header: React.FC<HeaderProps> = ({
               <div className="flex items-center space-x-1.5">
                 <span className="text-lg font-black tracking-tight text-emerald-950">MandiQ</span>
                 <span className="text-[10px] uppercase font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                  APMC PWA
+                  {t('common.apmcPwa')}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-medium">Intelligent Dynamic Queue & Local-First WAL</p>
+              <p className="text-[11px] text-slate-500 font-medium">{t('common.appSubtitle')}</p>
             </div>
           </div>
 
@@ -160,15 +143,21 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="hidden sm:flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 shadow-xs">
             <Building2 className="w-3.5 h-3.5 text-emerald-700" />
             <select
-              value={selectedMandiId}
+              value={selectedMandiId || ''}
               onChange={(e) => setSelectedMandiId(Number(e.target.value))}
               className="bg-transparent text-slate-900 font-bold focus:outline-none cursor-pointer"
             >
-              {mandisList.map((m) => (
-                <option key={m.mandi_id} value={m.mandi_id} className="bg-white text-slate-900">
-                  {m.name} ({m.district})
+              {mandisList.length === 0 ? (
+                <option value="" className="bg-white text-slate-900">
+                  {t('farmer.noMandisAvailable')}
                 </option>
-              ))}
+              ) : (
+                mandisList.map((m) => (
+                  <option key={m.mandi_id} value={m.mandi_id} className="bg-white text-slate-900">
+                    {getMandiName(m.name)} ({m.district})
+                  </option>
+                ))
+              )}
             </select>
           </div>
         </div>
@@ -187,97 +176,71 @@ export const Header: React.FC<HeaderProps> = ({
               </div>
               <button
                 onClick={onLogout}
-                title="Sign out of MandiQ session"
-                className="ml-1 p-1 rounded hover:bg-emerald-100 text-slate-400 hover:text-rose-600 transition"
+                title={t('common.logout')}
+                className="ml-1 p-1 rounded hover:bg-emerald-100 text-slate-400 hover:text-rose-600 transition cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
               </button>
             </div>
           )}
 
-          {/* Stitch Language Selector Indicator */}
-          <div className="hidden lg:flex items-center space-x-1 bg-amber-50 border border-amber-300 rounded-lg px-2 py-1 text-xs text-amber-900 font-bold">
-            <Globe className="w-3.5 h-3.5 text-amber-700" />
-            <span className="font-bold text-[11px]">English / हिन्दी</span>
+          {/* Authoritative Single-Language Selector */}
+          <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-300 rounded-lg px-2.5 py-1 text-xs text-amber-950 font-bold shadow-xs">
+            <Globe className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <select
+              value={language}
+              onChange={(e) => setLanguage(e.target.value as 'en' | 'hi')}
+              className="bg-transparent text-amber-950 font-bold text-xs focus:outline-none cursor-pointer"
+              aria-label={t('common.language')}
+            >
+              <option value="en">English</option>
+              <option value="hi">हिन्दी</option>
+            </select>
           </div>
 
-          {/* Quick Dynamic Showcase Traffic Launcher */}
-          <button
-            onClick={handleQuickLiveDemo}
-            disabled={isSimulatingDemo}
-            className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white border border-amber-600 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs cursor-pointer"
-            title="Inject live vehicles and switch to Dynamic Queue"
-          >
-            <Zap className={`w-3.5 h-3.5 ${isSimulatingDemo ? 'animate-bounce' : ''}`} />
-            <span className="hidden sm:inline">{isSimulatingDemo ? 'Simulating...' : '⚡ Live Demo'}</span>
-          </button>
+          {/* Role-Gated Demo Tools Launcher (ADMIN & SUPERVISOR ONLY) */}
+          {isDemoAuthorized && (
+            <button
+              onClick={onOpenDemoTools}
+              className="bg-gradient-to-r from-amber-600 to-amber-700 hover:brightness-105 text-white border border-amber-600 px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
+              title={t('nav.demoTools')}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-200" />
+              <span className="hidden sm:inline">{t('nav.demoTools')}</span>
+            </button>
+          )}
 
-          {/* Automated Phase 8 E2E Journey Launcher */}
-          <button
-            onClick={onOpenE2E}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white border border-indigo-600 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
-            title="Launch automated Phase 8 End-to-End Acceptance Journey"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span className="hidden sm:inline">E2E Journey</span>
-          </button>
-
-          {/* Zero-Data Cellular USSD Launcher */}
-          <button
-            onClick={onOpenUSSD}
-            className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1 shadow-xs"
-            title="Open USSD Feature Phone Simulator (*247#)"
-          >
-            <Phone className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">USSD (*247#)</span>
-          </button>
-
-          {/* Simulated Blackout Toggle */}
-          <button
-            onClick={() => setIsSimulatedOffline(!isSimulatedOffline)}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border transition flex items-center space-x-1 ${
-              isSimulatedOffline
-                ? 'bg-amber-100 text-amber-900 border-amber-400 font-bold animate-pulse'
-                : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
-            }`}
-            title="Simulate rural APMC power & network outage to demonstrate local-first IndexedDB resilience"
-          >
-            {isSimulatedOffline ? <WifiOff className="w-3.5 h-3.5 text-amber-600" /> : <Wifi className="w-3.5 h-3.5 text-slate-600" />}
-            <span className="hidden md:inline">{isSimulatedOffline ? 'Blackout On' : 'Simulate Blackout'}</span>
-          </button>
-
-          {/* Connection Status Pill */}
+          {/* Connection & Status Pill */}
           <div
-            title={
-              !effectiveOnline
-                ? 'Offline WAL mode enabled. Mutations recorded locally in IndexedDB.'
-                : !isBackendConnected
-                ? 'MandiQ FastAPI backend is not running on port 8000. Start with: .venv\\Scripts\\python.exe -m uvicorn backend.app.main:app --reload --port 8000'
-                : 'MandiQ Backend & e-NAM Cloud Connected'
-            }
             className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-              !effectiveOnline
+              !effectiveOnline || isSimulatedOffline
                 ? 'bg-amber-50 text-amber-800 border-amber-300'
-                : !isBackendConnected
+                : !systemHealth.online
                 ? 'bg-rose-50 text-rose-800 border-rose-300 animate-pulse'
+                : !systemHealth.redisConnected
+                ? 'bg-amber-50 text-amber-900 border-amber-300'
                 : 'bg-emerald-50 text-emerald-800 border-emerald-300'
             }`}
           >
             <span
               className={`w-2 h-2 rounded-full ${
-                !effectiveOnline
+                !effectiveOnline || isSimulatedOffline
                   ? 'bg-amber-500 animate-ping'
-                  : !isBackendConnected
+                  : !systemHealth.online
                   ? 'bg-rose-600 shadow-[0_0_6px_#e11d48]'
+                  : !systemHealth.redisConnected
+                  ? 'bg-amber-500'
                   : 'bg-emerald-600 shadow-[0_0_6px_#059669]'
               }`}
             ></span>
             <span className="text-[11px] font-mono font-bold">
-              {!effectiveOnline
-                ? `OFFLINE (${pendingWALCount})`
-                : !isBackendConnected
-                ? 'BACKEND OFFLINE (8000)'
-                : 'ONLINE'}
+              {!effectiveOnline || isSimulatedOffline
+                ? `${t('common.offline')} (${pendingWALCount})`
+                : !systemHealth.online
+                ? t('common.backendOffline')
+                : !systemHealth.redisConnected
+                ? t('common.inMemoryQueue')
+                : `${t('common.online')}`}
             </span>
           </div>
         </div>
@@ -292,7 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center space-x-2 px-3.5 py-2 text-xs font-medium rounded-t-lg transition whitespace-nowrap border-b-2 ${
+              className={`flex items-center space-x-2 px-3.5 py-2 text-xs font-medium rounded-t-lg transition whitespace-nowrap border-b-2 cursor-pointer ${
                 isActive
                   ? 'border-emerald-700 text-emerald-800 bg-emerald-50/80 font-bold shadow-xs'
                   : 'border-transparent text-slate-600 hover:text-slate-900 hover:bg-slate-100 font-medium'
@@ -311,4 +274,4 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
     </header>
   );
-}
+};

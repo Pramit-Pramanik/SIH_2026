@@ -1,6 +1,7 @@
 /**
  * MandiQ Client Authentication Service
  * Manages JWT tokens and communicates with backend /api/v1/auth endpoints.
+ * Includes controlled offline session caching (Section 13) preventing arbitrary offline identity fabrication.
  */
 
 export interface AuthUser {
@@ -9,6 +10,7 @@ export interface AuthUser {
   full_name: string;
   role: string;
   mandi_id: number | null;
+  farmer_id?: number | null;
   is_active: boolean;
 }
 
@@ -17,9 +19,20 @@ export interface LoginResponse {
   token_type: string;
   role: string;
   user_id: number;
+  username?: string;
+  mandi_id?: number | null;
+  farmer_id?: number | null;
+}
+
+export interface CachedSession {
+  username: string;
+  pass: string;
+  user: AuthUser;
+  cachedAt: number;
 }
 
 const TOKEN_KEY = 'mandiq_token';
+const CACHED_SESSIONS_KEY = 'mandiq_cached_user_sessions';
 
 export function getStoredToken(): string | null {
   try {
@@ -56,143 +69,164 @@ export function getAuthHeaders(): Record<string, string> {
   return headers;
 }
 
-const OFFLINE_USERS: Record<string, { pass: string; user: AuthUser }> = {
-  farmer: {
-    pass: 'Farmer@MandiQ2026',
-    user: {
-      user_id: 5,
-      username: 'farmer',
-      full_name: 'Ramesh Kumar (Registered Farmer)',
-      role: 'FARMER',
-      mandi_id: 1,
-      is_active: true,
-    },
-  },
-  operator: {
-    pass: 'Operator@MandiQ2026',
-    user: {
-      user_id: 2,
-      username: 'operator',
-      full_name: 'Suresh Verma (Gate Operator)',
-      role: 'OPERATOR',
-      mandi_id: 1,
-      is_active: true,
-    },
-  },
-  inspector: {
-    pass: 'Inspector@MandiQ2026',
-    user: {
-      user_id: 3,
-      username: 'inspector',
-      full_name: 'Dr. Anita Desai (Assayer)',
-      role: 'INSPECTOR',
-      mandi_id: 1,
-      is_active: true,
-    },
-  },
-  supervisor: {
-    pass: 'Supervisor@MandiQ2026',
-    user: {
-      user_id: 4,
-      username: 'supervisor',
-      full_name: 'Vikram Singh (Supervisor)',
-      role: 'SUPERVISOR',
-      mandi_id: 1,
-      is_active: true,
-    },
-  },
-  admin: {
-    pass: 'Admin@MandiQ2026',
-    user: {
-      user_id: 1,
-      username: 'admin',
-      full_name: 'System Administrator',
-      role: 'ADMIN',
-      mandi_id: null,
-      is_active: true,
-    },
-  },
-};
+/**
+ * Controlled Offline Cached Sessions
+ * Offline continuation is ONLY permitted for identities previously authenticated
+ * and cached on this client device. No arbitrary identities can be fabricated offline.
+ */
+export function getCachedSessions(): Record<string, CachedSession> {
+  try {
+    const raw = localStorage.getItem(CACHED_SESSIONS_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveCachedSession(username: string, pass: string, user: AuthUser): void {
+  try {
+    const current = getCachedSessions();
+    current[username.trim().toLowerCase()] = {
+      username: username.trim().toLowerCase(),
+      pass,
+      user,
+      cachedAt: Date.now(),
+    };
+    localStorage.setItem(CACHED_SESSIONS_KEY, JSON.stringify(current));
+  } catch {
+    // Local storage full or unavailable
+  }
+}
+
+/**
+ * Explicit helper for test environments and controlled bootstrap seeding.
+ */
+export function seedCachedSessionForTesting(username: string, pass: string, user: AuthUser): void {
+  saveCachedSession(username, pass, user);
+}
 
 export async function loginUser(username: string, password: string): Promise<LoginResponse> {
   const cleanUser = username.trim().toLowerCase();
-  
+  let response: Response;
+
   try {
-    const response = await fetch('/api/v1/auth/login', {
+    response = await fetch('/api/v1/auth/login', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ username: cleanUser, password }),
     });
+  } catch (networkErr: unknown) {
+    // Offline fallback MAY occur ONLY for genuine network/fetch failures
+    // (browser fetch failure, DNS/connection refusal, explicit inability to contact backend)
+    const cachedSessions = getCachedSessions();
+    const cached = cachedSessions[cleanUser];
 
-    const rawText = await response.text();
+    if (cached) {
+      if (cached.pass === password) {
+        const fallbackToken = `offline_pwa_token_${cleanUser}_${Date.now()}`;
+        setStoredToken(fallbackToken);
+        return {
+          access_token: fallbackToken,
+          token_type: 'bearer',
+          role: cached.user.role,
+          user_id: cached.user.user_id,
+          username: cached.user.username,
+          mandi_id: cached.user.mandi_id,
+          farmer_id: cached.user.farmer_id,
+        };
+      }
+      throw new Error('Cannot reach MandiQ backend server. Invalid password for cached offline session.');
+    }
 
-    if (!response.ok) {
-      let errorDetail = 'Authentication failed';
-      try {
-        const errJson = JSON.parse(rawText);
-        errorDetail = errJson.detail || errorDetail;
-      } catch {
-        // If server returned HTML (e.g. 500/502 from proxy)
-        if (response.status >= 500) {
-          // Check offline fallback for local development
-          const offlineMatch = OFFLINE_USERS[cleanUser];
-          if (offlineMatch && offlineMatch.pass === password) {
-            const fallbackToken = `offline_pwa_token_${cleanUser}_${Date.now()}`;
-            setStoredToken(fallbackToken);
-            return {
-              access_token: fallbackToken,
-              token_type: 'bearer',
-              role: offlineMatch.user.role,
-              user_id: offlineMatch.user.user_id,
-            };
-          }
-          errorDetail = 'Backend server unreachable. Verify backend on port 8000.';
+    if (networkErr instanceof Error) {
+      if (networkErr.message.includes('Failed to fetch') || networkErr.message.includes('NetworkError')) {
+        throw new Error('Cannot reach MandiQ backend server at port 8000. No previously authenticated offline session found for this user on this device.');
+      }
+      throw networkErr;
+    }
+    throw new Error('Cannot reach MandiQ backend server at port 8000. No previously authenticated offline session found for this user on this device.');
+  }
+
+  // The server WAS successfully contacted and returned an HTTP response.
+  // OFFLINE FALLBACK MUST NEVER OCCUR FOR ANY VALID HTTP RESPONSE FROM THE SERVER
+  // (e.g. HTTP 400, 401, 403, 422, 500, or any other HTTP status code).
+  const rawText = await response.text();
+
+  if (!response.ok) {
+    let errorDetail = `Authentication failed (${response.status})`;
+    try {
+      const errJson = JSON.parse(rawText);
+      if (errJson && errJson.detail) {
+        if (typeof errJson.detail === 'string') {
+          errorDetail = errJson.detail;
+        } else if (Array.isArray(errJson.detail)) {
+          errorDetail = errJson.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ');
         } else {
-          errorDetail = rawText || `Server error (${response.status})`;
+          errorDetail = JSON.stringify(errJson.detail);
         }
       }
-      throw new Error(errorDetail);
-    }
-
-    const data: LoginResponse = JSON.parse(rawText);
-    setStoredToken(data.access_token);
-    return data;
-  } catch (err: unknown) {
-    // If network error (fetch failed / server down), provide offline login fallback
-    const offlineMatch = OFFLINE_USERS[cleanUser];
-    if (offlineMatch && offlineMatch.pass === password) {
-      const fallbackToken = `offline_pwa_token_${cleanUser}_${Date.now()}`;
-      setStoredToken(fallbackToken);
-      return {
-        access_token: fallbackToken,
-        token_type: 'bearer',
-        role: offlineMatch.user.role,
-        user_id: offlineMatch.user.user_id,
-      };
-    }
-
-    if (err instanceof Error) {
-      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        throw new Error('Cannot reach MandiQ backend server at port 8000.');
+    } catch {
+      if (rawText && rawText.trim().length > 0 && !rawText.includes('<html')) {
+        errorDetail = rawText;
       }
-      throw err;
     }
-    throw new Error('An unexpected login error occurred.');
+    // Surface server authentication / authorization error directly to caller
+    throw new Error(errorDetail);
   }
+
+  const data: LoginResponse = JSON.parse(rawText);
+  setStoredToken(data.access_token);
+
+  // Cache authenticated session for controlled offline continuation
+  try {
+    const meResp = await fetch('/api/v1/auth/me', {
+      headers: {
+        Authorization: `Bearer ${data.access_token}`,
+      },
+    });
+    if (meResp.ok) {
+      const fullUser: AuthUser = await meResp.json();
+      saveCachedSession(cleanUser, password, fullUser);
+    } else {
+      saveCachedSession(cleanUser, password, {
+        user_id: data.user_id,
+        username: cleanUser,
+        full_name: cleanUser,
+        role: data.role,
+        mandi_id: data.mandi_id ?? null,
+        farmer_id: data.farmer_id ?? null,
+        is_active: true,
+      });
+    }
+  } catch {
+    saveCachedSession(cleanUser, password, {
+      user_id: data.user_id,
+      username: cleanUser,
+      full_name: cleanUser,
+      role: data.role,
+      mandi_id: data.mandi_id ?? null,
+      farmer_id: data.farmer_id ?? null,
+      is_active: true,
+    });
+  }
+
+  return data;
 }
 
 export async function fetchCurrentUser(): Promise<AuthUser | null> {
   const token = getStoredToken();
   if (!token) return null;
 
-  // Check offline token format: offline_pwa_token_{role}_{ts}
+  // Check offline token format: offline_pwa_token_{username}_{ts}
   if (token.startsWith('offline_pwa_token_')) {
     const parts = token.split('_');
-    const roleKey = parts[3]; // e.g. 'farmer'
-    const match = OFFLINE_USERS[roleKey];
-    if (match) return match.user;
+    const userKey = parts[3]; // e.g. 'farmer' or 'operator'
+    const cached = getCachedSessions()[userKey];
+    if (cached) return cached.user;
+    return null;
   }
 
   try {
@@ -213,7 +247,11 @@ export async function fetchCurrentUser(): Promise<AuthUser | null> {
     const user: AuthUser = JSON.parse(rawText);
     return user;
   } catch {
-    // If backend went down mid-session, check if we can preserve profile from token
+    // If backend went down mid-session, check if cached session can provide continuity
+    const cachedSessions = getCachedSessions();
+    for (const session of Object.values(cachedSessions)) {
+      return session.user;
+    }
     return null;
   }
 }

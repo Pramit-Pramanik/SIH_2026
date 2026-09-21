@@ -26,11 +26,13 @@ class User(Base):
     full_name = Column(String(100), nullable=False)
     role = Column(String(30), nullable=False, default="OPERATOR")
     mandi_id = Column(Integer, ForeignKey("mandis.mandi_id"), nullable=True)
+    farmer_id = Column(Integer, ForeignKey("farmers.farmer_id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     mandi = relationship("Mandi", backref="users", lazy="joined")
+    farmer = relationship("Farmer", backref="user", lazy="joined")
 
     __table_args__ = (
         CheckConstraint(f"role IN {VALID_USER_ROLES}", name="chk_user_valid_role"),

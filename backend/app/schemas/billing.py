@@ -22,6 +22,10 @@ class JFormGenerationRequest(BaseModel):
         default=None,
         description="Optional remarks from procurement inspector"
     )
+    rate_override_reason: Optional[str] = Field(
+        default=None,
+        description="Audited explanation if overriding authoritative crop MSP"
+    )
 
 
 class JFormInvoiceResponse(BaseModel):
@@ -44,3 +48,5 @@ class JFormInvoiceResponse(BaseModel):
     current_state: str
     generated_at: str
     message: str
+    is_rate_overridden: bool = False
+    standard_msp_rate: Optional[float] = None

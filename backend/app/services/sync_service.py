@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from backend.app.models.log import ProcurementLog, VALID_PROCUREMENT_STATES
+from backend.app.models.log import ProcurementLog, WALMutationJournal, VALID_PROCUREMENT_STATES
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.schemas.sync import (
@@ -13,8 +13,36 @@ from backend.app.schemas.sync import (
     WALBatchSyncRequest,
     WALMutationResult,
     WALBatchSyncResponse,
+    SignatureClassification,
 )
 from backend.app.services.lifecycle_service import validate_lifecycle_transition
+
+def classify_signature(
+    rec: WALMutationRecord,
+    incoming_fields: Dict[str, Any]
+) -> str:
+    """
+    Distinguishes AUTHENTICATED_SIGNATURE from INTEGRITY_METADATA.
+    Only describes/classifies as AUTHENTICATED_SIGNATURE if the signature is
+    cryptographically verified against server secrets using constant-time comparison.
+    Prototype metadata or unverified signatures are classified as INTEGRITY_METADATA.
+    """
+    sig = rec.hmac_signature
+    if not sig or not isinstance(sig, str):
+        return SignatureClassification.INTEGRITY_METADATA
+
+    # If 64-character hex string, check against booking signature
+    if len(sig) == 64:
+        try:
+            from backend.app.core.security import verify_booking_signature
+            slot_id = incoming_fields.get("slot_id") or 1
+            qty = incoming_fields.get("quantity_qt") or incoming_fields.get("net_weight_qt") or 0.0
+            if verify_booking_signature(rec.farmer_id, rec.mandi_id, int(slot_id), float(qty), sig):
+                return SignatureClassification.AUTHENTICATED_SIGNATURE
+        except Exception:
+            pass
+
+    return SignatureClassification.INTEGRITY_METADATA
 
 # Thread-safe server receive sequence tracker
 _seq_lock = threading.Lock()
@@ -94,59 +122,11 @@ def process_single_wal_mutation(
     forced_sequence: Optional[int] = None
 ) -> WALMutationResult:
     """
-    Applies a single WAL mutation record idempotently with field-level LWW merge
-    and authoritative server sequence assignment.
+    Applies a single WAL mutation record idempotently with field-level LWW merge,
+    authoritative server sequence assignment, cryptographic/metadata signature classification,
+    and persistent WAL journal tracking across process restarts.
     """
-    # 1. Idempotent Deduplication Check
-    if rec.client_mutation_id in _processed_mutations:
-        existing_seq, txn_id, prior_state = _processed_mutations[rec.client_mutation_id]
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=txn_id,
-            status="IGNORED_DUPLICATE",
-            server_receive_sequence=existing_seq,
-            current_state=prior_state,
-            message="Mutation already processed (idempotent replay)"
-        )
-
-    # 2. Assign authoritative monotonic server receive sequence
-    server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
-
-    # 3. Validate foreign keys and basic invariants
-    farmer = db.query(Farmer).filter(Farmer.farmer_id == rec.farmer_id).first()
-    if not farmer:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            message=f"Foreign key violation: Farmer {rec.farmer_id} does not exist"
-        )
-
-    mandi = db.query(Mandi).filter(Mandi.mandi_id == rec.mandi_id).first()
-    if not mandi:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            message=f"Foreign key violation: Mandi {rec.mandi_id} does not exist"
-        )
-
-    # Validate state validity
-    if rec.current_state not in VALID_PROCUREMENT_STATES:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            message=f"Invalid procurement state: '{rec.current_state}'"
-        )
-
-    # 4. Extract incoming payload attributes
+    # 1. Extract incoming payload attributes early to enable validation & signature classification
     incoming_fields: Dict[str, Any] = {"current_state": rec.current_state}
     if rec.payload:
         for k, v in rec.payload.items():
@@ -158,14 +138,113 @@ def process_single_wal_mutation(
                 for k, v in parsed.items():
                     incoming_fields[k] = v
         except json.JSONDecodeError:
+            server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
             return WALMutationResult(
                 client_mutation_id=rec.client_mutation_id,
                 transaction_id=rec.transaction_id,
                 status="REJECTED",
                 server_receive_sequence=server_seq,
                 current_state=None,
+                signature_type=SignatureClassification.INTEGRITY_METADATA,
                 message="Malformed payload_json string"
             )
+
+    # Classify signature: AUTHENTICATED_SIGNATURE vs INTEGRITY_METADATA
+    sig_classification = classify_signature(rec, incoming_fields)
+
+    # 2. Idempotent deduplication check.
+    # Fast path: in-memory map
+    if rec.client_mutation_id in _processed_mutations:
+        existing_seq, txn_id, prior_state = _processed_mutations[rec.client_mutation_id]
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=txn_id,
+            status="IGNORED_DUPLICATE",
+            server_receive_sequence=existing_seq,
+            current_state=prior_state,
+            signature_type=sig_classification,
+            message="Mutation already processed (idempotent replay)"
+        )
+
+    # Persistent WAL journal check (authoritative across process restarts)
+    persisted_journal = db.query(WALMutationJournal).filter(
+        WALMutationJournal.client_mutation_id == rec.client_mutation_id
+    ).first()
+    if persisted_journal:
+        _processed_mutations[rec.client_mutation_id] = (
+            persisted_journal.server_receive_sequence,
+            persisted_journal.transaction_id,
+            persisted_journal.current_state or ""
+        )
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=persisted_journal.transaction_id,
+            status="IGNORED_DUPLICATE",
+            server_receive_sequence=persisted_journal.server_receive_sequence,
+            current_state=persisted_journal.current_state,
+            signature_type=persisted_journal.signature_type,
+            message="Mutation already processed by the persisted WAL journal (idempotent replay)"
+        )
+
+    # Fallback to ProcurementLog check
+    persisted_duplicate = db.query(ProcurementLog).filter(
+        ProcurementLog.client_mutation_id == rec.client_mutation_id
+    ).first()
+    if persisted_duplicate:
+        _processed_mutations[rec.client_mutation_id] = (
+            persisted_duplicate.server_receive_sequence or 0,
+            persisted_duplicate.transaction_id,
+            persisted_duplicate.current_state or ""
+        )
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=persisted_duplicate.transaction_id,
+            status="IGNORED_DUPLICATE",
+            server_receive_sequence=persisted_duplicate.server_receive_sequence or 0,
+            current_state=persisted_duplicate.current_state,
+            signature_type=sig_classification,
+            message="Mutation already processed by the persisted ledger (idempotent replay)"
+        )
+
+    # 3. Assign authoritative monotonic server receive sequence
+    server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
+
+    # 4. Validate foreign keys and basic invariants
+    farmer = db.query(Farmer).filter(Farmer.farmer_id == rec.farmer_id).first()
+    if not farmer:
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=rec.transaction_id,
+            status="REJECTED",
+            server_receive_sequence=server_seq,
+            current_state=None,
+            signature_type=sig_classification,
+            message=f"Foreign key violation: Farmer {rec.farmer_id} does not exist"
+        )
+
+    mandi = db.query(Mandi).filter(Mandi.mandi_id == rec.mandi_id).first()
+    if not mandi:
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=rec.transaction_id,
+            status="REJECTED",
+            server_receive_sequence=server_seq,
+            current_state=None,
+            signature_type=sig_classification,
+            message=f"Foreign key violation: Mandi {rec.mandi_id} does not exist"
+        )
+
+    # Validate state validity
+    if rec.current_state not in VALID_PROCUREMENT_STATES:
+        return WALMutationResult(
+            client_mutation_id=rec.client_mutation_id,
+            transaction_id=rec.transaction_id,
+            status="REJECTED",
+            server_receive_sequence=server_seq,
+            current_state=None,
+            signature_type=sig_classification,
+            message=f"Invalid procurement state: '{rec.current_state}'"
+        )
 
     # Invariant validation for numerical fields
     if "crop_moisture_pct" in incoming_fields and incoming_fields["crop_moisture_pct"] is not None:
@@ -177,6 +256,7 @@ def process_single_wal_mutation(
                 status="REJECTED",
                 server_receive_sequence=server_seq,
                 current_state=rec.current_state,
+                signature_type=sig_classification,
                 message=f"Moisture percentage {val}% out of valid range [0, 100]"
             )
 
@@ -190,6 +270,7 @@ def process_single_wal_mutation(
                     status="REJECTED",
                     server_receive_sequence=server_seq,
                     current_state=rec.current_state,
+                    signature_type=sig_classification,
                     message=f"{weight_field} cannot be negative ({val})"
                 )
 
@@ -215,6 +296,7 @@ def process_single_wal_mutation(
                 status="REJECTED",
                 server_receive_sequence=server_seq,
                 current_state=None,
+                signature_type=sig_classification,
                 message=f"Lifecycle transition rejected: {err_msg}"
             )
 
@@ -222,7 +304,7 @@ def process_single_wal_mutation(
         token_sig = rec.hmac_signature or "OFFLINE_WAL_TOKEN"
         from datetime import date
         from datetime import datetime, timezone
-        
+
         log = ProcurementLog(
             transaction_id=rec.transaction_id,
             farmer_id=rec.farmer_id,
@@ -264,6 +346,7 @@ def process_single_wal_mutation(
                 status="IGNORED_DUPLICATE",
                 server_receive_sequence=log.server_receive_sequence or server_seq,
                 current_state=log.current_state,
+                signature_type=sig_classification,
                 message="Mutation already applied on ledger (idempotent duplicate)"
             )
 
@@ -283,6 +366,7 @@ def process_single_wal_mutation(
                 status="REJECTED",
                 server_receive_sequence=server_seq,
                 current_state=log.current_state,
+                signature_type=sig_classification,
                 message=f"Lifecycle transition rejected: {err_msg}"
             )
 
@@ -349,12 +433,25 @@ def process_single_wal_mutation(
 
     db.flush()
 
-    # Track in processed mutations registry
+    # Track in processed mutations registry (in-memory fast-path)
     _processed_mutations[rec.client_mutation_id] = (
         log.server_receive_sequence or server_seq,
         log.transaction_id,
         log.current_state
     )
+
+    # Persist in WALMutationJournal for restart idempotency
+    from datetime import datetime, timezone
+    journal_entry = WALMutationJournal(
+        client_mutation_id=rec.client_mutation_id,
+        transaction_id=rec.transaction_id,
+        server_receive_sequence=log.server_receive_sequence or server_seq,
+        current_state=log.current_state,
+        status=status,
+        signature_type=sig_classification,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.merge(journal_entry)
 
     return WALMutationResult(
         client_mutation_id=rec.client_mutation_id,
@@ -362,6 +459,7 @@ def process_single_wal_mutation(
         status=status,
         server_receive_sequence=log.server_receive_sequence or server_seq,
         current_state=log.current_state,
+        signature_type=sig_classification,
         message="Mutation successfully synchronized" if status == "SYNCED" else "Conflict resolved via LWW ordering"
     )
 

@@ -381,6 +381,7 @@ def test_wal_enforces_moisture_threshold_and_supervisor_override(
                 "current_state": "QUALITY_APPROVED",
                 "payload": {
                     "crop_moisture_pct": 18.50,
+                    "authorized_by_role": "SUPERVISOR",
                     "supervisor_token": "SUPERVISOR-KARNAL-001",
                     "reason": "Calibrated drying apron protocol authorized"
                 },

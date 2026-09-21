@@ -1,4 +1,4 @@
-import Dexie, { Table } from 'dexie';
+import Dexie, { type Table } from 'dexie';
 
 export interface LocalTransactionWAL {
   id?: number;                         // Auto-increment local primary key
@@ -198,6 +198,47 @@ export async function markWALRecordFailed(
 }
 
 /**
+ * Updates a WAL record when authentication is missing or rejected (HTTP 401/403).
+ * Preserves sync_status as PENDING so the mutation remains recoverable once the
+ * user or session re-authenticates. Does not exhaust retry limits.
+ */
+export async function markWALRecordAuthRequired(
+  id: number,
+  error: string
+): Promise<void> {
+  const existing = await localDB.transactionsWAL.get(id);
+  if (!existing) return;
+
+  await localDB.transactionsWAL.update(id, {
+    sync_status: 'PENDING',
+    last_attempt_at: Date.now(),
+    error_message: error
+  });
+
+  const localTxn = await localDB.localTransactions.get(existing.transaction_id);
+  if (localTxn && localTxn.last_client_mutation_id === existing.client_mutation_id) {
+    await localDB.localTransactions.update(existing.transaction_id, {
+      sync_status: 'PENDING'
+    });
+  }
+}
+
+/**
+ * Resets backoff delay for pending WAL records waiting for authentication.
+ * Called upon successful re-authentication to allow immediate synchronization.
+ */
+export async function resetPendingWALAuthBackoff(): Promise<void> {
+  const pending = await getPendingWALRecords();
+  for (const rec of pending) {
+    if (rec.id !== undefined && rec.sync_status === 'PENDING') {
+      await localDB.transactionsWAL.update(rec.id, {
+        last_attempt_at: 0
+      });
+    }
+  }
+}
+
+/**
  * Retrieves all WAL records for local auditing.
  */
 export async function getAllWALRecords(): Promise<LocalTransactionWAL[]> {
@@ -306,7 +347,7 @@ export async function executeLocalTransactionMutation(
     gross_weight_qt: (enrichedPayload.gross_weight_qt as number) ?? existing?.gross_weight_qt,
     tare_weight_qt: (enrichedPayload.tare_weight_qt as number) ?? existing?.tare_weight_qt,
     net_weight_qt: (enrichedPayload.net_weight_qt as number) ?? existing?.net_weight_qt,
-    rate_per_qt: (enrichedPayload.rate_per_qt as number) ?? existing?.rate_per_qt ?? 2275.0,
+    rate_per_qt: (enrichedPayload.rate_per_qt as number) ?? existing?.rate_per_qt ?? 0.0,
     gross_amount_inr: (enrichedPayload.gross_amount_inr as number) ?? existing?.gross_amount_inr,
     deductions_inr: (enrichedPayload.deductions_inr as number) ?? existing?.deductions_inr ?? 0.0,
     invoice_amount_inr: (enrichedPayload.invoice_amount_inr as number) ?? existing?.invoice_amount_inr,

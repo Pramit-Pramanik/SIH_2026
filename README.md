@@ -58,23 +58,29 @@ SIH_PROJECT/
 
 ### Step 1: Environment Setup
 ```bash
+# Option A: Automated local demo initialization (generates fresh 32-byte hex keys)
+python scripts/setup_demo_env.py
+
+# Option B: Manual configuration from template
 cp .env.example .env
-# Ensure MANDIQ_SECRET_HMAC_KEY and MANDIQ_PAYOUT_SECRET_KEY are populated
+# Populate MANDIQ_SECRET_HMAC_KEY and MANDIQ_PAYOUT_SECRET_KEY in .env
 ```
 
 ### Step 2: Backend Setup (Local SQLite Fallback)
 ```bash
-cd backend
 python -m venv .venv
 source .venv/bin/activate  # Or on Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 
-# Run migrations
+# Run environment initialization, migrations, and canonical bootstrap
+python scripts/setup_demo_env.py
 alembic upgrade head
+python scripts/bootstrap_demo.py
 
 # Start FastAPI development server
-uvicorn app.main:app --reload --port 8000
+uvicorn backend.app.main:app --reload --port 8000
 ```
+
 
 The application always loads the repository-root `.env`, and relative SQLite
 URLs resolve from the repository root, so these commands behave the same when
@@ -82,10 +88,23 @@ started from either the repository root or `backend/`. Alembic is the canonical
 schema creation and upgrade mechanism; automatic application startup never
 creates persistent schema state.
 
-### Step 3: Run Preflight & Test Suite
+### Step 3: Frontend Clean Build & Dev Server
 ```bash
+cd frontend
+npm ci
+npm run build   # Validates TypeScript compilation and builds from source (dist/ is ignored in git)
+npm run dev     # Starts Vite development server at http://localhost:5173
+```
+
+### Step 4: Run Preflight & Test Suite
+```bash
+# Python preflight check and backend test suite
 python scripts/preflight_check.py
 pytest tests/ -v
+
+# Frontend automated test suite (runs from frontend/ or repo root)
+cd frontend
+npm test
 ```
 
 ---

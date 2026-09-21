@@ -73,3 +73,21 @@ class ProcurementLog(Base):
     farmer = relationship("Farmer", back_populates="procurement_logs")
     mandi = relationship("Mandi", back_populates="procurement_logs")
     slot = relationship("ProcurementSlot", back_populates="procurement_logs")
+
+
+class WALMutationJournal(Base):
+    """
+    Authoritative persistent journal of processed offline WAL mutations.
+    Enforces persistent mutation deduplication across backend restarts (P1-02),
+    preserving the original monotonic server receive sequence and mutation status.
+    """
+    __tablename__ = "wal_mutation_journal"
+
+    client_mutation_id = Column(String(64), primary_key=True, index=True)
+    transaction_id = Column(String(36), index=True, nullable=False)
+    server_receive_sequence = Column(BigInteger, nullable=False)
+    current_state = Column(String(30), nullable=True)
+    status = Column(String(30), nullable=False)
+    signature_type = Column(String(30), nullable=False, default="INTEGRITY_METADATA")
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+

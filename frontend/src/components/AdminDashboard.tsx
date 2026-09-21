@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Wheat,
@@ -20,6 +20,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { parseResponseSafe, checkBackendHealth } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface Mandi {
   mandi_id: number;
@@ -80,13 +81,14 @@ interface MandiMetrics {
 }
 
 interface AdminDashboardProps {
-  selectedMandiId: number;
+  selectedMandiId: number | null;
   effectiveOnline: boolean;
 }
 
 type AdminSubTab = 'mandis' | 'crops' | 'users' | 'slots';
 
 export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashboardProps) {
+  const { t, language, getMandiName, getCropName } = useLanguage();
   const [activeSubTab, setActiveSubTab] = useState<AdminSubTab>('mandis');
   const [mandis, setMandis] = useState<Mandi[]>([]);
   const [crops, setCrops] = useState<Crop[]>([]);
@@ -96,10 +98,11 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const [isSimulating, setIsSimulating] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [activeMandiForSlots, setActiveMandiForSlots] = useState<number>(selectedMandiId);
+  const [activeMandiForSlots, setActiveMandiForSlots] = useState<number | null>(selectedMandiId);
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isBackendHealthy, setIsBackendHealthy] = useState<boolean | null>(null);
+  const refreshInFlight = useRef(false);
 
   // Modal / Form States
   const [isMandiModalOpen, setIsMandiModalOpen] = useState(false);
@@ -137,107 +140,142 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const loadMandis = async () => {
     try {
       const res = await fetch('/api/v1/mandis', { headers: getHeaders() });
-      if (res.ok) {
-        const data = await parseResponseSafe(res);
-        setMandis(data);
+      const data = await parseResponseSafe<Mandi[]>(res, 'Mandis endpoint failed');
+      setMandis(data);
+      if (!activeMandiForSlots && Array.isArray(data) && data.length > 0) {
+        setActiveMandiForSlots(data[0].mandi_id);
       }
-    } catch {
-      // Keep existing
+    } catch (err) {
+      throw new Error(`Mandis: ${err instanceof Error ? err.message : 'request failed'}`);
     }
   };
 
   const loadCrops = async () => {
     try {
       const res = await fetch('/api/v1/crops', { headers: getHeaders() });
-      if (res.ok) {
-        const data = await parseResponseSafe(res);
-        setCrops(data);
-      }
-    } catch {
-      // Keep existing
+      const data = await parseResponseSafe<Crop[]>(res, 'Crops endpoint failed');
+      setCrops(data);
+    } catch (err) {
+      throw new Error(`Crops: ${err instanceof Error ? err.message : 'request failed'}`);
     }
   };
 
   const loadUsers = async () => {
     try {
       const res = await fetch('/api/v1/admin/users', { headers: getHeaders() });
-      if (res.ok) {
-        const data = await parseResponseSafe(res);
-        setUsers(data);
+      if (res.status === 403) {
+        setUsers([]);
+        return;
       }
-    } catch {
-      // Keep existing
+      const data = await parseResponseSafe<UserAccount[]>(res, 'Users endpoint failed');
+      setUsers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      throw new Error(`Users: ${err instanceof Error ? err.message : 'request failed'}`);
     }
   };
 
   const loadSlots = async () => {
     try {
-      let res = await fetch(`/api/v1/slots/mandi/${activeMandiForSlots}/date/${selectedDate}`, {
+      const targetMandi = activeMandiForSlots || selectedMandiId;
+      if (!targetMandi) {
+        setSlots([]);
+        return;
+      }
+      const targetDate = selectedDate || new Date().toISOString().split('T')[0];
+      const res = await fetch(`/api/v1/slots?mandi_id=${targetMandi}&scheduled_date=${targetDate}`, {
         headers: getHeaders(),
       });
-      if (!res.ok) {
-        res = await fetch(`/api/v1/slots?mandi_id=${activeMandiForSlots}&scheduled_date=${selectedDate}`, {
-          headers: getHeaders(),
-        });
-      }
       if (res.ok) {
-        const data = await parseResponseSafe(res);
-        setSlots(data);
+        const data = await parseResponseSafe<Slot[]>(res);
+        setSlots(Array.isArray(data) ? data : []);
       } else {
         setSlots([]);
+        await parseResponseSafe(res, 'Slots endpoint failed');
       }
-    } catch {
+    } catch (err) {
       setSlots([]);
+      throw err;
     }
   };
 
   const loadMetrics = async () => {
     try {
-      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const targetMandi = activeMandiForSlots || selectedMandiId;
+      if (!targetMandi) {
+        setMetrics(null);
+        return;
+      }
       const res = await fetch(`/api/v1/admin/metrics?mandi_id=${targetMandi}`, {
         headers: getHeaders(),
       });
-      if (res.ok) {
-        const data = await parseResponseSafe(res);
-        setMetrics(data);
-        setIsBackendHealthy(true);
+      if (res.status === 403) {
+        return;
       }
-    } catch {
-      // Ignore
+      const data = await parseResponseSafe<MandiMetrics>(res, 'Metrics endpoint failed');
+      setMetrics(data);
+      setIsBackendHealthy(true);
+    } catch (err) {
+      throw new Error(`Metrics: ${err instanceof Error ? err.message : 'request failed'}`);
     }
   };
 
   const refreshAll = async () => {
+    if (refreshInFlight.current) return;
+    refreshInFlight.current = true;
     setIsLoading(true);
+    setFeedback(null);
     try {
       const healthy = await checkBackendHealth();
       setIsBackendHealthy(healthy);
       if (healthy) {
-        await Promise.all([loadMandis(), loadCrops(), loadUsers(), loadSlots(), loadMetrics()]);
+        const results = await Promise.allSettled([loadMandis(), loadCrops(), loadUsers(), loadSlots(), loadMetrics()]);
+        const failures = results
+          .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+          .map(result => result.reason instanceof Error ? result.reason.message : 'request failed');
+        if (failures.length) {
+          setFeedback({ type: 'error', message: `Admin data unavailable: ${failures.join('; ')}` });
+        }
+      } else {
+        setFeedback({ type: 'error', message: t('common.adminBackendUnavailable') });
       }
     } finally {
+      refreshInFlight.current = false;
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
+    setActiveMandiForSlots(selectedMandiId);
+  }, [selectedMandiId]);
+
+  useEffect(() => {
     refreshAll();
   }, [activeMandiForSlots, selectedDate]);
 
-  // Periodic metrics auto-polling (every 5 seconds)
+  // Periodic metrics auto-polling (every 8 seconds)
   useEffect(() => {
     if (!effectiveOnline) return;
+    let isMounted = true;
     const interval = setInterval(() => {
-      loadMetrics();
-    }, 5000);
-    return () => clearInterval(interval);
+      if (!refreshInFlight.current && isMounted) {
+        loadMetrics().catch(() => undefined);
+      }
+    }, 8000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [effectiveOnline, activeMandiForSlots, selectedMandiId]);
 
   const handleSimulateShowcase = async () => {
     setIsSimulating(true);
     setFeedback(null);
     try {
-      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const targetMandi = activeMandiForSlots || selectedMandiId;
+      if (!targetMandi) {
+        setFeedback({ type: 'error', message: t('common.noMandiSimulation') });
+        return;
+      }
       const res = await fetch('/api/v1/admin/simulate-showcase', {
         method: 'POST',
         headers: getHeaders(),
@@ -249,6 +287,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         message: data.message || 'Live showcase traffic successfully injected into database and priority queue!',
       });
       setIsBackendHealthy(true);
+      window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
+      window.dispatchEvent(new CustomEvent('mandiq:transactions-changed'));
       await refreshAll();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error simulating showcase traffic';
@@ -266,7 +306,11 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
     setIsResetting(true);
     setFeedback(null);
     try {
-      const targetMandi = activeMandiForSlots || selectedMandiId || 1;
+      const targetMandi = activeMandiForSlots || selectedMandiId;
+      if (!targetMandi) {
+        setFeedback({ type: 'error', message: t('common.noMandiReset') });
+        return;
+      }
       const res = await fetch('/api/v1/admin/reset-showcase', {
         method: 'POST',
         headers: getHeaders(),
@@ -278,6 +322,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         message: data.message || 'Showcase database and priority queue cleanly reset!',
       });
       setIsBackendHealthy(true);
+      window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
+      window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { action: 'reset' } }));
       await refreshAll();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error resetting showcase database';
@@ -305,9 +351,14 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         const err = await res.json();
         throw new Error(err.detail || 'Failed to create mandi');
       }
-      setFeedback({ type: 'success', message: `APMC Mandi "${mandiForm.name}" registered successfully!` });
+      const newMandi: Mandi = await res.json();
+      // Immediate local state update before full reload
+      setMandis((prev) => [...prev, newMandi]);
+      setFeedback({ type: 'success', message: `APMC Mandi "${newMandi.name}" registered successfully!` });
       setIsMandiModalOpen(false);
       setMandiForm({ name: '', district: '', state: '', daily_capacity_qt: 10000, active_weighbridges: 2, is_operational: true });
+      // Broadcast system-wide event so Header, FarmerPortal, and stations update immediately
+      window.dispatchEvent(new CustomEvent('mandiq:mandis-changed', { detail: newMandi }));
       loadMandis();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error creating mandi' });
@@ -330,6 +381,9 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         }),
       });
       if (!res.ok) throw new Error('Failed to update status');
+      const updatedMandi: Mandi = await res.json();
+      setMandis((prev) => prev.map((item) => item.mandi_id === updatedMandi.mandi_id ? updatedMandi : item));
+      window.dispatchEvent(new CustomEvent('mandiq:mandis-changed', { detail: updatedMandi }));
       loadMandis();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error updating mandi status' });
@@ -350,12 +404,42 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         const err = await res.json();
         throw new Error(err.detail || 'Failed to update commodity');
       }
-      setFeedback({ type: 'success', message: `Commodity "${cropForm.crop_name}" MSP updated to ₹${cropForm.msp_price_inr}/Qt!` });
+      const savedCrop: Crop = await res.json();
+      // Immediate local state update before full reload
+      setCrops((prev) => {
+        const idx = prev.findIndex((c) => c.crop_id === savedCrop.crop_id || c.crop_code === savedCrop.crop_code);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = savedCrop;
+          return updated;
+        }
+        return [...prev, savedCrop];
+      });
+      setFeedback({ type: 'success', message: `Commodity "${savedCrop.crop_name}" MSP updated to ₹${savedCrop.msp_price_inr}/Qt!` });
       setIsCropModalOpen(false);
       setEditingCrop(null);
+      // Broadcast system-wide event so billing and portals resolve authoritative MSP immediately
+      window.dispatchEvent(new CustomEvent('mandiq:crops-changed', { detail: savedCrop }));
       loadCrops();
     } catch (err: unknown) {
       setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error updating crop' });
+    }
+  };
+
+  const handleDeleteCrop = async (c: Crop) => {
+    if (!confirm(`Are you sure you want to deactivate commodity "${c.crop_name}"?`)) return;
+    try {
+      const res = await fetch(`/api/v1/admin/crops/${c.crop_id}`, {
+        method: 'DELETE',
+        headers: getHeaders(),
+      });
+      if (!res.ok) throw new Error('Failed to deactivate commodity');
+      setCrops((prev) => prev.filter((item) => item.crop_id !== c.crop_id));
+      setFeedback({ type: 'success', message: `Commodity "${c.crop_name}" deactivated successfully.` });
+      window.dispatchEvent(new CustomEvent('mandiq:crops-changed', { detail: c }));
+      loadCrops();
+    } catch (err: unknown) {
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error deactivating commodity' });
     }
   };
 
@@ -403,15 +487,15 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="space-y-1">
           <div className="flex items-center space-x-2">
             <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-400 text-slate-950 uppercase tracking-wide">
-              APMC Board Administration
+              {t('admin.apmcBoardAdmin')}
             </span>
             <span className="text-xs text-emerald-100 font-semibold">
-              {effectiveOnline ? 'e-NAM Cloud Authoritative' : 'Offline WAL Mode'}
+              {effectiveOnline ? t('admin.eNamCloudAuth') : t('admin.offlineWalMode')}
             </span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight">System Master & Yard Governance Hub</h2>
+          <h2 className="text-2xl font-black tracking-tight">{t('admin.hubSubtitle')}</h2>
           <p className="text-xs text-emerald-100/80 font-medium">
-            Configure APMC mandis, update statutory MSP rates, oversee operational staff roles, and allocate hourly gate capacity.
+            {t('admin.hubDesc')}
           </p>
         </div>
 
@@ -422,7 +506,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
             className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs flex items-center space-x-1.5 transition border border-white/20"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-            <span>Refresh State</span>
+            <span>{t('admin.refreshData')}</span>
           </button>
         </div>
       </div>
@@ -432,12 +516,12 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-950 flex items-start space-x-3 shadow-xs">
           <AlertCircle className="w-5 h-5 text-rose-600 mt-0.5 shrink-0" />
           <div className="flex-1 text-xs">
-            <h4 className="font-black text-sm text-rose-900">MandiQ Backend API Is Offline (Port 8000)</h4>
+            <h4 className="font-black text-sm text-rose-900">{t('admin.backendOffline')}</h4>
             <p className="mt-1 text-rose-800">
-              The Python FastAPI server is currently unreachable. Live yard telemetry, slot reservation, and DCDQ simulation require the backend process to be running.
+              {t('admin.backendOfflineDesc')}
             </p>
             <div className="mt-2 flex items-center space-x-2">
-              <span className="font-semibold text-rose-900">Start in terminal:</span>
+              <span className="font-semibold text-rose-900">{t('admin.startInTerminal')}</span>
               <code className="bg-rose-100 text-rose-900 font-mono text-[11px] px-2.5 py-1 rounded border border-rose-200">
                 .venv\Scripts\python.exe -m uvicorn backend.app.main:app --reload --port 8000
               </code>
@@ -471,7 +555,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           <div className="flex items-center space-x-2">
             <Activity className="w-4 h-4 text-emerald-700" />
             <h3 className="text-sm font-black text-slate-900">
-              Live Mandi Yard Operational Telemetry
+              {t('admin.title')}
             </h3>
             {effectiveOnline && (
               <span className="inline-flex items-center space-x-1.5 bg-emerald-50 text-emerald-800 px-2.5 py-0.5 rounded-full text-[10px] font-black border border-emerald-200">
@@ -479,7 +563,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-600"></span>
                 </span>
-                <span>Live Dynamic Stream (5s)</span>
+                <span>{t('admin.liveDynamicStream')}</span>
               </span>
             )}
           </div>
@@ -489,20 +573,20 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
               onClick={handleSimulateShowcase}
               disabled={isSimulating}
               className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider px-3.5 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
-              title="Inject realistic vehicles across stages to demonstrate dynamic re-ranking"
+              title={t('admin.simulateTooltip')}
             >
               <Zap className={`w-3.5 h-3.5 ${isSimulating ? 'animate-bounce' : ''}`} />
-              <span>{isSimulating ? 'Injecting...' : '⚡ Simulate Live Traffic'}</span>
+              <span>{isSimulating ? t('admin.simulatingTraffic') : t('admin.simulateTraffic')}</span>
             </button>
 
             <button
               onClick={handleResetShowcase}
               disabled={isResetting}
               className="bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-bold text-xs uppercase tracking-wider px-3 py-2 rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
-              title="Reset showcase database to clean baseline"
+              title={t('admin.resetTooltip')}
             >
               <RotateCcw className={`w-3.5 h-3.5 ${isResetting ? 'animate-spin' : ''}`} />
-              <span>{isResetting ? 'Resetting...' : 'Reset Showcase'}</span>
+              <span>{isResetting ? t('admin.resetting') : t('admin.resetShowcase')}</span>
             </button>
           </div>
         </div>
@@ -511,68 +595,68 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Queued in Yard</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.queuedVehicles')}</span>
               <Truck className="w-3.5 h-3.5 text-emerald-700" />
             </div>
             <div className="text-xl font-black text-emerald-950">
               {metrics?.queued_vehicles_count ?? 0}
             </div>
-            <span className="text-[10px] font-medium text-emerald-800">DCDQ Sorted</span>
+            <span className="text-[10px] font-medium text-emerald-800">{t('admin.dcdqSorted')}</span>
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Active Lots</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.activeTransactions')}</span>
               <Activity className="w-3.5 h-3.5 text-slate-500" />
             </div>
             <div className="text-xl font-black text-slate-900">
               {metrics?.active_transactions_total ?? 0}
             </div>
-            <span className="text-[10px] font-medium text-slate-600">Total pipeline</span>
+            <span className="text-[10px] font-medium text-slate-600">{t('admin.totalPipeline')}</span>
           </div>
 
           <div className="bg-teal-50/60 border border-teal-200/80 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Tonnage</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.volumeProcured')}</span>
               <Scale className="w-3.5 h-3.5 text-teal-700" />
             </div>
             <div className="text-xl font-black text-teal-950">
               {metrics?.total_volume_procured_qt?.toFixed(1) ?? '0.0'}
             </div>
-            <span className="text-[10px] font-medium text-teal-800">Quintals procured</span>
+            <span className="text-[10px] font-medium text-teal-800">{t('admin.quintalsProcured')}</span>
           </div>
 
           <div className="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">DBT Disbursed</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.payoutSettled')}</span>
               <DollarSign className="w-3.5 h-3.5 text-emerald-700" />
             </div>
             <div className="text-lg font-black text-emerald-950 truncate">
               ₹{(metrics?.total_payout_settled_inr ?? 0).toLocaleString('en-IN')}
             </div>
-            <span className="text-[10px] font-medium text-emerald-800">PFMS Settled</span>
+            <span className="text-[10px] font-medium text-emerald-800">{t('admin.pfmsSettled')}</span>
           </div>
 
           <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Rejection Rate</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.rejectionRate')}</span>
               <TrendingUp className="w-3.5 h-3.5 text-amber-700" />
             </div>
             <div className="text-xl font-black text-amber-950">
               {metrics?.quality_rejection_rate_pct ?? 0}%
             </div>
-            <span className="text-[10px] font-medium text-amber-800">&gt; 17% moisture</span>
+            <span className="text-[10px] font-medium text-amber-800">{t('admin.moistureRejection')}</span>
           </div>
 
           <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
             <div className="flex items-center justify-between text-slate-600 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider">Farmers</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider">{t('admin.totalRegisteredFarmers')}</span>
               <Users className="w-3.5 h-3.5 text-slate-500" />
             </div>
             <div className="text-xl font-black text-slate-900">
               {metrics?.total_registered_farmers ?? 0}
             </div>
-            <span className="text-[10px] font-medium text-slate-600">AgriStack Verified</span>
+            <span className="text-[10px] font-medium text-slate-600">{t('admin.agriStackVerified')}</span>
           </div>
         </div>
       </div>
@@ -588,7 +672,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           }`}
         >
           <Building2 className="w-4 h-4 text-emerald-700" />
-          <span>APMC Mandis ({mandis.length})</span>
+          <span>{t('admin.tabMandis')} ({mandis.length})</span>
         </button>
 
         <button
@@ -600,7 +684,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           }`}
         >
           <Wheat className="w-4 h-4 text-amber-700" />
-          <span>Commodities & MSP ({crops.length})</span>
+          <span>{t('admin.tabCrops')} ({crops.length})</span>
         </button>
 
         <button
@@ -612,7 +696,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           }`}
         >
           <Users className="w-4 h-4 text-blue-700" />
-          <span>Staff Directory ({users.length})</span>
+          <span>{t('admin.tabUsers')} ({users.length})</span>
         </button>
 
         <button
@@ -624,7 +708,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           }`}
         >
           <Calendar className="w-4 h-4 text-purple-700" />
-          <span>Capacity & Slots</span>
+          <span>{t('admin.tabSlots')}</span>
         </button>
       </div>
 
@@ -633,15 +717,15 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-extrabold text-slate-900">Registered APMC Procurement Mandis</h3>
-              <p className="text-xs text-slate-500">Centrally certified procurement yards with defined weighbridges and daily tonnage ceilings.</p>
+              <h3 className="text-base font-extrabold text-slate-900">{t('admin.tabMandis')}</h3>
+              <p className="text-xs text-slate-500">{t('admin.mandisSubtitle')}</p>
             </div>
             <button
               onClick={() => setIsMandiModalOpen(true)}
               className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Register APMC Mandi</span>
+              <span>{t('admin.addMandi')}</span>
             </button>
           </div>
 
@@ -654,7 +738,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                       #{m.mandi_id}
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-sm text-slate-900">{m.name}</h4>
+                      <h4 className="font-extrabold text-sm text-slate-900">{getMandiName(m.name)}</h4>
                       <p className="text-xs text-slate-500 font-medium">{m.district}, {m.state}</p>
                     </div>
                   </div>
@@ -666,20 +750,20 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                         : 'bg-slate-100 text-slate-600 border-slate-300'
                     }`}
                   >
-                    {m.is_operational ? 'Active Yard' : 'Suspended'}
+                    {m.is_operational ? t('admin.operationalStatusActive') : t('admin.operationalStatusInactive')}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 text-xs">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Daily Capacity</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">{t('admin.dailyCapacity')}</span>
                     <div className="font-mono font-black text-slate-900 text-sm">{m.daily_capacity_qt.toLocaleString()} Qt</div>
                   </div>
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Active Weighbridges</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">{t('admin.activeWeighbridges')}</span>
                     <div className="font-mono font-black text-slate-900 text-sm flex items-center gap-1">
                       <Scale className="w-3.5 h-3.5 text-amber-700" />
-                      <span>{m.active_weighbridges} Scales</span>
+                      <span>{m.active_weighbridges} {t('admin.weighbridges')}</span>
                     </div>
                   </div>
                 </div>
@@ -694,7 +778,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                     }`}
                   >
                     <Power className="w-3.5 h-3.5" />
-                    <span>{m.is_operational ? 'Suspend Operations' : 'Activate Mandi'}</span>
+                    <span>{m.is_operational ? t('admin.toggleOperational') : t('admin.toggleOperational')}</span>
                   </button>
                 </div>
               </div>
@@ -708,8 +792,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-base font-extrabold text-slate-900">Commodity Master & Minimum Support Price (MSP)</h3>
-              <p className="text-xs text-slate-500">Standard procurement rates enforced during automated J-Form billing and moisture rejection ceilings.</p>
+              <h3 className="text-base font-extrabold text-slate-900">{t('admin.tabCrops')}</h3>
+              <p className="text-xs text-slate-500">{t('admin.cropsSubtitle')}</p>
             </div>
             <button
               onClick={() => {
@@ -728,7 +812,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
               className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
             >
               <Plus className="w-4 h-4" />
-              <span>Register Commodity</span>
+              <span>{t('admin.addCrop')}</span>
             </button>
           </div>
 
@@ -737,14 +821,14 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-black uppercase text-[10px] tracking-wider">
-                    <th className="p-3.5">Commodity Name</th>
-                    <th className="p-3.5">Code</th>
-                    <th className="p-3.5">Category</th>
-                    <th className="p-3.5">Statutory MSP Rate</th>
-                    <th className="p-3.5">Optimal Moisture</th>
-                    <th className="p-3.5">Max Moisture Ceiling</th>
-                    <th className="p-3.5">Status</th>
-                    <th className="p-3.5 text-right">Actions</th>
+                    <th className="p-3.5">{t('admin.cropName')}</th>
+                    <th className="p-3.5">{t('admin.cropCode')}</th>
+                    <th className="p-3.5">{t('admin.category')}</th>
+                    <th className="p-3.5">{t('admin.mspPrice')}</th>
+                    <th className="p-3.5">{t('admin.optimalMoisture')}</th>
+                    <th className="p-3.5">{t('admin.maxMoisture')}</th>
+                    <th className="p-3.5">{t('admin.status')}</th>
+                    <th className="p-3.5 text-right">{t('admin.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -758,7 +842,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                         </span>
                       </td>
                       <td className="p-3.5 font-mono font-black text-emerald-800 text-sm">
-                        ₹{c.msp_price_inr.toFixed(2)} <span className="text-[10px] font-normal text-slate-500">/ Qt</span>
+                        ₹{c.msp_price_inr.toFixed(2)} <span className="text-[10px] font-normal text-slate-500">{t('admin.perQuintal')}</span>
                       </td>
                       <td className="p-3.5 font-mono text-slate-700 font-bold">{c.optimal_moisture_pct.toFixed(1)}%</td>
                       <td className="p-3.5 font-mono text-rose-700 font-bold">{c.max_moisture_pct.toFixed(1)}%</td>
@@ -766,16 +850,23 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           c.is_active ? 'bg-emerald-100 text-emerald-900' : 'bg-slate-100 text-slate-600'
                         }`}>
-                          {c.is_active ? 'Active' : 'Inactive'}
+                          {c.is_active ? t('admin.activeStatus') : t('admin.inactiveStatus')}
                         </span>
                       </td>
-                      <td className="p-3.5 text-right">
+                      <td className="p-3.5 text-right space-x-1.5">
                         <button
                           onClick={() => openEditCrop(c)}
                           className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs inline-flex items-center space-x-1 transition border border-slate-300/60"
                         >
                           <Edit2 className="w-3 h-3" />
-                          <span>Edit MSP</span>
+                          <span>{t('admin.editMsp')}</span>
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCrop(c)}
+                          className="px-2.5 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 font-bold text-xs inline-flex items-center space-x-1 transition border border-rose-200"
+                        >
+                          <Power className="w-3 h-3" />
+                          <span>{t('admin.deactivate')}</span>
                         </button>
                       </td>
                     </tr>
@@ -791,8 +882,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
       {activeSubTab === 'users' && (
         <div className="space-y-4">
           <div>
-            <h3 className="text-base font-extrabold text-slate-900">Operational Personnel & RBAC Registry</h3>
-            <p className="text-xs text-slate-500">Authoritative role mappings derived from signed HMAC cryptographic tokens.</p>
+            <h3 className="text-base font-extrabold text-slate-900">{t('admin.tabUsers')}</h3>
+            <p className="text-xs text-slate-500">{t('admin.usersSubtitle')}</p>
           </div>
 
           <div className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden shadow-xs">
@@ -800,12 +891,12 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-black uppercase text-[10px] tracking-wider">
-                    <th className="p-3.5">User ID</th>
-                    <th className="p-3.5">Legal Name</th>
-                    <th className="p-3.5">Username</th>
-                    <th className="p-3.5">Operational Role</th>
-                    <th className="p-3.5">Assigned APMC Mandi</th>
-                    <th className="p-3.5">Status</th>
+                    <th className="p-3.5">#</th>
+                    <th className="p-3.5">{t('admin.fullName')}</th>
+                    <th className="p-3.5">{t('admin.username')}</th>
+                    <th className="p-3.5">{t('admin.role')}</th>
+                    <th className="p-3.5">{t('admin.assignedMandi')}</th>
+                    <th className="p-3.5">{t('admin.status')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 font-medium">
@@ -830,12 +921,12 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                           </span>
                         </td>
                         <td className="p-3.5 text-slate-700">
-                          {u.mandi_id ? `Mandi #${u.mandi_id}` : <span className="text-slate-400">Universal System Access</span>}
+                          {u.mandi_id ? `Mandi #${u.mandi_id}` : <span className="text-slate-400">{t('admin.universalAccess')}</span>}
                         </td>
                         <td className="p-3.5">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-bold border border-emerald-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                            <span>Active Account</span>
+                            <span>{t('admin.activeStatus')}</span>
                           </span>
                         </td>
                       </tr>
@@ -854,8 +945,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           <div className="bg-white border-2 border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Hourly Yard Capacity & Slot Controller</h3>
-                <p className="text-xs text-slate-500">Monitor real-time slot occupancy and batch-generate booking windows.</p>
+                <h3 className="text-base font-extrabold text-slate-900">{t('admin.tabSlots')}</h3>
+                <p className="text-xs text-slate-500">{t('admin.slotsSubtitle')}</p>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -864,7 +955,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
                 >
                   <Calendar className="w-4 h-4" />
-                  <span>Generate Slots (Next 7 Days)</span>
+                  <span>{t('admin.generateBatchSlots')}</span>
                 </button>
               </div>
             </div>
@@ -872,22 +963,26 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
             {/* Filter row */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Target APMC Mandi</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('admin.assignedMandi')}</label>
                 <select
-                  value={activeMandiForSlots}
+                  value={activeMandiForSlots || ''}
                   onChange={(e) => setActiveMandiForSlots(Number(e.target.value))}
                   className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-xs text-slate-900 focus:outline-none focus:border-emerald-700"
                 >
-                  {mandis.map((m) => (
-                    <option key={m.mandi_id} value={m.mandi_id}>
-                      {m.name} (Daily Cap: {m.daily_capacity_qt} Qt)
-                    </option>
-                  ))}
+                  {mandis.length === 0 ? (
+                    <option value="">{t('admin.noMandisAvailable')}</option>
+                  ) : (
+                    mandis.map((m) => (
+                      <option key={m.mandi_id} value={m.mandi_id}>
+                        {getMandiName(m.name)} ({t('admin.dailyCapacity')}: {m.daily_capacity_qt} Qt)
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Procurement Date</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('admin.scheduledDate')}</label>
                 <input
                   type="date"
                   value={selectedDate}
@@ -903,20 +998,20 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
             {slots.length === 0 ? (
               <div className="p-8 text-center space-y-2">
                 <Clock className="w-8 h-8 text-slate-400 mx-auto" />
-                <div className="text-xs font-bold text-slate-700">No procurement slots configured for this date</div>
-                <p className="text-[11px] text-slate-500">Click &quot;Generate Slots (Next 7 Days)&quot; above to initialize hourly windows.</p>
+                <div className="text-xs font-bold text-slate-700">{t('admin.noSlotsFound')}</div>
+                <p className="text-[11px] text-slate-500">{t('admin.clickGenerateSlots')}</p>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-black uppercase text-[10px] tracking-wider">
-                      <th className="p-3.5">Slot ID</th>
-                      <th className="p-3.5">Time Window</th>
-                      <th className="p-3.5">Allocated Capacity</th>
-                      <th className="p-3.5">Booked Volume</th>
-                      <th className="p-3.5">Available Headroom</th>
-                      <th className="p-3.5">Utilization</th>
+                      <th className="p-3.5">{t('admin.slotId')}</th>
+                      <th className="p-3.5">{t('admin.slotTime')}</th>
+                      <th className="p-3.5">{t('admin.allocatedCapacity')}</th>
+                      <th className="p-3.5">{t('admin.bookedCapacity')}</th>
+                      <th className="p-3.5">{t('admin.remainingCapacity')}</th>
+                      <th className="p-3.5">{t('admin.utilization')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-mono">
@@ -956,17 +1051,17 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-slate-200 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
-              <h4 className="font-extrabold text-slate-900 text-sm">Register New APMC Mandi</h4>
+              <h4 className="font-extrabold text-slate-900 text-sm">{t('admin.createMandiTitle')}</h4>
               <button onClick={() => setIsMandiModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-sm font-bold">✕</button>
             </div>
 
             <form onSubmit={handleCreateMandi} className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Mandi Name</label>
+                <label className="block font-bold text-slate-700 mb-1">{t('admin.mandiName')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Ujjain APMC Mandi"
+                  placeholder={t('admin.mandiNamePlaceholder')}
                   value={mandiForm.name}
                   onChange={(e) => setMandiForm({ ...mandiForm, name: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900"
@@ -975,22 +1070,22 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">District</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.districtLabel')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="Ujjain"
+                    placeholder={t('admin.districtPlaceholder')}
                     value={mandiForm.district}
                     onChange={(e) => setMandiForm({ ...mandiForm, district: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900"
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">State</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.stateLabel')}</label>
                   <input
                     type="text"
                     required
-                    placeholder="Madhya Pradesh"
+                    placeholder={t('admin.statePlaceholder')}
                     value={mandiForm.state}
                     onChange={(e) => setMandiForm({ ...mandiForm, state: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900"
@@ -1000,7 +1095,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Daily Cap (Qt)</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.dailyCapacityLabel')}</label>
                   <input
                     type="number"
                     required
@@ -1010,7 +1105,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Weighbridges</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.weighbridges')}</label>
                   <input
                     type="number"
                     required
@@ -1026,7 +1121,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                 type="submit"
                 className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2"
               >
-                Confirm Mandi Registration
+                {t('admin.saveButton')}
               </button>
             </form>
           </div>
@@ -1039,18 +1134,18 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border-2 border-slate-200 space-y-4">
             <div className="flex justify-between items-center border-b border-slate-100 pb-3">
               <h4 className="font-extrabold text-slate-900 text-sm">
-                {editingCrop ? `Update MSP: ${editingCrop.crop_name}` : 'Register New Commodity'}
+                {editingCrop ? `${t('common.details')}: ${getCropName(editingCrop.crop_name)}` : t('admin.createCropTitle')}
               </h4>
               <button onClick={() => setIsCropModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-sm font-bold">✕</button>
             </div>
 
             <form onSubmit={handleSaveCrop} className="space-y-3 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Crop Name</label>
+                <label className="block font-bold text-slate-700 mb-1">{t('admin.cropName')}</label>
                 <input
                   type="text"
                   required
-                  placeholder="Wheat (Sharbati)"
+                  placeholder={t('admin.cropNamePlaceholder')}
                   value={cropForm.crop_name}
                   onChange={(e) => setCropForm({ ...cropForm, crop_name: e.target.value })}
                   className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900"
@@ -1059,7 +1154,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Crop Code</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.cropCode')}</label>
                   <input
                     type="text"
                     required
@@ -1070,21 +1165,21 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Category</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.category')}</label>
                   <select
                     value={cropForm.category}
                     onChange={(e) => setCropForm({ ...cropForm, category: e.target.value })}
                     className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-bold text-slate-900"
                   >
-                    <option value="CEREAL">Cereal / अनाज</option>
-                    <option value="PULSE">Pulse / दालें</option>
-                    <option value="OILSEED">Oilseed / तिलहन</option>
+                    <option value="CEREAL">{language === 'hi' ? 'अनाज' : 'Cereal'}</option>
+                    <option value="PULSE">{language === 'hi' ? 'दालें' : 'Pulse'}</option>
+                    <option value="OILSEED">{language === 'hi' ? 'तिलहन' : 'Oilseed'}</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Statutory MSP Price (₹ / Quintal)</label>
+                <label className="block font-bold text-slate-700 mb-1">{t('admin.mspPriceUnit')}</label>
                 <input
                   type="number"
                   step="0.50"
@@ -1097,7 +1192,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Optimal Moisture %</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.optimalMoistureUnit')}</label>
                   <input
                     type="number"
                     step="0.1"
@@ -1108,7 +1203,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   />
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Max Moisture Ceiling %</label>
+                  <label className="block font-bold text-slate-700 mb-1">{t('admin.maxMoistureUnit')}</label>
                   <input
                     type="number"
                     step="0.1"
@@ -1124,7 +1219,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                 type="submit"
                 className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2"
               >
-                Commit MSP to National Registry
+                {t('admin.saveButton')}
               </button>
             </form>
           </div>

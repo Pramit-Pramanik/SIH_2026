@@ -3,10 +3,15 @@ MandiQ Authentication & RBAC API Router.
 Provides endpoints for login, token issuance, session verification, and role inspection.
 """
 
-from typing import List
+import secrets
+import threading
+import time
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.app.core.config import get_settings
+from backend.app.core.security import verify_password
 from backend.app.dependencies.get_db import get_db
 from backend.app.dependencies.auth import get_current_user
 from backend.app.models.user import User
@@ -31,6 +36,51 @@ from backend.app.services.auth_service import (
     OPERATIONAL_ROLES_CATALOG
 )
 
+
+class OtpChallengeStore:
+    """
+    Thread-safe server-side OTP challenge registry bound to mobile number and role.
+    Maintains ephemeral challenges with expiration and replay prevention.
+    """
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._challenges: Dict[str, Dict[str, Any]] = {}
+
+    def set_challenge(self, mobile_number: str, role: str, otp: str, ttl_seconds: int = 300) -> None:
+        with self._lock:
+            self._challenges[mobile_number] = {
+                "otp": otp,
+                "role": role,
+                "expires_at": time.time() + ttl_seconds,
+                "used": False
+            }
+
+    def verify_and_consume(self, mobile_number: str, otp: str, role: str) -> Tuple[bool, str]:
+        with self._lock:
+            challenge = self._challenges.get(mobile_number)
+            if not challenge:
+                return False, f"No active OTP challenge found for mobile number +91 {mobile_number}. Please request an OTP first."
+
+            if time.time() > challenge["expires_at"]:
+                self._challenges.pop(mobile_number, None)
+                return False, "OTP has expired. Please request a new OTP."
+
+            if challenge["used"]:
+                return False, "This OTP has already been used. Please request a new OTP."
+
+            if challenge["otp"] != otp.strip():
+                return False, "Invalid OTP code entered."
+
+            challenge["used"] = True
+            return True, ""
+
+    def clear(self) -> None:
+        with self._lock:
+            self._challenges.clear()
+
+
+_otp_store = OtpChallengeStore()
+
 router = APIRouter(prefix="/auth", tags=["Authentication & RBAC"])
 
 
@@ -49,6 +99,14 @@ def login_for_access_token(
 
     user = authenticate_user(db, payload.username, payload.password)
     if not user:
+        # Explicit check for disabled accounts
+        candidate = db.query(User).filter(User.username == payload.username.strip().lower()).first()
+        if candidate and not candidate.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Account is disabled. Please contact your system administrator.",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password.",
@@ -121,7 +179,7 @@ def lookup_farmer_by_mobile(
     "/send-otp",
     response_model=MobileOtpResponse,
     summary="Request Mobile Login OTP",
-    description="Dispatches a 6-digit OTP to the registered mobile number for e-NAM pass holders."
+    description="Dispatches a 6-digit OTP to the registered mobile number for e-NAM pass holders (Mock SMS/Gateway)."
 )
 def send_login_otp(
     payload: MobileOtpRequest,
@@ -130,13 +188,25 @@ def send_login_otp(
     clean_num = payload.mobile_number.replace("+91", "").strip().replace(" ", "").replace("-", "")
     farmer_lookup = lookup_farmer_by_mobile(clean_num, db)
 
+    settings = get_settings()
+    # In prototype/demo mode, issue deterministic demo OTP '123456'; in production generate secure 6-digit random code
+    otp_code = "123456" if settings.ENVIRONMENT != "production" else f"{secrets.randbelow(900000) + 100000}"
+    ttl = 300
+
+    _otp_store.set_challenge(
+        mobile_number=clean_num,
+        role=payload.role.upper(),
+        otp=otp_code,
+        ttl_seconds=ttl
+    )
+
     masked = clean_num[:2] + "******" + clean_num[-2:] if len(clean_num) >= 4 else clean_num
     return MobileOtpResponse(
         status="SUCCESS",
-        message=f"OTP sent successfully to +91 {masked}",
+        message=f"[Mock SMS Gateway] OTP sent successfully to +91 {masked}",
         mobile_number=clean_num,
-        otp_demo="123456",
-        expires_in_seconds=30,
+        otp_demo=otp_code,
+        expires_in_seconds=ttl,
         linked_pass=farmer_lookup.model_dump()
     )
 
@@ -145,7 +215,7 @@ def send_login_otp(
     "/verify-otp",
     response_model=TokenResponse,
     summary="Verify Mobile OTP & Authenticate Session",
-    description="Validates entered OTP and returns an authenticated JWT session."
+    description="Validates entered OTP against active challenge and returns an authenticated JWT session."
 )
 def verify_login_otp(
     payload: VerifyOtpRequest,
@@ -155,11 +225,16 @@ def verify_login_otp(
     clean_num = payload.mobile_number.replace("+91", "").strip().replace(" ", "").replace("-", "")
     target_role = payload.role.upper()
 
-    # In prototype/showcase mode, accepts demo OTP '123456' or any valid 4+ digit code
-    if len(payload.otp.strip()) < 4:
+    # Enforce challenge matching, expiration, single-use, and code equality
+    success, err_msg = _otp_store.verify_and_consume(
+        mobile_number=clean_num,
+        otp=payload.otp,
+        role=target_role
+    )
+    if not success:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid OTP format. Must be at least 4 digits."
+            detail=err_msg
         )
 
     # Find matching operational user based on selected role
@@ -181,10 +256,13 @@ def verify_login_otp(
 
     # Customize display name if farmer has custom profile
     farmer = db.query(Farmer).filter(Farmer.mobile_number == clean_num).first()
+    farmer_id_override = None
     if farmer and target_role == "FARMER":
         user.full_name = f"{farmer.name} (Pass ID: 08234)"
+        farmer_id_override = farmer.farmer_id
 
-    return create_user_token(user)
+    return create_user_token(user, farmer_id=farmer_id_override)
+
 
 
 @router.get(
@@ -208,6 +286,7 @@ def get_authenticated_user_profile(
         full_name=current_user.full_name,
         role=current_user.role,
         mandi_id=current_user.mandi_id,
+        farmer_id=getattr(current_user, "farmer_id", None),
         is_active=current_user.is_active
     )
 

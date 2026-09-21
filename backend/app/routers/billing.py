@@ -33,7 +33,7 @@ def create_jform_invoice(
     Validates that vehicle has completed weighment (WEIGHED_TARE), multiplies net weight
     by applicable crop MSP, subtracts any deductions, and transitions state to BILL_GENERATED.
     """
-    return generate_jform_invoice(db=db, request=payload)
+    return generate_jform_invoice(db=db, request=payload, current_user=current_user)
 
 
 @router.get(

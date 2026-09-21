@@ -208,15 +208,22 @@ def validate_lifecycle_transition(
 
     # 3. Domain invariant validations per target state
     if to_state == "QUALITY_APPROVED":
+        # Authoritative supervisor override check when transitioning from QUALITY_REJECTED:
+        # Client payload fields like reason, supervisor_override, or magic supervisor_token strings cannot manufacture authorization.
+        # Only an authenticated actor role (SUPERVISOR or ADMIN) authorizes this override.
+        if from_state == "QUALITY_REJECTED":
+            is_override = payload.get("authorized_by_role") in ("SUPERVISOR", "ADMIN")
+            if not is_override:
+                return (
+                    False,
+                    "Supervisor override authorization required: Transition from 'QUALITY_REJECTED' to 'QUALITY_APPROVED' requires authenticated role SUPERVISOR or ADMIN.",
+                    403
+                )
+
         moisture = payload.get("crop_moisture_pct")
         if moisture is not None:
             val = float(moisture)
-            is_override = bool(
-                payload.get("supervisor_token")
-                or payload.get("supervisor_override")
-                or payload.get("is_supervisor_override")
-                or payload.get("reason")
-            )
+            is_override = payload.get("authorized_by_role") in ("SUPERVISOR", "ADMIN")
             if val > 17.0 and not is_override:
                 return (
                     False,

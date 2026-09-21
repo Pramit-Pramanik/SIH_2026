@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # Cryptographic secrets - fail closed if missing or empty in production/active runtime
     MANDIQ_SECRET_HMAC_KEY: str = Field(default="")
     MANDIQ_PAYOUT_SECRET_KEY: str = Field(default="")
-    MANDIQ_AUTH_ENFORCED: bool = Field(default=False)
+    MANDIQ_AUTH_ENFORCED: bool = Field(default=True)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(default=480)
 
     # DCDQ Perishability parameter

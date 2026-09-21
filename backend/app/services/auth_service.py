@@ -99,19 +99,28 @@ def authenticate_user(
     return user
 
 
-def create_user_token(user: User) -> TokenResponse:
+class AuthMode:
+    SERVER_AUTHENTICATED = "SERVER_AUTHENTICATED"
+    OFFLINE_LOCAL_PROVISIONAL = "OFFLINE_LOCAL_PROVISIONAL"
+
+
+def create_user_token(user: User, farmer_id: Optional[int] = None) -> TokenResponse:
     """
     Issues a cryptographically signed JWT access token for the authenticated user.
     """
     settings = get_settings()
     expire_minutes = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+    eff_farmer_id = farmer_id if farmer_id is not None else getattr(user, "farmer_id", None)
+
     payload = {
         "sub": str(user.user_id),
         "user_id": user.user_id,
         "username": user.username,
         "role": user.role,
         "mandi_id": user.mandi_id,
-        "full_name": user.full_name
+        "farmer_id": eff_farmer_id,
+        "full_name": user.full_name,
+        "auth_mode": AuthMode.SERVER_AUTHENTICATED
     }
     token = create_access_jwt(payload, expires_delta=expire_minutes)
     return TokenResponse(
@@ -122,6 +131,7 @@ def create_user_token(user: User) -> TokenResponse:
         username=user.username,
         role=user.role,
         mandi_id=user.mandi_id,
+        farmer_id=eff_farmer_id,
         full_name=user.full_name
     )
 
@@ -138,14 +148,9 @@ def verify_token_string(
     if not clean_token:
         return (False, None, "Empty token provided")
 
-    # Seamless PWA offline-to-online fallback token support for local development and showcase
+    # Offline local provisional tokens must NEVER satisfy privileged server RBAC
     if clean_token.startswith("offline_pwa_token_"):
-        parts = clean_token.split("_")
-        if len(parts) >= 4:
-            username = parts[3].lower()
-            user = db.query(User).filter(User.username == username).first()
-            if user and user.is_active:
-                return (True, user, "Offline PWA token accepted")
+        return (False, None, "Offline provisional tokens cannot satisfy server authentication")
 
     try:
         claims = decode_access_jwt(clean_token)
@@ -155,9 +160,19 @@ def verify_token_string(
 
         user = db.query(User).filter(User.user_id == int(user_id)).first()
         if not user:
-            return (False, None, f"User {user_id} does not exist")
+            claimed_username = claims.get("username")
+            if claimed_username:
+                user = db.query(User).filter(User.username == claimed_username.strip().lower()).first()
+            if not user:
+                return (False, None, f"User {user_id} does not exist")
         if not user.is_active:
             return (False, None, f"User {user_id} is inactive")
+
+        # Dynamically attach token-level overrides if specified in claims
+        if claims.get("farmer_id") is not None:
+            user.farmer_id = claims["farmer_id"]
+        if claims.get("mandi_id") is not None:
+            user.mandi_id = claims["mandi_id"]
 
         return (True, user, "Token is valid")
     except jwt.ExpiredSignatureError:
@@ -168,6 +183,7 @@ def verify_token_string(
         return (False, None, f"Unexpected token decoding error: {str(exc)}")
 
 
+
 def ensure_default_operational_users(
     db: Session,
     mandi_id: Optional[int] = None
@@ -176,11 +192,6 @@ def ensure_default_operational_users(
     Idempotently seeds standard APMC operational users if the users table is empty.
     Returns the list of operational users (existing or newly seeded).
     """
-    existing = db.query(User).all()
-    if existing:
-        return existing
-
-    # Determine default mandi_id if not explicitly provided
     assigned_mandi_id = mandi_id
     if assigned_mandi_id is None:
         from backend.app.models.mandi import Mandi
@@ -189,25 +200,40 @@ def ensure_default_operational_users(
             assigned_mandi_id = mandi.mandi_id
 
     default_users = [
-        ("admin", "Admin@MandiQ2026", "Mandi Board Administrator", "ADMIN", None),
-        ("supervisor", "Supervisor@MandiQ2026", "APMC Yard Supervisor", "SUPERVISOR", assigned_mandi_id),
-        ("inspector", "Inspector@MandiQ2026", "Quality Assaying Inspector", "INSPECTOR", assigned_mandi_id),
-        ("operator", "Operator@MandiQ2026", "Mandi Yard Operator", "OPERATOR", assigned_mandi_id),
-        ("farmer", "Farmer@MandiQ2026", "Registered Farmer", "FARMER", None),
+        ("admin", "Admin@MandiQ2026", "Mandi Board Administrator", "ADMIN", None, None),
+        ("supervisor", "Supervisor@MandiQ2026", "APMC Yard Supervisor", "SUPERVISOR", assigned_mandi_id, None),
+        ("inspector", "Inspector@MandiQ2026", "Quality Assaying Inspector", "INSPECTOR", assigned_mandi_id, None),
+        ("operator", "Operator@MandiQ2026", "Mandi Yard Operator", "OPERATOR", assigned_mandi_id, None),
+        ("farmer", "Farmer@MandiQ2026", "Ramesh Kumar (Registered Farmer)", "FARMER", None, 1),
     ]
 
+    # Purge legacy duplicate farmer authentication accounts (profiles remain in farmers table)
+    db.query(User).filter(User.username.in_(["farmer_balvinder", "farmer_suresh"])).delete(synchronize_session=False)
+
     created = []
-    for uname, pword, fname, role, m_id in default_users:
-        u = User(
-            username=uname,
-            hashed_password=hash_password(pword),
-            full_name=fname,
-            role=role,
-            mandi_id=m_id,
-            is_active=True
-        )
-        db.add(u)
-        created.append(u)
+    from backend.app.models.farmer import Farmer
+    for uname, pword, fname, role, m_id, f_id in default_users:
+        assigned_f_id = None
+        if f_id is not None:
+            if db.query(Farmer).filter(Farmer.farmer_id == f_id).first():
+                assigned_f_id = f_id
+
+        existing_u = db.query(User).filter(User.username == uname).first()
+        if not existing_u:
+            u = User(
+                username=uname,
+                hashed_password=hash_password(pword),
+                full_name=fname,
+                role=role,
+                mandi_id=m_id,
+                farmer_id=assigned_f_id,
+                is_active=True
+            )
+            db.add(u)
+            created.append(u)
+        else:
+            if assigned_f_id is not None and existing_u.farmer_id != assigned_f_id:
+                existing_u.farmer_id = assigned_f_id
 
     try:
         db.commit()
@@ -217,4 +243,4 @@ def ensure_default_operational_users(
         db.rollback()
         raise
 
-    return created
+    return db.query(User).all()

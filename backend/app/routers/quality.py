@@ -48,13 +48,13 @@ def assess_crop_quality(
 def override_crop_quality(
     payload: QualityOverrideRequest,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(require_roles(["SUPERVISOR", "ADMIN"]))
+    current_user: Optional[User] = Depends(require_roles(["SUPERVISOR", "ADMIN"], strict=True))
 ) -> QualityOverrideResponse:
     """
     Allows authenticated mandi supervisors to override a quality rejection with explicit audit logging,
     re-admitting the vehicle to the active priority queue.
     """
-    return override_quality_and_admit(db=db, request=payload)
+    return override_quality_and_admit(db=db, request=payload, current_user=current_user)
 
 
 @router.get(

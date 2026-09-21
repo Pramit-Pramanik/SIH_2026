@@ -1,6 +1,6 @@
 from datetime import datetime, timezone, date, time
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from backend.app.dependencies.get_db import get_db
@@ -9,11 +9,96 @@ from backend.app.models.user import User
 from backend.app.models.mandi import Mandi
 from backend.app.models.crop import Crop
 from backend.app.models.slot import ProcurementSlot
+from backend.app.models.farmer import Farmer
+from backend.app.models.log import ProcurementLog
 from backend.app.schemas.mandi import MandiResponse, MandiCreateRequest
 from backend.app.schemas.crop import CropResponse, CropCreateRequest
 from backend.app.schemas.auth import UserResponse
+from backend.app.schemas.showcase import (
+    ShowcaseFarmersResponse,
+    ShowcaseFarmerItem,
+    ShowcaseFarmerBooking
+)
 
 router = APIRouter(prefix="/admin", tags=["Administrator Management"])
+
+
+@router.get(
+    "/showcase/farmers",
+    response_model=ShowcaseFarmersResponse,
+    summary="Get Showcase Farmers (Live Database)",
+    description="Returns live database records for showcase farmers with active bookings, ceilings, and mandi association. Restricted to ADMIN and SUPERVISOR."
+)
+def get_showcase_farmers(
+    db: Session = Depends(get_db),
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR"], strict=True))
+) -> ShowcaseFarmersResponse:
+    from backend.app.routers.farmers import compute_farmer_profile
+
+    farmers = db.query(Farmer).order_by(Farmer.farmer_id.asc()).all()
+    results = []
+
+    default_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
+    if not default_mandi:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No APMC mandis found in database."
+        )
+
+    for f in farmers:
+        profile = compute_farmer_profile(db=db, farmer=f)
+
+        # Look up latest procurement log to determine primary/recent mandi and active booking
+        latest_log = db.query(ProcurementLog).filter(
+            ProcurementLog.farmer_id == f.farmer_id
+        ).order_by(ProcurementLog.created_at.desc()).first()
+
+        total_bookings = db.query(ProcurementLog).filter(
+            ProcurementLog.farmer_id == f.farmer_id
+        ).count()
+
+        mandi = None
+        if latest_log:
+            mandi = db.query(Mandi).filter(Mandi.mandi_id == latest_log.mandi_id).first()
+
+        if not mandi:
+            mandi = default_mandi
+
+        active_booking = None
+        if latest_log and latest_log.current_state not in ("PAYMENT_SETTLED", "CANCELLED", "QUALITY_REJECTED"):
+            slot = db.query(ProcurementSlot).filter(ProcurementSlot.slot_id == latest_log.slot_id).first()
+            time_str = f"{slot.start_time} - {slot.end_time}" if slot else "Morning Window"
+            active_booking = ShowcaseFarmerBooking(
+                transaction_id=latest_log.transaction_id,
+                current_state=latest_log.current_state,
+                scheduled_date=str(latest_log.scheduled_date),
+                scheduled_time=time_str,
+                slot_id=latest_log.slot_id,
+                quantity_qt=float(latest_log.net_weight_qt or 0.0),
+                mandi_id=mandi.mandi_id,
+                mandi_name=mandi.name
+            )
+
+        results.append(
+            ShowcaseFarmerItem(
+                farmer_id=f.farmer_id,
+                name=f.name,
+                mobile=f.mobile_number,
+                crop=f.registered_crop_type,
+                land_area_hectares=float(f.land_area_hectares),
+                ceiling_qt=profile.production_ceiling_qt,
+                cumulative_booked_qt=profile.cumulative_booked_qt,
+                remaining_ceiling_qt=profile.remaining_ceiling_qt,
+                mandi_id=mandi.mandi_id,
+                mandi_name=mandi.name,
+                state=mandi.state,
+                district=mandi.district,
+                active_booking=active_booking,
+                total_bookings=total_bookings
+            )
+        )
+
+    return ShowcaseFarmersResponse(farmers=results, count=len(results))
 
 
 @router.post(
@@ -26,7 +111,7 @@ router = APIRouter(prefix="/admin", tags=["Administrator Management"])
 def create_mandi(
     payload: MandiCreateRequest,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ) -> MandiResponse:
     existing = db.query(Mandi).filter(Mandi.name == payload.name).first()
     if existing:
@@ -59,7 +144,7 @@ def create_mandi(
 def create_crop(
     payload: CropCreateRequest,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ) -> CropResponse:
     existing = db.query(Crop).filter(Crop.crop_code == payload.crop_code).first()
     if existing:
@@ -99,7 +184,7 @@ def update_mandi(
     mandi_id: int,
     payload: MandiCreateRequest,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ) -> MandiResponse:
     mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
     if not mandi:
@@ -135,11 +220,31 @@ class GenerateSlotsRequest(MandiCreateRequest.__base__):
 def generate_procurement_slots(
     payload: dict,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ):
     from datetime import datetime, date, time, timedelta
 
-    mandi_id = int(payload.get("mandi_id", 1))
+    if "mandi_id" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Field 'mandi_id' is required."
+        )
+    try:
+        mandi_id = int(payload["mandi_id"])
+        if mandi_id <= 0:
+            raise ValueError()
+    except (ValueError, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Field 'mandi_id' must be a positive integer."
+        )
+
+    target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+    if not target_mandi:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Mandi with ID {mandi_id} not found."
+        )
     start_date_str = payload.get("start_date")
     num_days = int(payload.get("num_days", 7))
     hourly_capacity = float(payload.get("hourly_capacity_qt", 500.0))
@@ -193,7 +298,7 @@ def generate_procurement_slots(
 )
 def list_users(
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ) -> List[UserResponse]:
     users = db.query(User).order_by(User.user_id.asc()).all()
     return [
@@ -217,7 +322,7 @@ def list_users(
 def delete_crop(
     crop_id: int,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN"], strict=True))
 ):
     crop = db.query(Crop).filter(Crop.crop_id == crop_id).first()
     if not crop:
@@ -244,18 +349,49 @@ def delete_crop(
     description="Calculates live operational telemetry across the procurement pipeline for showcase evaluation."
 )
 def get_mandi_metrics(
-    mandi_id: int = 1,
+    mandi_id: Optional[int] = Query(None, description="Target APMC mandi identifier"),
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR", "OPERATOR"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR"]))
 ):
     from datetime import date
     from backend.app.models.log import ProcurementLog
     from backend.app.models.farmer import Farmer
     from backend.app.services.queue_manager import queue_manager
 
+    if mandi_id is not None:
+        if mandi_id <= 0:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="mandi_id must be a positive integer"
+            )
+        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Mandi with ID {mandi_id} not found."
+            )
+        effective_mandi_id = mandi_id
+    elif admin_user and getattr(admin_user, "mandi_id", None) is not None:
+        effective_mandi_id = admin_user.mandi_id
+        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == effective_mandi_id).first()
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Authorized mandi with ID {effective_mandi_id} not found."
+            )
+    else:
+        first_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
+        if not first_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No APMC mandis found in database."
+            )
+        effective_mandi_id = first_mandi.mandi_id
+        target_mandi = first_mandi
+
     today = date.today()
-    logs = db.query(ProcurementLog).filter(ProcurementLog.mandi_id == mandi_id).all()
-    mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+    logs = db.query(ProcurementLog).filter(ProcurementLog.mandi_id == effective_mandi_id).all()
+    mandi = target_mandi
     total_farmers = db.query(Farmer).count()
 
     state_counts = {}
@@ -276,12 +412,12 @@ def get_mandi_metrics(
             if st == "QUALITY_REJECTED" or float(l.crop_moisture_pct) > 17.0:
                 quality_rejected += 1
 
-    queued_vehicles = queue_manager.get_queue(mandi_id)
+    queued_vehicles = queue_manager.get_queue(effective_mandi_id)
     rejection_pct = round((quality_rejected / quality_inspected * 100.0), 1) if quality_inspected > 0 else 0.0
 
     return {
-        "mandi_id": mandi_id,
-        "mandi_name": mandi.name if mandi else f"Mandi #{mandi_id}",
+        "mandi_id": effective_mandi_id,
+        "mandi_name": mandi.name if mandi else f"Mandi #{effective_mandi_id}",
         "total_registered_farmers": total_farmers,
         "active_transactions_total": len(logs),
         "state_counts": state_counts,
@@ -305,7 +441,7 @@ def get_mandi_metrics(
 def simulate_showcase_traffic(
     payload: dict = None,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR", "OPERATOR"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR"]))
 ):
     from datetime import date, time
     import time as time_module
@@ -317,29 +453,40 @@ def simulate_showcase_traffic(
     from backend.app.services.dcdq_engine import calculate_dcdq_priority_score
     from backend.app.core.security import generate_booking_signature
 
-    raw_mandi = payload.get("mandi_id") if payload else 1
-    try:
-        mandi_id = int(raw_mandi) if raw_mandi is not None and str(raw_mandi).strip() != "" else 1
-    except (ValueError, TypeError):
-        mandi_id = 1
-
-    # Ensure target mandi exists or fallback gracefully
-    target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
-    if not target_mandi:
-        first_mandi = db.query(Mandi).first()
-        if first_mandi:
-            mandi_id = first_mandi.mandi_id
-        else:
-            default_m = Mandi(
-                name="Central APMC Mandi",
-                district="Sehore",
-                state="Madhya Pradesh",
-                daily_capacity_qt=10000.0,
-                active_weighbridges=2
+    raw_mandi = payload.get("mandi_id") if payload else None
+    if raw_mandi is not None:
+        try:
+            mandi_id = int(raw_mandi)
+            if mandi_id <= 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="mandi_id must be a positive integer"
             )
-            db.add(default_m)
-            db.commit()
-            mandi_id = default_m.mandi_id
+        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Mandi with ID {mandi_id} not found."
+            )
+    elif admin_user and getattr(admin_user, "mandi_id", None) is not None:
+        mandi_id = admin_user.mandi_id
+        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Authorized mandi with ID {mandi_id} not found."
+            )
+    else:
+        first_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
+        if not first_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No APMC mandis found in database."
+            )
+        mandi_id = first_mandi.mandi_id
+        target_mandi = first_mandi
 
     today = date.today()
 
@@ -386,7 +533,7 @@ def simulate_showcase_traffic(
 
     simulated_lots = [
         {
-            "transaction_id": "TXN-SIM-101",
+            "transaction_id": f"TXN-SIM-{mandi_id}-101",
             "farmer_id": f_ids[0 % len(f_ids)],
             "slot_id": s_ids[0 % len(s_ids)],
             "moisture": 12.40,
@@ -399,7 +546,7 @@ def simulate_showcase_traffic(
             "payout": None,
         },
         {
-            "transaction_id": "TXN-SIM-102",
+            "transaction_id": f"TXN-SIM-{mandi_id}-102",
             "farmer_id": f_ids[1 % len(f_ids)],
             "slot_id": s_ids[1 % len(s_ids)],
             "moisture": 16.20,
@@ -412,7 +559,7 @@ def simulate_showcase_traffic(
             "payout": None,
         },
         {
-            "transaction_id": "TXN-SIM-103",
+            "transaction_id": f"TXN-SIM-{mandi_id}-103",
             "farmer_id": f_ids[2 % len(f_ids)],
             "slot_id": s_ids[2 % len(s_ids)],
             "moisture": 18.60,
@@ -425,7 +572,7 @@ def simulate_showcase_traffic(
             "payout": None,
         },
         {
-            "transaction_id": "TXN-SIM-104",
+            "transaction_id": f"TXN-SIM-{mandi_id}-104",
             "farmer_id": f_ids[3 % len(f_ids)],
             "slot_id": s_ids[3 % len(s_ids)],
             "moisture": 13.10,
@@ -438,7 +585,7 @@ def simulate_showcase_traffic(
             "payout": None,
         },
         {
-            "transaction_id": "TXN-SIM-105",
+            "transaction_id": f"TXN-SIM-{mandi_id}-105",
             "farmer_id": f_ids[4 % len(f_ids)],
             "slot_id": s_ids[4 % len(s_ids)],
             "moisture": 11.90,
@@ -536,36 +683,60 @@ def simulate_showcase_traffic(
     description="Cleanly resets simulated and test transactions back to the baseline showcase state."
 )
 def reset_showcase_database(
-    payload: dict = None,
+    payload: Optional[dict] = None,
     db: Session = Depends(get_db),
-    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR", "OPERATOR"]))
+    admin_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR"]))
 ):
-    from backend.app.models.log import ProcurementLog
-    from backend.app.services.queue_manager import queue_manager
+    from backend.app.services.seed_service import reset_showcase_data
 
-    raw_mandi = payload.get("mandi_id") if payload else 1
-    try:
-        mandi_id = int(raw_mandi) if raw_mandi is not None and str(raw_mandi).strip() != "" else 1
-    except (ValueError, TypeError):
-        mandi_id = 1
+    raw_mandi = payload.get("mandi_id") if payload else None
+    mandi_id = None
+    if raw_mandi is not None:
+        try:
+            mandi_id = int(raw_mandi)
+            if mandi_id <= 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="mandi_id must be a positive integer"
+            )
+    elif admin_user and getattr(admin_user, "mandi_id", None) is not None:
+        mandi_id = admin_user.mandi_id
+    else:
+        first_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
+        mandi_id = first_mandi.mandi_id if first_mandi else None
 
-    # Clear queue
-    queue_manager.clear(f"mandi:queue:{mandi_id}")
+    raw_farmer = payload.get("farmer_id") if payload else None
+    farmer_id = None
+    if raw_farmer is not None:
+        try:
+            farmer_id = int(raw_farmer)
+            if farmer_id <= 0:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="farmer_id must be a positive integer"
+            )
 
-    # Remove temporary simulated transactions
-    db.query(ProcurementLog).filter(
-        ProcurementLog.transaction_id.like("TXN-SIM-%")
-    ).delete(synchronize_session=False)
+    result = reset_showcase_data(db, mandi_id=mandi_id, farmer_id=farmer_id)
 
-    db.query(ProcurementLog).filter(
-        ProcurementLog.transaction_id.like("TXN-E2E-%")
-    ).delete(synchronize_session=False)
+    if mandi_id is not None:
+        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Mandi with ID {mandi_id} not found."
+            )
 
-    db.commit()
+    if farmer_id is not None:
+        target_farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
+        if not target_farmer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Farmer with ID {farmer_id} not found."
+            )
 
-    return {
-        "status": "SUCCESS",
-        "mandi_id": mandi_id,
-        "message": f"Showcase transactions and priority queue for Mandi #{mandi_id} have been cleanly reset."
-    }
+    return result
 

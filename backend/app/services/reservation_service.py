@@ -65,7 +65,8 @@ def reserve_slot_atomic(
     mandi_id: int,
     slot_id: int,
     farmer_id: int,
-    requested_qty_qt: float
+    requested_qty_qt: float,
+    demo_run_id: Optional[str] = None,
 ) -> SlotReservationResponse:
     """
     Atomically validates farmer yield ceiling AND reserves hourly slot capacity
@@ -76,42 +77,42 @@ def reserve_slot_atomic(
     if requested_qty_qt <= 0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Requested delivery quantity must be strictly greater than 0."
+            detail=(
+                f"Invalid quantity: Requested: {requested_qty_qt:.2f} qt | "
+                f"Available: > 0.00 qt | "
+                f"Rule: Requested delivery quantity must be strictly greater than 0."
+            )
         )
 
-    # 1. Validate farmer existence
-    farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
-    if not farmer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Farmer with ID {farmer_id} not found."
-        )
-
-    # 2. Validate mandi existence and operational status
-    mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
-    if not mandi or not mandi.is_operational:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Mandi with ID {mandi_id} not found or is currently non-operational."
-        )
-
-    # 3. Validate slot existence and matching mandi
-    slot = db.query(ProcurementSlot).filter(
-        ProcurementSlot.slot_id == slot_id,
-        ProcurementSlot.mandi_id == mandi_id
-    ).first()
-    if not slot:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Procurement slot {slot_id} not found for mandi {mandi_id}."
-        )
-
-    # 4. Acquire atomic reservation lock
+    # 4. Acquire atomic reservation lock and execute validation atomically
     try:
         with lock_manager.acquire_reservation_lock(mandi_id, slot_id, farmer_id):
-            # Refresh entities inside lock boundary
-            db.refresh(slot)
-            db.refresh(farmer)
+            # 1. Validate farmer existence
+            farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
+            if not farmer:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Farmer with ID {farmer_id} not found."
+                )
+
+            # 2. Validate mandi existence and operational status
+            mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+            if not mandi or not mandi.is_operational:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Mandi with ID {mandi_id} not found or is currently non-operational."
+                )
+
+            # 3. Validate slot existence and matching mandi
+            slot = db.query(ProcurementSlot).filter(
+                ProcurementSlot.slot_id == slot_id,
+                ProcurementSlot.mandi_id == mandi_id
+            ).first()
+            if not slot:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Procurement slot {slot_id} not found for mandi {mandi_id}."
+                )
 
             # Compute current cumulative quantity booked by this farmer across active states
             cumulative_res = db.query(
@@ -124,26 +125,28 @@ def reserve_slot_atomic(
             farmer_ceiling = float(farmer.production_ceiling_qt)
 
             # Check Farmer Production Ceiling Invariant: Q_booked + Q_requested <= ceiling
-            if (current_farmer_booked + requested_qty_qt) > farmer_ceiling:
+            if round(current_farmer_booked + requested_qty_qt, 4) > round(farmer_ceiling, 4):
+                available_ceiling = max(0.0, round(farmer_ceiling - current_farmer_booked, 4))
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
-                        f"Farmer production ceiling exceeded: requesting {requested_qty_qt:.2f} qt, "
-                        f"already booked {current_farmer_booked:.2f} qt, "
-                        f"production ceiling is {farmer_ceiling:.2f} qt."
+                        f"Farmer production ceiling exceeded: Requested: {requested_qty_qt:.2f} qt | "
+                        f"Available: {available_ceiling:.2f} qt | "
+                        f"Rule: Farmer cumulative ceiling is {farmer_ceiling:.2f} qt (already booked {current_farmer_booked:.2f} qt)."
                     )
                 )
 
             # Check Slot Capacity Invariant: booked + requested <= allocated
             allocated = float(slot.allocated_capacity_qt)
             booked = float(slot.booked_capacity_qt)
-            remaining = allocated - booked
-            if remaining < requested_qty_qt:
+            remaining = round(allocated - booked, 4)
+            if remaining < round(requested_qty_qt, 4):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=(
-                        f"Slot capacity exhausted: requesting {requested_qty_qt:.2f} qt, "
-                        f"only {remaining:.2f} qt remaining."
+                        f"Slot capacity exhausted: Requested: {requested_qty_qt:.2f} qt | "
+                        f"Available: {max(0.0, remaining):.2f} qt | "
+                        f"Rule: Hourly slot capacity is {allocated:.2f} qt (already booked {booked:.2f} qt)."
                     )
                 )
 
@@ -156,11 +159,11 @@ def reserve_slot_atomic(
             )
 
             # Mutate slot state
-            slot.booked_capacity_qt = booked + requested_qty_qt
+            slot.booked_capacity_qt = round(booked + requested_qty_qt, 4)
             slot.version += 1
 
             # Create canonical procurement log entry
-            txn_id = f"TXN-{uuid.uuid4().hex[:12].upper()}"
+            txn_id = f"TXN-E2E-{uuid.uuid4().hex[:12].upper()}" if demo_run_id else f"TXN-{uuid.uuid4().hex[:12].upper()}"
             procurement_log = ProcurementLog(
                 transaction_id=txn_id,
                 farmer_id=farmer_id,
@@ -262,4 +265,3 @@ def cancel_slot_reservation(
         "current_state": "CANCELLED",
         "message": f"Slot booking '{transaction_id}' successfully cancelled and capacity restored."
     }
-

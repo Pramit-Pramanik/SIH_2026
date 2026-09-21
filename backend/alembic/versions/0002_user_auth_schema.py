@@ -32,10 +32,12 @@ def upgrade() -> None:
         sa.Column('full_name', sa.String(length=100), nullable=False),
         sa.Column('role', sa.String(length=30), server_default='OPERATOR', nullable=False),
         sa.Column('mandi_id', sa.Integer(), nullable=True),
+        sa.Column('farmer_id', sa.Integer(), nullable=True),
         sa.Column('is_active', sa.Boolean(), server_default=sa.text('1'), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.ForeignKeyConstraint(['mandi_id'], ['mandis.mandi_id'], name='fk_users_mandi_id'),
+        sa.ForeignKeyConstraint(['farmer_id'], ['farmers.farmer_id'], name='fk_users_farmer_id'),
         sa.PrimaryKeyConstraint('user_id'),
         sa.CheckConstraint(
             f"role IN {VALID_USER_ROLES}",

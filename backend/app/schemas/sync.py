@@ -1,6 +1,11 @@
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel, Field, ConfigDict
 
+class SignatureClassification:
+    AUTHENTICATED_SIGNATURE = "AUTHENTICATED_SIGNATURE"
+    INTEGRITY_METADATA = "INTEGRITY_METADATA"
+
+
 class WALMutationRecord(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -11,7 +16,7 @@ class WALMutationRecord(BaseModel):
     current_state: str = Field(..., description="Lifecycle state for this mutation")
     payload: Optional[Dict[str, Any]] = Field(default=None, description="Structured mutation payload")
     payload_json: Optional[str] = Field(default=None, description="Stringified payload attributes")
-    hmac_signature: Optional[str] = Field(default=None, description="Cryptographic signature from client/token")
+    hmac_signature: Optional[str] = Field(default=None, description="Cryptographic signature or integrity metadata")
     client_timestamp: float = Field(..., description="Local epoch milliseconds or seconds (diagnostic metadata only)")
     mutation_type: Optional[str] = Field(default=None, description="Type of mutation e.g. GATE_CHECK_IN, GROSS_WEIGHMENT")
 
@@ -28,6 +33,7 @@ class WALMutationResult(BaseModel):
     status: str = Field(..., description="SYNCED, CONFLICT_RESOLVED, IGNORED_DUPLICATE, or REJECTED")
     server_receive_sequence: int = Field(..., description="Authoritative server sequence assigned to this mutation")
     current_state: Optional[str] = None
+    signature_type: Optional[str] = Field(default="INTEGRITY_METADATA", description="AUTHENTICATED_SIGNATURE or INTEGRITY_METADATA")
     message: Optional[str] = None
 
 class WALBatchSyncResponse(BaseModel):

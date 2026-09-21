@@ -9,6 +9,7 @@ implementation source code, tests, scripts, and configuration manifests.
 import sys
 import re
 from pathlib import Path
+from typing import List
 
 # Paths to inspect
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -137,6 +138,89 @@ def scan_file(file_path: Path) -> list[str]:
 
     return violations
 
+import zipfile
+import tarfile
+import subprocess
+
+
+def check_packaging_and_secrets() -> List[str]:
+    violations = []
+
+    # Check 1: .env.example must not contain live/populated secret values
+    env_example = PROJECT_ROOT / ".env.example"
+    if env_example.exists():
+        content = env_example.read_text(encoding="utf-8")
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("MANDIQ_SECRET_HMAC_KEY=") and len(line.split("=", 1)[1].strip()) > 0:
+                violations.append(".env.example contains populated MANDIQ_SECRET_HMAC_KEY secret value!")
+            if line.startswith("MANDIQ_PAYOUT_SECRET_KEY=") and len(line.split("=", 1)[1].strip()) > 0:
+                violations.append(".env.example contains populated MANDIQ_PAYOUT_SECRET_KEY secret value!")
+
+    # Check 2: .env must NOT be tracked in git
+    try:
+        res = subprocess.run(
+            ["git", "ls-files", ".env"],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True,
+            text=True
+        )
+        if res.stdout.strip():
+            violations.append(f"CRITICAL SECURITY VIOLATION: .env is tracked in git index: {res.stdout.strip()}")
+    except Exception:
+        pass
+
+    # Check 3: Distributable archives must not bundle .env, node_modules, .venv, or database files
+    candidate_archives = []
+    for ext in ("*.zip", "*.tar", "*.tar.gz", "*.tgz"):
+        candidate_archives.extend(PROJECT_ROOT.glob(ext))
+    for pat in ("SIH_2026*.zip", "*presentation*.zip"):
+        candidate_archives.extend(PROJECT_ROOT.parent.glob(pat))
+
+    checked = set()
+    for archive_path in candidate_archives:
+        if archive_path.resolve() in checked or not archive_path.is_file():
+            continue
+        checked.add(archive_path.resolve())
+
+        if archive_path.suffix == ".zip":
+            try:
+                with zipfile.ZipFile(archive_path, "r") as zf:
+                    for name in zf.namelist():
+                        norm = name.replace("\\", "/")
+                        parts = norm.split("/")
+                        fname = parts[-1]
+                        if fname == ".env" or (fname.startswith(".env") and fname != ".env.example"):
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden secret file: {name}")
+                        if "node_modules" in parts:
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden node_modules path: {name}")
+                        if ".venv" in parts or "venv" in parts:
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden virtualenv path: {name}")
+                        if any(norm.endswith(ext) for ext in (".db", ".sqlite", ".sqlite3")):
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden database file: {name}")
+            except Exception:
+                pass
+        elif "tar" in archive_path.suffix or archive_path.name.endswith(".tgz"):
+            try:
+                with tarfile.open(archive_path, "r:*") as tf:
+                    for member in tf.getmembers():
+                        norm = member.name.replace("\\", "/")
+                        parts = norm.split("/")
+                        fname = parts[-1]
+                        if fname == ".env" or (fname.startswith(".env") and fname != ".env.example"):
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden secret file: {member.name}")
+                        if "node_modules" in parts:
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden node_modules path: {member.name}")
+                        if ".venv" in parts or "venv" in parts:
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden virtualenv path: {member.name}")
+                        if any(norm.endswith(ext) for ext in (".db", ".sqlite", ".sqlite3")):
+                            violations.append(f"Distributable archive {archive_path.name} contains forbidden database file: {member.name}")
+            except Exception:
+                pass
+
+    return violations
+
+
 def main() -> int:
     print("=" * 70)
     print("  MANDIQ REPOSITORY PREFLIGHT & PORTABILITY AUDITOR")
@@ -144,8 +228,16 @@ def main() -> int:
 
     all_violations = []
 
-    # 1. Check required governance directories
-    print("[1/3] Checking required governance directories...")
+    # 1. Check packaging and secret cleanliness
+    print("[1/4] Checking distributable archive & secret cleanliness...")
+    pkg_violations = check_packaging_and_secrets()
+    all_violations.extend(pkg_violations)
+    if not pkg_violations:
+        print("  [OK] .env is not tracked in git and no distributable archives bundle .env.")
+        print("  [OK] .env.example contains zero populated secrets.")
+
+    # 2. Check required governance directories
+    print("\n[2/4] Checking required governance directories...")
     for req_dir in REQUIRED_GOVERNANCE_DIRECTORIES:
         target = PROJECT_ROOT / req_dir
         if not target.is_dir():
@@ -153,10 +245,10 @@ def main() -> int:
         else:
             print(f"  [OK] Found required directory: {req_dir}/")
 
-    # 2. Collect files to audit
-    print("\n[2/3] Scanning implementation files, tests, scripts, and configurations...")
+    # 3. Collect files to audit
+    print("\n[3/4] Scanning implementation files, tests, scripts, and configurations...")
     files_to_scan = []
-    
+
     # Root audit files
     for root_file in AUDIT_ROOT_FILES:
         target = PROJECT_ROOT / root_file
@@ -183,8 +275,8 @@ def main() -> int:
 
     print(f"  Scanned {scanned_count} implementation & configuration files.")
 
-    # 3. Results evaluation
-    print("\n[3/3] Evaluating preflight audit status...")
+    # 4. Results evaluation
+    print("\n[4/4] Evaluating preflight audit status...")
     if all_violations:
         print("\n[FAIL] Preflight audit FAILED with the following violations:\n")
         for v in all_violations:

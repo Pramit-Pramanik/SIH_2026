@@ -7,8 +7,42 @@ from backend.app.core.config import get_settings
 from backend.app.dependencies.get_db import get_db
 from backend.app.schemas.health import HealthResponse, DatabaseStatus, RedisStatus
 
+import time
+from typing import Dict, Any
+
 router = APIRouter(tags=["Health & Diagnostics"])
 settings = get_settings()
+
+_redis_health_cache: Dict[str, Any] = {"timestamp": 0.0, "status": None}
+
+def _check_redis(redis_url: str) -> RedisStatus:
+    now = time.time()
+    cached = _redis_health_cache.get("status")
+    if cached and (now - _redis_health_cache.get("timestamp", 0.0) < 3.0):
+        return cached
+
+    clean_url = redis_url.replace("localhost", "127.0.0.1")
+    try:
+        r = redis.from_url(
+            clean_url,
+            socket_timeout=0.2,
+            socket_connect_timeout=0.2,
+            retry_on_timeout=False
+        )
+        r.ping()
+        redis_status = RedisStatus(
+            status="connected",
+            details="Redis ping acknowledged"
+        )
+    except Exception as e:
+        redis_status = RedisStatus(
+            status="disconnected",
+            details=f"Redis unavailable: {type(e).__name__}"
+        )
+
+    _redis_health_cache["timestamp"] = now
+    _redis_health_cache["status"] = redis_status
+    return redis_status
 
 @router.get(
     "/health",
@@ -35,20 +69,12 @@ def check_health(db: Session = Depends(get_db)) -> HealthResponse:
         )
 
     # 2. Redis check
-    try:
-        r = redis.from_url(settings.REDIS_URL, socket_timeout=1.0, socket_connect_timeout=1.0)
-        r.ping()
-        redis_status = RedisStatus(
-            status="connected",
-            details="Redis ping acknowledged"
-        )
-    except Exception as e:
-        redis_status = RedisStatus(
-            status="disconnected",
-            details=f"Redis unavailable: {type(e).__name__}"
-        )
+    redis_status = _check_redis(settings.REDIS_URL)
 
-    overall_status = "healthy" if db_status.status == "connected" else "degraded"
+    if db_status.status != "connected" or redis_status.status != "connected":
+        overall_status = "degraded"
+    else:
+        overall_status = "healthy"
 
     return HealthResponse(
         status=overall_status,

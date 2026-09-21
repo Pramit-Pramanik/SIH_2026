@@ -61,12 +61,37 @@ def get_farmer_profile(
     current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> FarmerProfileResponse:
-    target_farmer_id = farmer_id
-    if target_farmer_id is None:
-        # Default to farmer_id 1 if not specified
-        target_farmer_id = 1
+    if current_user and current_user.role == "FARMER":
+        auth_farmer_id = getattr(current_user, "farmer_id", None)
+        if auth_farmer_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Authenticated user has no linked farmer profile."
+            )
+        if farmer_id is not None and farmer_id != auth_farmer_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access forbidden: Authenticated farmer cannot query another farmer's profile (requested {farmer_id}, authenticated {auth_farmer_id})."
+            )
+        target_farmer_id = auth_farmer_id
+    else:
+        target_farmer_id = farmer_id
+        if target_farmer_id is None:
+            if current_user and getattr(current_user, "farmer_id", None):
+                target_farmer_id = current_user.farmer_id
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Query parameter 'farmer_id' is required for staff lookups."
+                )
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == target_farmer_id).first()
+    if not farmer:
+        # Check if target_farmer_id was passed as a User ID
+        user_match = db.query(User).filter(User.user_id == target_farmer_id).first()
+        if user_match and user_match.farmer_id:
+            farmer = db.query(Farmer).filter(Farmer.farmer_id == user_match.farmer_id).first()
+
     if not farmer:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -84,8 +109,17 @@ def get_farmer_profile(
 )
 def get_farmer_by_id(
     farmer_id: int,
+    current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> FarmerProfileResponse:
+    if current_user and current_user.role == "FARMER":
+        auth_farmer_id = getattr(current_user, "farmer_id", None)
+        if auth_farmer_id != farmer_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access forbidden: Authenticated farmer cannot access another farmer's profile."
+            )
+
     farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
     if not farmer:
         raise HTTPException(
@@ -102,8 +136,17 @@ def get_farmer_by_id(
 )
 def get_farmer_latest_booking(
     farmer_id: int,
+    current_user: Optional[User] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    if current_user and current_user.role == "FARMER":
+        auth_farmer_id = getattr(current_user, "farmer_id", None)
+        if auth_farmer_id != farmer_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access forbidden: Authenticated farmer cannot view another farmer's active booking."
+            )
+
     log = db.query(ProcurementLog).filter(
         ProcurementLog.farmer_id == farmer_id
     ).order_by(ProcurementLog.created_at.desc()).first()

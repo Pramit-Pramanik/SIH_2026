@@ -7,6 +7,8 @@ import {
   markWALRecordFailed
 } from '../db/dexie';
 import { verifyOfflineGateEntry } from '../services/offlineCrypto';
+import { getAuthHeaders } from '../services/api';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface GateTerminalProps {
   mandiId: number;
@@ -23,13 +25,12 @@ export function GateTerminal({
   onGateCheckedIn,
   onGateEntryVerified,
 }: GateTerminalProps) {
-  const [transactionId, setTransactionId] = useState(activeTxnId || 'TXN-DEMO-1001');
-  const [farmerId, setFarmerId] = useState<number>(1);
-  const [slotId, setSlotId] = useState<number>(1);
-  const [quantityQt, setQuantityQt] = useState<number>(35.0);
-  const [tokenSignature, setTokenSignature] = useState<string>(
-    '70a19fd45098476ad07e31556048d3603ae699ddce96b25bd2b6966567349259'
-  );
+  const [transactionId, setTransactionId] = useState(activeTxnId || '');
+  const [farmerId, setFarmerId] = useState<number>(0);
+  const [slotId, setSlotId] = useState<number>(0);
+  const [quantityQt, setQuantityQt] = useState<number>(0);
+  const [tokenSignature, setTokenSignature] = useState<string>('');
+  const [manualTxnInput, setManualTxnInput] = useState('');
 
   const [isVerifying, setIsVerifying] = useState(false);
   const [feedback, setFeedback] = useState<{
@@ -62,7 +63,9 @@ export function GateTerminal({
       // 2. Fetch authoritative database state if online
       if (effectiveOnline) {
         try {
-          const resp = await fetch(`/api/v1/gate/verify/${targetId}`);
+          const resp = await fetch(`/api/v1/gate/verify/${targetId}`, {
+            headers: getAuthHeaders(),
+          });
           if (resp.ok) {
             const data = await resp.json();
             if (data.farmer_id) setFarmerId(data.farmer_id);
@@ -138,13 +141,9 @@ export function GateTerminal({
       // 3. If online, attempt server authoritative check-in
       if (effectiveOnline) {
         try {
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          const token = localStorage.getItem('mandiq_token');
-          if (token) headers['Authorization'] = `Bearer ${token}`;
-
           const resp = await fetch('/api/v1/gate/check-in', {
             method: 'POST',
-            headers,
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
               transaction_id: transactionId,
               farmer_id: farmerId,
@@ -189,17 +188,49 @@ export function GateTerminal({
     }
   };
 
+  const { t } = useLanguage();
+
+  if (!transactionId) {
+    return (
+      <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
+        <Truck className="w-16 h-16 text-blue-600 mx-auto" />
+        <h2 className="text-xl font-black text-slate-800">{t('gate.title')}</h2>
+        <p className="text-sm text-slate-600">
+          No active transaction selected. Please select an active transaction from the queue or recent workflow, or enter a Transaction ID below:
+        </p>
+        <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
+          <input
+            type="text"
+            value={manualTxnInput}
+            onChange={(e) => setManualTxnInput(e.target.value.trim())}
+            placeholder="e.g. TXN-..."
+            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-600 focus:outline-none"
+          />
+          <button
+            onClick={() => {
+              if (manualTxnInput) setTransactionId(manualTxnInput);
+            }}
+            disabled={!manualTxnInput}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
+          >
+            Load
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 font-sans">
       {/* Banner */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 shadow-xs">
         <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
           <Truck className="w-4 h-4" />
-          <span>Gate Check-In & Entry Pass</span>
+          <span>{t('gate.title')}</span>
         </div>
-        <h2 className="text-xl font-black text-blue-950">Cryptographic QR Gate Check-In</h2>
+        <h2 className="text-xl font-black text-blue-950">{t('gate.subtitle')}</h2>
         <p className="text-xs text-slate-600 mt-0.5">
-          Offline HMAC-SHA256 signature verification guarantees zero gate congestion and blocks unauthorized entries.
+          {t('gate.scanQrSubtitle')}
         </p>
       </div>
 
@@ -208,28 +239,30 @@ export function GateTerminal({
         <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
           <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
             <QrCode className="w-4 h-4 text-blue-600" />
-            <span>Scan or Enter Gate Pass Token</span>
+            <span>{t('gate.scanQrTitle')}</span>
           </h3>
 
           <form onSubmit={handleVerifyGatePass} className="space-y-3.5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Transaction ID:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.activeToken')}:</label>
                 <input
                   type="text"
                   value={transactionId}
                   onChange={(e) => setTransactionId(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                  placeholder={t('gate.tokenPlaceholder')}
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Farmer ID:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.kisanId')}:</label>
                 <input
                   type="number"
-                  value={farmerId}
-                  onChange={(e) => setFarmerId(parseInt(e.target.value) || 1)}
+                  value={farmerId || ''}
+                  onChange={(e) => setFarmerId(parseInt(e.target.value) || 0)}
+                  placeholder={t('gate.farmerIdPlaceholder')}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
                   required
                 />
@@ -238,18 +271,19 @@ export function GateTerminal({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Scheduled Slot ID:</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.step5Title')}:</label>
                 <input
                   type="number"
-                  value={slotId}
-                  onChange={(e) => setSlotId(parseInt(e.target.value) || 1)}
+                  value={slotId || ''}
+                  onChange={(e) => setSlotId(parseInt(e.target.value) || 0)}
+                  placeholder={t('gate.slotIdPlaceholder')}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
                   required
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Quantity (qt):</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">{t('queue.quantity')} ({t('common.quintals')}):</label>
                 <input
                   type="number"
                   step="0.1"
@@ -263,14 +297,14 @@ export function GateTerminal({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                HMAC-SHA256 Token Signature (Gate Pass Token):
+                HMAC-SHA256 Token Signature:
               </label>
               <textarea
                 rows={2}
                 value={tokenSignature}
                 onChange={(e) => setTokenSignature(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-[11px] font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
-                placeholder="64-character hex signature..."
+                placeholder={t('gate.signaturePlaceholder')}
                 required
               />
             </div>
@@ -280,9 +314,9 @@ export function GateTerminal({
                 className={`p-3.5 rounded-xl border text-xs flex flex-col space-y-1.5 ${
                   feedback.type === 'success'
                     ? feedback.mode === 'AUTHORITATIVE_CLOUD'
-                      ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
-                      : 'bg-amber-50 border-amber-300 text-amber-900'
-                    : 'bg-rose-50 border-rose-300 text-rose-900'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                      : 'bg-amber-50 border-amber-300 text-amber-950'
+                    : 'bg-rose-50 border-rose-300 text-rose-950'
                 }`}
               >
                 <div className="flex items-center space-x-2">
@@ -290,22 +324,22 @@ export function GateTerminal({
                     feedback.mode === 'AUTHORITATIVE_CLOUD' ? (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase bg-emerald-100 text-emerald-800 border border-emerald-300">
                         <CheckCircle2 className="w-3 h-3 mr-1" />
-                        Authoritative Cloud Verified
+                        {t('common.verified')} (Cloud)
                       </span>
                     ) : (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase bg-amber-100 text-amber-800 border border-amber-300">
                         <AlertTriangle className="w-3 h-3 mr-1" />
-                        Offline Local Provisional (WAL Ingestion Pending)
+                        {t('common.offline')} WAL
                       </span>
                     )
                   ) : (
                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase bg-rose-100 text-rose-800 border border-rose-300">
                       <AlertTriangle className="w-3 h-3 mr-1" />
-                      Verification Failed
+                      {t('common.error')}
                     </span>
                   )}
                 </div>
-                <span className="leading-relaxed font-medium">{feedback.message}</span>
+                <span className="leading-relaxed font-semibold">{feedback.message}</span>
               </div>
             )}
 
@@ -314,7 +348,7 @@ export function GateTerminal({
               disabled={isVerifying}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-blue-600/20 flex items-center justify-center space-x-2 cursor-pointer"
             >
-              <span>{isVerifying ? 'Verifying Token...' : 'Verify Signature & Admit Vehicle'}</span>
+              <span>{isVerifying ? t('gate.verifying') : t('gate.checkInButton')}</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </form>
@@ -325,18 +359,18 @@ export function GateTerminal({
           <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
               <ShieldCheck className="w-4 h-4 text-emerald-700" />
-              <span>Cryptographic Protocol Rules</span>
+              <span>{t('gate.cryptoRules')}</span>
             </h3>
 
             <div className="space-y-2.5 text-xs text-slate-600">
               <p>
-                <strong className="text-slate-900">Tamper Protection:</strong> Any alteration to quantity, farmer ID, or slot invalidates the 64-character HMAC token signature.
+                <strong className="text-slate-900">{t('gate.tamperProtection')}:</strong> {t('gate.tamperDesc')}
               </p>
               <p>
-                <strong className="text-slate-900">Offline Resilience:</strong> During cellular blackouts, gate verification executes locally in IndexedDB without unhandled exceptions.
+                <strong className="text-slate-900">{t('gate.offlineResilience')}:</strong> {t('gate.offlineDesc')}
               </p>
               <p>
-                <strong className="text-slate-900">State Progression:</strong> Successful check-in transitions transaction state to <code className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-mono font-bold">GATE_ENTRY_VERIFIED</code> and routes truck to Quality Assaying.
+                <strong className="text-slate-900">{t('gate.stateProgression')}:</strong> {t('gate.stateProgressionDesc')} <code className="text-emerald-800 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 font-mono font-bold">GATE_ENTRY_VERIFIED</code> {t('gate.stateProgressionSuffix')}
               </p>
             </div>
           </div>

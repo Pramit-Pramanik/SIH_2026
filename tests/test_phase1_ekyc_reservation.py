@@ -336,6 +336,7 @@ def test_concurrent_reservations_preserve_ceiling_invariant(db_session: Session,
     assert statuses.count("FAILED") == 1
 
     # Verify cumulative booked in database strictly equals 30.0 (never 60.0)
+    db_session.expire_all()
     db_session.refresh(slot)
     assert float(slot.booked_capacity_qt) == 30.0
 
@@ -394,6 +395,7 @@ def test_concurrent_reservations_preserve_slot_capacity_invariant(db_session: Se
     assert statuses.count("FAILED") == 1
 
     # Booked capacity must never exceed 50.0 allocated
+    db_session.expire_all()
     db_session.refresh(slot)
     assert float(slot.booked_capacity_qt) == 30.0
 

@@ -25,7 +25,17 @@ end
 class InMemoryLockRegistry:
     """
     Thread-safe in-memory fallback lock registry used when Redis service is not active.
-    Provides identical SET NX PX semantics with monotonic expiration and token validation.
+    Provides SET NX PX semantics with monotonic expiration and token validation.
+
+    IMPORTANT ARCHITECTURAL CONCURRENCY NOTE:
+    -----------------------------------------
+    This in-memory registry is STRICTLY PROCESS-LOCAL (backed by a Python threading.Lock).
+    It successfully coordinates concurrent asynchronous or multi-threaded requests within
+    a single operating system process (e.g. single Uvicorn worker process or test worker).
+    It is NOT equivalent to a distributed Redis lock and CANNOT coordinate across multiple
+    independent OS processes, clustered containers, or horizontal worker nodes.
+    For multi-process or horizontally scaled production deployments, Redis MUST be active
+    and reachable via REDIS_URL to provide true distributed synchronization.
     """
     def __init__(self):
         self._mutex = threading.Lock()
@@ -62,6 +72,12 @@ class LockManager:
     Unified atomic locking coordinator.
     Attempts Redis-based SET NX PX locking first, seamlessly falling back to the
     thread-safe in-memory coordinator if Redis is unavailable.
+
+    Preserves deterministic lock ordering (lexicographical sorting of keys) to eliminate
+    deadlock hazards when simultaneously acquiring slot locks and farmer yield boundary locks.
+
+    Note: When Redis is unavailable, the fallback coordinator is process-local and does
+    not provide cross-process distributed synchronization.
     """
     def __init__(self):
         self.settings = get_settings()

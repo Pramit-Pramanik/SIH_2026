@@ -1,0 +1,1908 @@
+/**
+ * MandiQ Localization Dictionary
+ * Strict Single-Language strings for English (en) and Hindi (hi).
+ * NO mixed-language slash strings.
+ */
+
+export interface Translations {
+  common: {
+    appName: string;
+    appSubtitle: string;
+    apmcPwa: string;
+    loading: string;
+    confirm: string;
+    cancel: string;
+    close: string;
+    refresh: string;
+    status: string;
+    action: string;
+    verified: string;
+    pending: string;
+    operational: string;
+    today: string;
+    logout: string;
+    online: string;
+    offline: string;
+    synced: string;
+    error: string;
+    success: string;
+    quintals: string;
+    kg: string;
+    inr: string;
+    language: string;
+    all: string;
+    search: string;
+    filter: string;
+    details: string;
+    noData: string;
+
+    activeTransaction: string;
+    apmcProcurementSystem: string;
+
+    backendOffline: string;
+    inMemoryQueue: string;
+    noActiveTransaction: string;
+    tareWeightError: string;
+    noMandiSelected: string;
+    reservationFailed: string;
+    cancellationFailed: string;
+    networkErrorCancel: string;
+    selectOperationalMandi: string;
+    unlinkedFarmerReservation: string;
+    noVehiclesInQueue: string;
+    jformMissingNetWeight: string;
+    savedLocallyWal: string;
+    generateJformFirst: string;
+    dualSigAdminNotice: string;
+    dbtOfflineWal: string;
+    dbtPfmsConfirmed: string;
+    dbtOfflineRecorded: string;
+    supervisorOverrideRecorded: string;
+    adminBackendUnavailable: string;
+    noMandiSimulation: string;
+    noMandiReset: string;
+    initializing: string;
+  };
+  nav: {
+    admin: string;
+    farmer: string;
+    gate: string;
+    quality: string;
+    queue: string;
+    weighbridge: string;
+    billing: string;
+    sync: string;
+    advanceStation: string;
+    nextStation: string;
+    demoTools: string;
+  };
+  roles: {
+    admin: string;
+    supervisor: string;
+    inspector: string;
+    operator: string;
+    farmer: string;
+  };
+  login: {
+    title: string;
+    subtitle: string;
+    selectRole: string;
+    username: string;
+    usernamePlaceholder: string;
+    password: string;
+    passwordPlaceholder: string;
+    signIn: string;
+    signingIn: string;
+    quickDemoUsers: string;
+    credentialsError: string;
+    offlineFallbackNotice: string;
+
+    hmacSession: string;
+    footerStandards: string;
+  };
+  farmer: {
+    greeting: string;
+    profileTitle: string;
+    kisanId: string;
+    mobile: string;
+    remainingCeiling: string;
+    availableCapacity: string;
+    remainingAfterBooking: string;
+    targetMandi: string;
+    yardOperational: string;
+    processFlow: string;
+    stepOf: string;
+    step1Crop: string;
+    step2Token: string;
+    step3Gate: string;
+    step4Quality: string;
+    step5Weight: string;
+    step6Payment: string;
+    activeToken: string;
+    tokenNo: string;
+    scanAtGate: string;
+    cancelSlot: string;
+    cancelSlotPrompt: string;
+    viewReceipt: string;
+    bookDeliveryTitle: string;
+    bookDeliverySubtitle: string;
+    step1Title: string;
+    govtMsp: string;
+    loadingCrops: string;
+    noCrops: string;
+    step2Title: string;
+    quantityHint: string;
+    quickPills: string;
+    step3Title: string;
+    landTenure: string;
+    ownerCultivator: string;
+    ownerDesc: string;
+    tenantCultivator: string;
+    tenantDesc: string;
+    landownerName: string;
+    landownerNamePlaceholder: string;
+    panchayatCert: string;
+    panchayatCertHint: string;
+    bonaFideDeclaration: string;
+    step4Title: string;
+    scheduledDate: string;
+    step5Title: string;
+    slotsHint: string;
+    loadingSlots: string;
+    noSlots: string;
+    capacityRemaining: string;
+    confirming: string;
+    reserveButton: string;
+    slotUnavailable: string;
+    valQtyPositive: string;
+    valQtyExceedsCeiling: string;
+    valLandownerRequired: string;
+    valBonaFideRequired: string;
+    valSlotRequired: string;
+    valOfflineBooking: string;
+    appointmentSuccess: string;
+
+    targetMandiAndDate: string;
+    sourceOfTruthSlots: string;
+    destinationMandi: string;
+    noMandisAvailable: string;
+    scheduledDeliveryDate: string;
+    minus: string;
+    plus: string;
+    unlinkedProfileTitle: string;
+    unlinkedProfileDesc: string;
+  };
+  gate: {
+    title: string;
+    subtitle: string;
+    scanQrTitle: string;
+    scanQrSubtitle: string;
+    tokenPlaceholder: string;
+    verifyButton: string;
+    verifying: string;
+    driverMobile: string;
+    vehicleNo: string;
+    vehicleNoPlaceholder: string;
+    checkInButton: string;
+    checkingIn: string;
+    checkInSuccess: string;
+    waitingVehicle: string;
+    entryVerified: string;
+    inspectionReady: string;
+
+    cryptoRules: string;
+    tamperProtection: string;
+    tamperDesc: string;
+    offlineResilience: string;
+    offlineDesc: string;
+    stateProgression: string;
+    stateProgressionDesc: string;
+    stateProgressionSuffix: string;
+    farmerIdPlaceholder: string;
+    slotIdPlaceholder: string;
+    signaturePlaceholder: string;
+  };
+  quality: {
+    title: string;
+    subtitle: string;
+    sensorReading: string;
+    cropMoisture: string;
+    optimalRange: string;
+    maxLimit: string;
+    assessing: string;
+    assessButton: string;
+    resultApproved: string;
+    resultRejected: string;
+    eligibleForQueue: string;
+    routedToDrying: string;
+    routeToDrying: string;
+    priorityScore: string;
+    supervisorOverrideTitle: string;
+    overrideReason: string;
+    overrideButton: string;
+    overriding: string;
+
+    supervisorAuthToken: string;
+    standardsTitle: string;
+    gradeATitle: string;
+    gradeADesc: string;
+    gradeBTitle: string;
+    gradeBDesc: string;
+    rejectionTitle: string;
+    rejectionDesc: string;
+    calibratedMoisture: string;
+    confirmOverride: string;
+    dcdqFormula: string;
+  };
+  queue: {
+    title: string;
+    subtitle: string;
+    liveQueueStatus: string;
+    vehiclesWaiting: string;
+    rank: string;
+    tokenNo: string;
+    farmer: string;
+    quantity: string;
+    dcdqScore: string;
+    status: string;
+    dispatchButton: string;
+    dispatching: string;
+    emptyQueue: string;
+    emptyQueueHint: string;
+    dispatchedToWeighbridge: string;
+  };
+  weighbridge: {
+    title: string;
+    subtitle: string;
+    grossWeight: string;
+    tareWeight: string;
+    netWeight: string;
+    scaleReading: string;
+    captureGross: string;
+    capturingGross: string;
+    captureTare: string;
+    capturingTare: string;
+    weightSummary: string;
+    proceedToBilling: string;
+    tareInstruction: string;
+
+    rulesTitle: string;
+    physicalInvariant: string;
+    physicalDesc: string;
+    yieldCeiling: string;
+    yieldDesc: string;
+    distributedLock: string;
+    lockDesc: string;
+    lockSuffix: string;
+    captureUnified: string;
+    scaleInvariance: string;
+    twoStepWeighment: string;
+    unifiedWeighment: string;
+  };
+  billing: {
+    title: string;
+    subtitle: string;
+    jformTitle: string;
+    invoiceNo: string;
+    mandiName: string;
+    cropName: string;
+    netWeight: string;
+    mspPrice: string;
+    grossPayable: string;
+    mandiDeductions: string;
+    netPayable: string;
+    generateInvoice: string;
+    generateButton: string;
+    generating: string;
+    dualSignatureRequired: string;
+    inspectorSig: string;
+    operatorSig: string;
+    authorizePayout: string;
+    authorizing: string;
+    payoutSettled: string;
+    dbtReference: string;
+
+    deductionsCut: string;
+    targetInvoiceAmount: string;
+    verifyingSignatures: string;
+    stageDualSignature: string;
+    simulatePfms: string;
+    officialFormJ: string;
+    totalNetAmount: string;
+    totalDisbursement: string;
+    farmerName: string;
+    commodityNetQty: string;
+    ratePerQuintal: string;
+    totalDeductions: string;
+    dbtConfirmation: string;
+    payoutBlockHash: string;
+    pfmsReference: string;
+    inspectorRemarks: string;
+    inspectorHmac: string;
+    operatorHmac: string;
+    enterOrVerifyHmac: string;
+  };
+  sync: {
+    title: string;
+    subtitle: string;
+    walStatus: string;
+    pendingMutations: string;
+    syncedMutations: string;
+    triggerSync: string;
+    syncing: string;
+    mutationId: string;
+    targetState: string;
+    timestamp: string;
+    statusLabel: string;
+  };
+  demoTools: {
+    title: string;
+    subtitle: string;
+    tabControls: string;
+    tabFarmerSwitcher: string;
+    tabEvidence: string;
+    resetShowcase: string;
+    resetting: string;
+    resetSuccess: string;
+    simulateTraffic: string;
+    simulatingTraffic: string;
+    simulateBlackout: string;
+    blackoutActive: string;
+    launchE2E: string;
+    openUSSD: string;
+    switchFarmerTitle: string;
+    switchFarmerDesc: string;
+    activeContextNotice: string;
+    technicalEvidenceTitle: string;
+    dcdqTitle: string;
+    dcdqFormula: string;
+    dcdqAlpha: string;
+    dcdqBeta: string;
+    dcdqGamma: string;
+    dcdqLambda: string;
+    invariantsTitle: string;
+    invCeiling: string;
+    invSlot: string;
+    invState: string;
+    invCrypto: string;
+    invWal: string;
+
+    accessRestricted: string;
+    accessRestrictedDesc: string;
+    invCeilingTitle: string;
+    invSlotTitle: string;
+    invStateTitle: string;
+    invCryptoTitle: string;
+    invWalTitle: string;
+  };
+  receipt: {
+    title: string;
+    govtHeader: string;
+    jformSubheader: string;
+    qrValid: string;
+    printSlip: string;
+    close: string;
+
+    cryptoAuditTrail: string;
+    ledgerHash: string;
+    hmacToken: string;
+    dbtRef: string;
+  };
+  admin: {
+    title: string;
+    subtitle: string;
+    tabMandis: string;
+    tabCrops: string;
+    tabUsers: string;
+    tabSlots: string;
+    totalRegisteredFarmers: string;
+    activeTransactions: string;
+    queuedVehicles: string;
+    volumeProcured: string;
+    payoutSettled: string;
+    qualityInspected: string;
+    rejectionRate: string;
+    activeWeighbridges: string;
+    dailyCapacity: string;
+    operationalStatus: string;
+    simulateTraffic: string;
+    simulatingTraffic: string;
+    resetShowcase: string;
+    resetting: string;
+    resetConfirmPrompt: string;
+    addMandi: string;
+    addCrop: string;
+    addUser: string;
+    generateBatchSlots: string;
+    generatingSlots: string;
+    refreshData: string;
+    toggleOperational: string;
+    toggleActive: string;
+    mandiName: string;
+    districtState: string;
+    dailyCapacityQt: string;
+    weighbridges: string;
+    status: string;
+    actions: string;
+    cropName: string;
+    cropCode: string;
+    category: string;
+    mspPrice: string;
+    optimalMoisture: string;
+    maxMoisture: string;
+    username: string;
+    fullName: string;
+    role: string;
+    assignedMandi: string;
+    slotTime: string;
+    allocatedCapacity: string;
+    bookedCapacity: string;
+    remainingCapacity: string;
+    scheduledDate: string;
+    createMandiTitle: string;
+    createCropTitle: string;
+    createUserTitle: string;
+    generateSlotsTitle: string;
+    mandiNameLabel: string;
+    districtLabel: string;
+    stateLabel: string;
+    dailyCapacityLabel: string;
+    weighbridgesLabel: string;
+    cropNameLabel: string;
+    cropCodeLabel: string;
+    categoryLabel: string;
+    mspLabel: string;
+    optimalMoistureLabel: string;
+    maxMoistureLabel: string;
+    usernameLabel: string;
+    fullNameLabel: string;
+    roleLabel: string;
+    passwordLabel: string;
+    targetDateLabel: string;
+    startHourLabel: string;
+    endHourLabel: string;
+    capacityPerHourLabel: string;
+    saveButton: string;
+    cancelButton: string;
+    activeStatus: string;
+    inactiveStatus: string;
+    operationalStatusActive: string;
+    operationalStatusInactive: string;
+    noMandisFound: string;
+    noCropsFound: string;
+    noUsersFound: string;
+    noSlotsFound: string;
+    selectMandiToViewSlots: string;
+    offlineNotice: string;
+
+    hubSubtitle: string;
+    hubDesc: string;
+    apmcBoardAdmin: string;
+    eNamCloudAuth: string;
+    offlineWalMode: string;
+    backendOffline: string;
+    backendOfflineDesc: string;
+    startInTerminal: string;
+    simulateTooltip: string;
+    resetTooltip: string;
+    liveDynamicStream: string;
+    dcdqSorted: string;
+    totalPipeline: string;
+    quintalsProcured: string;
+    pfmsSettled: string;
+    moistureRejection: string;
+    agriStackVerified: string;
+    mandisSubtitle: string;
+    cropsSubtitle: string;
+    usersSubtitle: string;
+    slotsSubtitle: string;
+    universalAccess: string;
+    noMandisAvailable: string;
+    clickGenerateSlots: string;
+    slotId: string;
+    utilization: string;
+    editMsp: string;
+    deactivate: string;
+    mandiNamePlaceholder: string;
+    districtPlaceholder: string;
+    statePlaceholder: string;
+    cropNamePlaceholder: string;
+    mspPriceUnit: string;
+    optimalMoistureUnit: string;
+    maxMoistureUnit: string;
+    perQuintal: string;
+  };
+  journey: {
+    modalTitle: string;
+    modalSubtitle: string;
+    runAll: string;
+    runningAll: string;
+    resetAll: string;
+    close: string;
+    statusPending: string;
+    statusRunning: string;
+    statusSuccess: string;
+    statusFailed: string;
+    statusBlocked: string;
+    stageDetails: string;
+    duration: string;
+    invariantsChecked: string;
+    payloadResponse: string;
+    stage1Title: string;
+    stage1Desc: string;
+    stage2Title: string;
+    stage2Desc: string;
+    stage3Title: string;
+    stage3Desc: string;
+    stage4Title: string;
+    stage4Desc: string;
+    stage5Title: string;
+    stage5Desc: string;
+    stage6Title: string;
+    stage6Desc: string;
+    stage7Title: string;
+    stage7Desc: string;
+    stage8Title: string;
+    stage8Desc: string;
+    stage9Title: string;
+    stage9Desc: string;
+    stage10Title: string;
+    stage10Desc: string;
+    stage11Title: string;
+    stage11Desc: string;
+    stage12Title: string;
+    stage12Desc: string;
+  };
+  ussd: {
+    simulatorTitle: string;
+    simulatorSubtitle: string;
+    activeCallState: string;
+    standbyState: string;
+    dialPrompt: string;
+    sessionEnded: string;
+    networkTimeout: string;
+    transmittingPacket: string;
+    inputLabel: string;
+    sendDial: string;
+    endCall: string;
+    clearInput: string;
+    callerLabel: string;
+  };
+  walMonitor: {
+    bannerTag: string;
+    title: string;
+    description: string;
+    refreshButton: string;
+    syncBatch: string;
+    syncingBatch: string;
+    tabLedger: string;
+    tabMaterialized: string;
+    filterAll: string;
+    filterPending: string;
+    filterSynced: string;
+    filterFailed: string;
+    colMutationId: string;
+    colType: string;
+    colEntityId: string;
+    colStatus: string;
+    colTimestamp: string;
+    colActions: string;
+    noRecordsFound: string;
+    viewPayload: string;
+    modalPayloadTitle: string;
+    serverMonotonicSeq: string;
+    statusPending: string;
+    statusSynced: string;
+    statusFailed: string;
+    lastSyncResultTitle: string;
+    mutationsSynced: string;
+    conflictsResolved: string;
+    errorsEncountered: string;
+    localTransactionsTitle: string;
+    noLocalTransactions: string;
+    colTxnId: string;
+    colFarmerId: string;
+    colMandiId: string;
+    colCurrentState: string;
+
+    totalMutations: string;
+    indexedDbWal: string;
+    pendingSync: string;
+    queuedReplication: string;
+    reconciled: string;
+    acknowledgedServer: string;
+    networkRail: string;
+    liveCloudLink: string;
+    offlineAirGap: string;
+    directRestGzip: string;
+    indexedDbLocalFallback: string;
+    generateMutations: string;
+    generateMutationsSubtitle: string;
+    transactionId: string;
+    currentState: string;
+    farmer: string;
+    mandi: string;
+    syncStatus: string;
+    lastUpdated: string;
+    details: string;
+    payloadInspector: string;
+    mutationUuid: string;
+    metadataAttributes: string;
+    stateAttributes: string;
+    targetState: string;
+    hmacIntegrity: string;
+    parsedPayload: string;
+    materializedTransaction: string;
+    aggregatedPayload: string;
+    lastMutationId: string;
+  };
+}
+
+export const translations: Record<'en' | 'hi', Translations> = {
+  en: {
+    common: {
+      appName: 'MandiQ',
+      appSubtitle: 'Intelligent Dynamic Queue & Local-First WAL',
+      apmcPwa: 'APMC PWA',
+      loading: 'Loading...',
+      confirm: 'Confirm',
+      cancel: 'Cancel',
+      close: 'Close',
+      refresh: 'Refresh',
+      status: 'Status',
+      action: 'Action',
+      verified: 'VERIFIED',
+      pending: 'PENDING',
+      operational: 'Operational',
+      today: 'Today',
+      logout: 'Sign Out',
+      online: 'ONLINE',
+      offline: 'OFFLINE',
+      synced: 'SYNCED',
+      error: 'Error',
+      success: 'Success',
+      quintals: 'Quintals',
+      kg: 'kg',
+      inr: '₹',
+      language: 'Language',
+      all: 'All',
+      search: 'Search',
+      filter: 'Filter',
+      details: 'Details',
+      noData: 'No data available',
+
+      activeTransaction: 'Active Transaction',
+      apmcProcurementSystem: 'Agricultural Produce Market Committee Procurement System',
+
+      backendOffline: 'BACKEND OFFLINE',
+      inMemoryQueue: 'IN-MEMORY QUEUE',
+      noActiveTransaction: 'No authoritative transaction selected.',
+      tareWeightError: 'Physical Invariant Violation: Tare weight cannot be >= Gross weight.',
+      noMandiSelected: 'No operational mandi selected.',
+      reservationFailed: 'Reservation failed',
+      cancellationFailed: 'Failed to cancel appointment',
+      networkErrorCancel: 'Network error cancelling appointment.',
+      selectOperationalMandi: 'Please select an operational mandi.',
+      unlinkedFarmerReservation: 'Authenticated farmer profile is not linked. Slot reservation cannot proceed.',
+      noVehiclesInQueue: 'No vehicles currently present in queue to dispatch.',
+      jformMissingNetWeight: 'Cannot generate bill: Authoritative transaction has no verified net weight. Vehicle must complete weighbridge tare weighing first.',
+      savedLocallyWal: 'Saved locally in IndexedDB transactionsWAL.',
+      generateJformFirst: 'Please generate or fetch a valid J-Form invoice first.',
+      dualSigAdminNotice: 'Dual-signature verification requires both Inspector and Operator cryptographic signatures. Prototype demo auto-approvals require ADMIN authorization.',
+      dbtOfflineWal: '[OFFLINE WAL] Dual-signature DBT authorization stored locally in IndexedDB transactionsWAL. Ready to settle when online.',
+      dbtPfmsConfirmed: 'Direct Benefit Transfer (DBT) confirmed by PFMS Settlement Rail!',
+      dbtOfflineRecorded: 'Offline Blackout: Direct Benefit Transfer (DBT) recorded locally in Dexie. Will reconcile when online.',
+      supervisorOverrideRecorded: '[OFFLINE WAL] Supervisor override recorded locally in Dexie. Truck re-admitted to dispatch queue.',
+      adminBackendUnavailable: 'Backend unavailable. Reconnect to manage server-side administration.',
+      noMandiSimulation: 'No operational mandi selected for simulation.',
+      noMandiReset: 'No operational mandi selected for reset.',
+      initializing: 'Initializing MandiQ System...',
+    },
+    nav: {
+      admin: 'Admin Hub',
+      farmer: 'Farmer Portal',
+      gate: 'Gate Terminal',
+      quality: 'Quality Gate',
+      queue: 'Live Queue',
+      weighbridge: 'Weighbridge',
+      billing: 'Billing & DBT',
+      sync: 'Offline WAL',
+      advanceStation: 'Advance Station',
+      nextStation: 'Next station',
+      demoTools: 'Demo Tools',
+    },
+    roles: {
+      admin: 'Administrator',
+      supervisor: 'Yard Supervisor',
+      inspector: 'Quality Assayer',
+      operator: 'Gate & Weighbridge Operator',
+      farmer: 'Verified Farmer',
+    },
+    login: {
+      title: 'APMC Gate & Procurement Gateway',
+      subtitle: 'Decentralized Queue Dispatch & Local-First Assaying Terminal',
+      selectRole: 'Select Station Role',
+      username: 'Operator / Aadhaar ID',
+      usernamePlaceholder: 'Enter your registered identity ID',
+      password: 'Security Passcode',
+      passwordPlaceholder: 'Enter security passcode',
+      signIn: 'Authenticate & Access Terminal',
+      signingIn: 'Verifying Security Credentials...',
+      quickDemoUsers: 'Quick Demo Access Accounts',
+      credentialsError: 'Invalid credentials. Please verify your ID and passcode.',
+      offlineFallbackNotice: 'Offline Mode: Operating with cached local credentials.',
+
+      hmacSession: 'Cryptographically signed HMAC-SHA256 session',
+      footerStandards: 'MandiQ APMC Procurement System • National Standards',
+    },
+    farmer: {
+      greeting: 'Namaste, {name}',
+      profileTitle: 'Verified Kisan Profile',
+      kisanId: 'Kisan ID',
+      mobile: 'Registered Mobile',
+      remainingCeiling: 'Remaining Crop Ceiling',
+      availableCapacity: 'Available Capacity',
+      remainingAfterBooking: 'Remaining After Booking',
+      targetMandi: 'Procurement Mandi',
+      yardOperational: 'Yard Operational',
+      processFlow: 'Procurement Process Workflow',
+      stepOf: 'Step {current} of {total}',
+      step1Crop: 'Registered Crop',
+      step2Token: 'Token Issued',
+      step3Gate: 'Gate Entry',
+      step4Quality: 'Assaying',
+      step5Weight: 'Weighbridge',
+      step6Payment: 'DBT Payout',
+      activeToken: 'Active Delivery Appointment Token',
+      tokenNo: 'Token Number',
+      scanAtGate: 'Present this QR barcode upon arrival at the APMC entry gate.',
+      cancelSlot: 'Cancel Reservation',
+      cancelSlotPrompt: 'Are you sure you want to cancel this scheduled delivery slot?',
+      viewReceipt: 'View Digital J-Form Receipt',
+      bookDeliveryTitle: 'Schedule Harvest Delivery',
+      bookDeliverySubtitle: 'Reserve an hourly arrival window to eliminate physical queue delays.',
+      step1Title: 'Select Registered Crop',
+      govtMsp: 'Govt. MSP',
+      loadingCrops: 'Loading registered crops...',
+      noCrops: 'No crops found for this mandi.',
+      step2Title: 'Delivery Quantity (Quintals)',
+      quantityHint: 'Specify quantity in quintals (1 qt = 100 kg = 0.1 tonne)',
+      quickPills: 'Quick Selection',
+      step3Title: 'Land Cultivator Verification',
+      landTenure: 'Cultivator Status',
+      ownerCultivator: 'Owner Cultivator',
+      ownerDesc: 'Self-owned land with verified AgriStack record.',
+      tenantCultivator: 'Tenant / Sharecropper',
+      tenantDesc: 'Cultivating under lease agreement.',
+      landownerName: 'Landowner Full Name',
+      landownerNamePlaceholder: 'Enter name as on revenue record',
+      panchayatCert: 'Panchayat Verification Certificate No.',
+      panchayatCertHint: 'Certificate from Gram Panchayat or Tehsildar',
+      bonaFideDeclaration: 'I declare under penalty of law that this produce is cultivated by me.',
+      step4Title: 'Procurement Date',
+      scheduledDate: 'Select Arrival Date',
+      step5Title: 'Available Hourly Slots',
+      slotsHint: 'Hourly arrival slot prevents road congestion and yard stagnation.',
+      loadingSlots: 'Loading hourly slots...',
+      noSlots: 'No available slots for this date.',
+      capacityRemaining: 'remaining',
+      confirming: 'Reserving Slot...',
+      reserveButton: 'Confirm Delivery Appointment',
+      slotUnavailable: 'Selected slot is exhausted. Please pick an alternative time.',
+      valQtyPositive: 'Quantity must be greater than zero.',
+      valQtyExceedsCeiling: 'Requested quantity exceeds your remaining production ceiling.',
+      valLandownerRequired: 'Landowner name is required for tenant cultivators.',
+      valBonaFideRequired: 'You must check the bona fide cultivator declaration.',
+      valSlotRequired: 'Please select an arrival slot to continue.',
+      valOfflineBooking: 'Saved locally in Offline WAL. Will synchronize once connected.',
+      appointmentSuccess: 'Appointment confirmed! Your QR delivery pass is ready.',
+
+      targetMandiAndDate: 'Target APMC Mandi & Date',
+      sourceOfTruthSlots: 'Source of truth for hourly slots',
+      destinationMandi: 'Destination Mandi',
+      noMandisAvailable: 'No operational mandis available',
+      scheduledDeliveryDate: 'Scheduled Delivery Date',
+      minus: 'Minus',
+      plus: 'Plus',
+      unlinkedProfileTitle: 'Authenticated farmer profile is not linked',
+      unlinkedProfileDesc: 'Your login account is not currently linked to an operational farmer profile in the APMC database. Slot reservations are disabled until a verified farmer profile is linked.',
+    },
+    gate: {
+      title: 'APMC Inbound Gate Terminal',
+      subtitle: 'QR Token Cryptographic Verification & Fast Vehicle Check-in',
+      scanQrTitle: 'Scan Farmer Delivery Pass',
+      scanQrSubtitle: 'Verify digital signature and HMAC validity.',
+      tokenPlaceholder: 'Enter Token No. or scan QR barcode',
+      verifyButton: 'Verify Cryptographic Token',
+      verifying: 'Verifying Signature...',
+      driverMobile: 'Driver Mobile Number',
+      vehicleNo: 'Vehicle Registration Number',
+      vehicleNoPlaceholder: 'e.g., MP-04-AB-1234',
+      checkInButton: 'Admit Vehicle to Yard',
+      checkingIn: 'Recording Gate Check-In...',
+      checkInSuccess: 'Vehicle admitted successfully. Directed to Quality Assaying Station.',
+      waitingVehicle: 'Vehicle Waiting at Inbound Barrier',
+      entryVerified: 'Gate Entry Verified',
+      inspectionReady: 'Proceed to Assaying Station',
+
+      cryptoRules: 'Cryptographic Protocol Rules',
+      tamperProtection: 'Tamper Protection',
+      tamperDesc: 'Any alteration to quantity, farmer ID, or slot invalidates the 64-character HMAC token signature.',
+      offlineResilience: 'Offline Resilience',
+      offlineDesc: 'During cellular blackouts, gate verification executes locally in IndexedDB without unhandled exceptions.',
+      stateProgression: 'State Progression',
+      stateProgressionDesc: 'Successful check-in transitions transaction state to',
+      stateProgressionSuffix: 'and routes truck to Quality Assaying.',
+      farmerIdPlaceholder: 'Farmer ID',
+      slotIdPlaceholder: 'Slot ID',
+      signaturePlaceholder: '64-character hex signature...',
+    },
+    quality: {
+      title: 'Digital Quality Assaying Gate',
+      subtitle: 'IoT Sensor Telemetry & Automated APMC Grade Standards',
+      sensorReading: 'Sensor Telemetry',
+      cropMoisture: 'Grain Moisture Content',
+      optimalRange: 'Optimal: <= 12.0%',
+      maxLimit: 'Max Limit: 17.0%',
+      assessing: 'Assaying Crop Quality...',
+      assessButton: 'Record Quality Assessment',
+      resultApproved: 'Quality Approved: Grade-A APMC Standard',
+      resultRejected: 'Rejected: Moisture exceeds maximum 17.0% threshold',
+      eligibleForQueue: 'Admitted to Dynamic Priority Queue',
+      routedToDrying: 'Directed to Solar Drying Yard',
+      routeToDrying: 'Send to Drying Yard',
+      priorityScore: 'Computed DCDQ Priority Score',
+      supervisorOverrideTitle: 'Supervisor Quality Override',
+      overrideReason: 'Official Justification for Variance Override',
+      overrideButton: 'Authorize Supervisory Override',
+      overriding: 'Authorizing Override...',
+
+      supervisorAuthToken: 'Supervisor Authorization Token',
+      standardsTitle: 'APMC Lot Assaying Standards',
+      gradeATitle: 'Grade A (FAQ Standard)',
+      gradeADesc: 'Lot directly accepted for immediate weighment and electronic MSP settlement.',
+      gradeBTitle: 'Grade B (Priority Lot)',
+      gradeBDesc: 'Admitted to priority queue to ensure timely processing and avoid yard decay.',
+      rejectionTitle: 'Quality Rejection',
+      rejectionDesc: 'Excessive moisture detected. Diverted to solar drying apron unless authorized by supervisor.',
+      calibratedMoisture: 'Calibrated Moisture Analyzer Reading',
+      confirmOverride: 'Confirm Supervisor Quality Override',
+      dcdqFormula: 'P(lot) = 0.35 * P_arrival + 0.30 * P_moisture + 0.20 * P_wait + 0.15 * P_demurrage',
+    },
+    queue: {
+      title: 'Dynamic Yard Queue Dispatcher',
+      subtitle: 'Real-Time DCDQ FIFO & Anti-Starvation Traffic Controller',
+      liveQueueStatus: 'Live Yard Queue Registry',
+      vehiclesWaiting: 'Vehicles Awaiting Weighment',
+      rank: 'Rank',
+      tokenNo: 'Token No.',
+      farmer: 'Farmer',
+      quantity: 'Quantity',
+      dcdqScore: 'DCDQ Score',
+      status: 'Status',
+      dispatchButton: 'Dispatch to Weighbridge',
+      dispatching: 'Dispatching...',
+      emptyQueue: 'Queue is clear. No vehicles awaiting weighment.',
+      emptyQueueHint: 'Admitted vehicles from Quality Assaying will appear here.',
+      dispatchedToWeighbridge: 'Vehicle dispatched to Weighbridge Scale.',
+    },
+    weighbridge: {
+      title: 'Electronic Weighbridge Scale',
+      subtitle: 'Load-Cell Telemetry & Gross/Tare Weight Calculation',
+      grossWeight: 'Gross Weight (Loaded Truck)',
+      tareWeight: 'Tare Weight (Empty Truck)',
+      netWeight: 'Net Weight (Produce)',
+      scaleReading: 'Live Digital Scale Reading',
+      captureGross: 'Capture Gross Weight',
+      capturingGross: 'Capturing Scale Telemetry...',
+      captureTare: 'Capture Tare Weight',
+      capturingTare: 'Capturing Empty Scale...',
+      weightSummary: 'Weighment Certified Summary',
+      proceedToBilling: 'Proceed to J-Form Billing & Payout',
+      tareInstruction: 'Empty truck on scale after yard unloading to determine net produce weight.',
+
+      rulesTitle: 'Weighbridge Operational Rules',
+      physicalInvariant: 'Physical Invariant',
+      physicalDesc: 'Tare weight must strictly be < Gross weight ($Tare \ge Gross$ is rejected with HTTP 422).',
+      yieldCeiling: 'Yield Ceiling Enforcement',
+      yieldDesc: 'Net delivered weight plus prior delivered batches cannot exceed the farmer\'s registered production ceiling.',
+      distributedLock: 'Distributed Lock Protection',
+      lockDesc: 'Parallel weighments for the same farmer serialize under',
+      lockSuffix: 'to eliminate race conditions.',
+      captureUnified: 'Record Certified Net Weight',
+      scaleInvariance: 'Scale Reading Invariance & Calibration Verified',
+      twoStepWeighment: 'Two-Step Weighment (Gross & Tare)',
+      unifiedWeighment: 'Unified Weighment Telemetry',
+    },
+    billing: {
+      title: 'Procurement Billing & Direct Benefit Transfer',
+      subtitle: 'Official J-Form Settlement & Cryptographic Dual-Signature DBT',
+      jformTitle: 'Official J-Form Joint-Sale Certificate',
+      invoiceNo: 'J-Form Invoice Number',
+      mandiName: 'Procuring APMC Mandi',
+      cropName: 'Procured Commodity',
+      netWeight: 'Certified Net Weight',
+      mspPrice: 'Applicable Govt. MSP',
+      grossPayable: 'Gross Produce Value',
+      mandiDeductions: 'Statutory APMC Market Deductions',
+      netPayable: 'Net DBT Payment to Farmer',
+      generateInvoice: 'Generate Official J-Form',
+      generateButton: 'Generate Official J-Form',
+      generating: 'Generating Invoice...',
+      dualSignatureRequired: 'Dual Cryptographic Signatures Required',
+      inspectorSig: 'Quality Assayer Signature',
+      operatorSig: 'Weighbridge Operator Signature',
+      authorizePayout: 'Authorize & Disburse DBT Payout',
+      authorizing: 'Processing Cryptographic Authorization...',
+      payoutSettled: 'Payment Settled: DBT Bank Transfer Initiated',
+      dbtReference: 'PFMS / DBT Reference Number',
+
+      deductionsCut: 'Moisture or handling cut',
+      targetInvoiceAmount: 'Target Invoice Amount',
+      verifyingSignatures: 'Verifying Cryptographic Signatures...',
+      stageDualSignature: 'Stage Dual-Signature DBT Payout',
+      simulatePfms: 'Simulate PFMS / NPCI Aadhaar Settlement Direct Rail',
+      officialFormJ: 'Official Form J — Sale Intimation & Receipt',
+      totalNetAmount: 'Total Net Amount Payable',
+      totalDisbursement: 'Total Approved Disbursement',
+      farmerName: 'Farmer Name',
+      commodityNetQty: 'Commodity / Net Qty',
+      ratePerQuintal: 'Rate Per Quintal',
+      totalDeductions: 'Total Deductions',
+      dbtConfirmation: 'Government DBT Settlement Confirmation',
+      payoutBlockHash: 'Cryptographic Payout Block Hash',
+      pfmsReference: 'PFMS Aadhaar Reference',
+      inspectorRemarks: 'Inspector Remarks',
+      inspectorHmac: 'Inspector HMAC-SHA256',
+      operatorHmac: 'Operator HMAC-SHA256',
+      enterOrVerifyHmac: 'Enter or auto-verify HMAC',
+    },
+    sync: {
+      title: 'Offline Write-Ahead Log (WAL) Sync',
+      subtitle: 'Local-First Ledger & Cryptographic Replay Security',
+      walStatus: 'IndexedDB WAL Status',
+      pendingMutations: 'Pending Offline Mutations',
+      syncedMutations: 'Synced Mutations',
+      triggerSync: 'Synchronize All Mutations Now',
+      syncing: 'Syncing with Mandi Server...',
+      mutationId: 'Mutation ID',
+      targetState: 'Target State',
+      timestamp: 'Logged At',
+      statusLabel: 'Sync Status',
+    },
+    demoTools: {
+      title: 'MandiQ Demonstration Suite',
+      subtitle: 'Showcase Controls, Farmer Switching & Technical Verification',
+      tabControls: 'Showcase Actions',
+      tabFarmerSwitcher: 'Switch Showcase Farmer',
+      tabEvidence: 'Technical Evidence',
+      resetShowcase: 'Reset Demo Database',
+      resetting: 'Resetting Database...',
+      resetSuccess: 'Demo database cleanly reset to baseline state.',
+      simulateTraffic: 'Simulate Inbound Vehicle Traffic',
+      simulatingTraffic: 'Generating vehicles...',
+      simulateBlackout: 'Simulate Rural Grid/Internet Blackout',
+      blackoutActive: 'Outage simulation active: Offline Mode enforced.',
+      launchE2E: 'Run Full End-to-End Automated Journey',
+      openUSSD: 'Open Feature Phone USSD Simulator (*247#)',
+      switchFarmerTitle: 'Showcase Farmer Selection',
+      switchFarmerDesc: 'Select an authorized farmer profile to inspect dynamic ceiling and booking isolation.',
+      activeContextNotice: 'Prototype Demonstration Context: For evaluation and testing purposes.',
+      technicalEvidenceTitle: 'MandiQ Technical Architecture & Invariants',
+      dcdqTitle: 'DCDQ Multi-Criteria Priority Formulation',
+      dcdqFormula: 'S_i = alpha * A_i + beta * D_i + gamma * M_i + lambda * W_i',
+      dcdqAlpha: 'alpha * A_i (Distance Factor): Prioritizes smallholders traveling from remote villages.',
+      dcdqBeta: 'beta * D_i (Perishability Factor): Protects high-spoilage agricultural commodities.',
+      dcdqGamma: 'gamma * M_i (Moisture Factor): Prioritizes 15-17% moisture grain to prevent mold formation.',
+      dcdqLambda: 'lambda * W_i (Anti-Starvation Bonus): Dynamically increases score to prevent starvation.',
+      invariantsTitle: 'Guaranteed Mathematical & Security Invariants',
+      invCeiling: 'Farmer Production Ceiling: Active bookings cannot exceed registered land yield capacity.',
+      invSlot: 'Hourly Slot Capacity: Inbound hourly volume cannot exceed yard gate throughput limits.',
+      invState: 'Monotonic Lifecycle: Mandatory progression (Gate -> Assaying -> Weighment -> Billing -> Payout).',
+      invCrypto: 'Cryptographic Integrity: Tamper-evident HMAC-SHA256 tokens fail closed if secret or payload altered.',
+      invWal: 'Local-First Offline WAL: ACID-compliant IndexedDB mutation queue with monotonic sequence replay.',
+
+      accessRestricted: 'Access Restricted',
+      accessRestrictedDesc: 'Demo Tools and Technical Evidence are restricted to Mandi Board Administrators and APMC Yard Supervisors.',
+      invCeilingTitle: '1. Yield Ceiling Invariant',
+      invSlotTitle: '2. Slot Capacity Invariant',
+      invStateTitle: '3. Monotonic Lifecycle',
+      invCryptoTitle: '4. HMAC-SHA256 Cryptography',
+      invWalTitle: '5. Local-First Write-Ahead Log',
+    },
+    receipt: {
+      title: 'Digital J-Form Joint-Sale Certificate',
+      govtHeader: 'Agricultural Produce Market Committee (APMC)',
+      jformSubheader: 'Authorized e-NAM Electronic Procurement & Direct Benefit Transfer Record',
+      qrValid: 'Cryptographically Verified Token',
+      printSlip: 'Print J-Form Slip',
+      close: 'Close Window',
+
+      cryptoAuditTrail: 'Cryptographic Audit & Payout Trail',
+      ledgerHash: 'Ledger Hash',
+      hmacToken: 'HMAC Token',
+      dbtRef: 'DBT Ref',
+    },
+    admin: {
+      title: 'APMC Administration Hub',
+      subtitle: 'State Procurement Authority & Yard Infrastructure Management',
+      tabMandis: 'APMC Mandis',
+      tabCrops: 'Commodities & MSP',
+      tabUsers: 'Station Users',
+      tabSlots: 'Procurement Slots',
+      totalRegisteredFarmers: 'Registered Farmers',
+      activeTransactions: 'Active Yard Transactions',
+      queuedVehicles: 'Queued Vehicles',
+      volumeProcured: 'Total Volume Procured',
+      payoutSettled: 'Total DBT Settled',
+      qualityInspected: 'Assayed Lots',
+      rejectionRate: 'Rejection Rate',
+      activeWeighbridges: 'Active Weighbridges',
+      dailyCapacity: 'Daily Capacity',
+      operationalStatus: 'Operational Status',
+      simulateTraffic: 'Simulate Traffic',
+      simulatingTraffic: 'Simulating...',
+      resetShowcase: 'Reset Showcase',
+      resetting: 'Resetting...',
+      resetConfirmPrompt: 'Are you sure you want to reset the showcase database to baseline?',
+      addMandi: 'Add Mandi Yard',
+      addCrop: 'Add Commodity',
+      addUser: 'Add Staff Account',
+      generateBatchSlots: 'Generate Daily Slots',
+      generatingSlots: 'Generating...',
+      refreshData: 'Refresh Metrics',
+      toggleOperational: 'Toggle Operational Status',
+      toggleActive: 'Toggle Active Status',
+      mandiName: 'Mandi Name',
+      districtState: 'District & State',
+      dailyCapacityQt: 'Daily Capacity (qt)',
+      weighbridges: 'Weighbridges',
+      status: 'Status',
+      actions: 'Actions',
+      cropName: 'Commodity Name',
+      cropCode: 'Commodity Code',
+      category: 'Category',
+      mspPrice: 'MSP Price (₹/qt)',
+      optimalMoisture: 'Optimal Moisture (%)',
+      maxMoisture: 'Max Moisture (%)',
+      username: 'Username',
+      fullName: 'Full Name',
+      role: 'Assigned Role',
+      assignedMandi: 'Assigned Mandi',
+      slotTime: 'Time Window',
+      allocatedCapacity: 'Allocated (qt)',
+      bookedCapacity: 'Booked (qt)',
+      remainingCapacity: 'Available (qt)',
+      scheduledDate: 'Scheduled Date',
+      createMandiTitle: 'Register New APMC Mandi',
+      createCropTitle: 'Register Procurement Commodity',
+      createUserTitle: 'Register Station Operator Account',
+      generateSlotsTitle: 'Generate Hourly Procurement Slots',
+      mandiNameLabel: 'Mandi Yard Name',
+      districtLabel: 'District',
+      stateLabel: 'State',
+      dailyCapacityLabel: 'Daily Throughput Capacity (qt)',
+      weighbridgesLabel: 'Number of Active Weighbridges',
+      cropNameLabel: 'Commodity Name',
+      cropCodeLabel: 'Commodity Code',
+      categoryLabel: 'Crop Category',
+      mspLabel: 'Minimum Support Price (₹/qt)',
+      optimalMoistureLabel: 'Optimal Moisture Standard (%)',
+      maxMoistureLabel: 'Maximum Moisture Limit (%)',
+      usernameLabel: 'Login Username',
+      fullNameLabel: 'Operator Full Name',
+      roleLabel: 'Station Role',
+      passwordLabel: 'Access Passcode',
+      targetDateLabel: 'Procurement Target Date',
+      startHourLabel: 'Start Hour (24h format)',
+      endHourLabel: 'End Hour (24h format)',
+      capacityPerHourLabel: 'Capacity Per Hourly Slot (qt)',
+      saveButton: 'Save Record',
+      cancelButton: 'Cancel',
+      activeStatus: 'ACTIVE',
+      inactiveStatus: 'INACTIVE',
+      operationalStatusActive: 'OPERATIONAL',
+      operationalStatusInactive: 'CLOSED',
+      noMandisFound: 'No registered mandis found.',
+      noCropsFound: 'No registered commodities found.',
+      noUsersFound: 'No user accounts found.',
+      noSlotsFound: 'No procurement slots found for this date.',
+      selectMandiToViewSlots: 'Select a mandi yard above to inspect its procurement schedule.',
+      offlineNotice: 'Admin configuration updates require active server connectivity.',
+
+      hubSubtitle: 'System Master & Yard Governance Hub',
+      hubDesc: 'Configure APMC mandis, update statutory MSP rates, oversee operational staff roles, and allocate hourly gate capacity.',
+      apmcBoardAdmin: 'APMC Board Administration',
+      eNamCloudAuth: 'e-NAM Cloud Authoritative',
+      offlineWalMode: 'Offline WAL Mode',
+      backendOffline: 'MandiQ Backend API Is Offline (Port 8000)',
+      backendOfflineDesc: 'The Python FastAPI server is currently unreachable. Live yard telemetry, slot reservation, and DCDQ simulation require the backend process to be running.',
+      startInTerminal: 'Start in terminal:',
+      simulateTooltip: 'Inject realistic vehicles across stages to demonstrate dynamic re-ranking',
+      resetTooltip: 'Reset showcase database to clean baseline',
+      liveDynamicStream: 'Live Dynamic Stream (5s)',
+      dcdqSorted: 'DCDQ Sorted',
+      totalPipeline: 'Total pipeline',
+      quintalsProcured: 'Quintals procured',
+      pfmsSettled: 'PFMS Settled',
+      moistureRejection: '> 17% moisture',
+      agriStackVerified: 'AgriStack Verified',
+      mandisSubtitle: 'Centrally certified procurement yards with defined weighbridges and daily tonnage ceilings.',
+      cropsSubtitle: 'Standard procurement rates enforced during automated J-Form billing and moisture rejection ceilings.',
+      usersSubtitle: 'Authoritative role mappings derived from signed HMAC cryptographic tokens.',
+      slotsSubtitle: 'Monitor real-time slot occupancy and batch-generate booking windows.',
+      universalAccess: 'Universal System Access',
+      noMandisAvailable: 'No operational mandis available',
+      clickGenerateSlots: 'Click \"Generate Slots (Next 7 Days)\" above to initialize hourly windows.',
+      slotId: 'Slot ID',
+      utilization: 'Utilization',
+      editMsp: 'Edit MSP',
+      deactivate: 'Deactivate',
+      mandiNamePlaceholder: 'e.g. Ujjain APMC Mandi',
+      districtPlaceholder: 'Ujjain',
+      statePlaceholder: 'Madhya Pradesh',
+      cropNamePlaceholder: 'Wheat (Sharbati)',
+      mspPriceUnit: 'Statutory MSP Price (₹ / Quintal)',
+      optimalMoistureUnit: 'Optimal Moisture %',
+      maxMoistureUnit: 'Max Moisture Ceiling %',
+      perQuintal: '/ Qt',
+    },
+    journey: {
+      modalTitle: 'Automated End-to-End Procurement Journey',
+      modalSubtitle: 'Interactive Architectural Simulation Across All 12 MandiQ Lifecycle Stages',
+      runAll: 'Run Complete E2E Journey',
+      runningAll: 'Executing Stage Pipeline...',
+      resetAll: 'Reset All Stages',
+      close: 'Close Journey Modal',
+      statusPending: 'PENDING',
+      statusRunning: 'IN PROGRESS',
+      statusSuccess: 'VERIFIED SUCCESS',
+      statusFailed: 'FAILED',
+      statusBlocked: 'BLOCKED BY POLICY',
+      stageDetails: 'Stage Technical Details',
+      duration: 'Execution Duration',
+      invariantsChecked: 'Mathematical & Security Invariants',
+      payloadResponse: 'Cryptographic Payload & Response',
+      stage1Title: 'Farmer e-KYC & Land Record (Simulated)',
+      stage1Desc: 'Query simulated UIDAI e-KYC and AgriStack land registry for verified identity and production ceiling.',
+      stage2Title: 'Atomic Slot Reservation + HMAC',
+      stage2Desc: 'Atomically reserve delivery slot and generate tamper-proof HMAC-SHA256 booking token.',
+      stage3Title: 'Gate QR Verification & Entry',
+      stage3Desc: 'Gate scanner verifies cryptographic HMAC signature on arrival and admits truck.',
+      stage4Title: 'Digital Quality Assaying',
+      stage4Desc: 'Digital sensor moisture assaying. Invariant: moisture <= 17.0% for queue admission.',
+      stage5Title: 'DCDQ Priority Queue Placement',
+      stage5Desc: 'Calculate composite priority score (S_i) and place vehicle in priority queue.',
+      stage6Title: 'Weighbridge Gross Weighment',
+      stage6Desc: 'Scale load-cell telemetry captures gross weight of loaded truck (100.00 qt).',
+      stage7Title: 'Weighbridge Tare & Net Weight',
+      stage7Desc: 'Unloaded tare scale capture (37.50 qt). Net weight = 62.50 qt. Yield ceiling checked.',
+      stage8Title: 'J-Form Joint-Sale Billing',
+      stage8Desc: 'Compute official procurement invoice: 62.50 qt * ₹2,275 MSP = ₹142,187.50.',
+      stage9Title: 'Dual-Signature DBT Staging',
+      stage9Desc: 'Dual cryptographic HMAC-SHA256 signatures from Inspector and Operator bound to block hash.',
+      stage10Title: 'PFMS Aadhaar Payment Rail (Mock)',
+      stage10Desc: 'Simulated government PFMS / NPCI Aadhaar Payment Bridge disbursement and settlement.',
+      stage11Title: 'Offline WAL Replay & LWW Merge',
+      stage11Desc: 'Batch synchronization with monotonic server receive sequence and conflict resolution.',
+      stage12Title: 'Live Queue Starvation Prevention',
+      stage12Desc: 'Verify anti-starvation lambda bonus promotes low-priority grain before max wait threshold.',
+    },
+    ussd: {
+      simulatorTitle: 'Zero-Data Cellular Simulator',
+      simulatorSubtitle: 'GSM MAP Layer (*247#)',
+      activeCallState: 'MAP ACTIVE',
+      standbyState: 'STANDBY',
+      dialPrompt: 'MandiQ Feature Phone Simulator\nDial *247# to begin zero-data session.',
+      sessionEnded: 'Session ended.\nDial *247# to begin.',
+      networkTimeout: 'Network / MAP signaling timeout.\nCheck connectivity.',
+      transmittingPacket: 'Transmitting signaling packet...',
+      inputLabel: 'Input:',
+      sendDial: 'SEND / DIAL',
+      endCall: 'END CALL',
+      clearInput: 'Clear Input',
+      callerLabel: 'Caller Mobile:',
+    },
+    walMonitor: {
+      bannerTag: 'Offline Storage & Sync Status',
+      title: 'Client Mutation Ledger & Sync Engine',
+      description: 'Local-first IndexedDB ledger preserves ACID mutation safety on edge devices during rural APMC power & network outages. Upon reconnect, mutations are Gzip-compressed, uploaded to /api/v1/sync/wal, and reconciled via authoritative server monotonic sequence.',
+      refreshButton: 'Refresh local records',
+      syncBatch: 'Sync Batch Now',
+      syncingBatch: 'Syncing Batch...',
+      tabLedger: 'WAL Mutation Ledger',
+      tabMaterialized: 'Materialized Client View',
+      filterAll: 'All Mutations',
+      filterPending: 'Pending Sync',
+      filterSynced: 'Synced',
+      filterFailed: 'Failed',
+      colMutationId: 'Mutation ID',
+      colType: 'Mutation Type',
+      colEntityId: 'Entity / Txn ID',
+      colStatus: 'Status',
+      colTimestamp: 'Recorded Timestamp',
+      colActions: 'Action',
+      noRecordsFound: 'No write-ahead log mutations found.',
+      viewPayload: 'Inspect Payload',
+      modalPayloadTitle: 'WAL Mutation Payload Details',
+      serverMonotonicSeq: 'Server Monotonic Sequence',
+      statusPending: 'PENDING',
+      statusSynced: 'SYNCED',
+      statusFailed: 'FAILED',
+      lastSyncResultTitle: 'Last Server Sync Result',
+      mutationsSynced: 'Mutations Reconciled',
+      conflictsResolved: 'Conflicts Resolved',
+      errorsEncountered: 'Errors Encountered',
+      localTransactionsTitle: 'Local Materialized Transactions',
+      noLocalTransactions: 'No local transactions recorded in offline store.',
+      colTxnId: 'Transaction ID',
+      colFarmerId: 'Farmer ID',
+      colMandiId: 'Mandi ID',
+      colCurrentState: 'Current State',
+
+      totalMutations: 'Total Mutations',
+      indexedDbWal: 'IndexedDB transactionsWAL',
+      pendingSync: 'Pending Sync',
+      queuedReplication: 'Queued for server replication',
+      reconciled: 'Reconciled',
+      acknowledgedServer: 'Acknowledged by server',
+      networkRail: 'Network Rail',
+      liveCloudLink: 'LIVE CLOUD LINK',
+      offlineAirGap: 'OFFLINE AIR-GAP',
+      directRestGzip: 'Direct REST & Gzip WAL',
+      indexedDbLocalFallback: 'IndexedDB Local Fallback',
+      generateMutations: 'Generate Local Offline WAL Mutations',
+      generateMutationsSubtitle: 'Click to inject test entries into IndexedDB without cloud connection',
+      transactionId: 'Transaction ID',
+      currentState: 'Current State',
+      farmer: 'Farmer',
+      mandi: 'Mandi',
+      syncStatus: 'Sync Status',
+      lastUpdated: 'Last Updated',
+      details: 'Details',
+      payloadInspector: 'WAL Payload Inspector',
+      mutationUuid: 'Mutation UUID',
+      metadataAttributes: 'Metadata Attributes',
+      stateAttributes: 'State Attributes',
+      targetState: 'Target State',
+      hmacIntegrity: 'HMAC Integrity',
+      parsedPayload: 'Parsed Payload JSON',
+      materializedTransaction: 'Materialized Transaction',
+      aggregatedPayload: 'Aggregated Payload JSON',
+      lastMutationId: 'Last Mutation ID',
+    },
+  },
+  hi: {
+    common: {
+      appName: 'मंडीक्यू',
+      appSubtitle: 'स्मार्ट गतिशील कतार एवं लोकल-फर्स्ट डब्ल्यूएएल',
+      apmcPwa: 'एपीएमसी पीडब्ल्यूए',
+      loading: 'लोड हो रहा है...',
+      confirm: 'पुष्टि करें',
+      cancel: 'रद्द करें',
+      close: 'बंद करें',
+      refresh: 'ताज़ा करें',
+      status: 'स्थिति',
+      action: 'कार्रवाई',
+      verified: 'सत्यापित',
+      pending: 'लंबित',
+      operational: 'सक्रिय मंडी',
+      today: 'आज',
+      logout: 'लॉग आउट',
+      online: 'ऑनलाइन',
+      offline: 'ऑफलाइन',
+      synced: 'सिंक पूर्ण',
+      error: 'त्रुटि',
+      success: 'सफल',
+      quintals: 'क्विंटल',
+      kg: 'किग्रा',
+      inr: '₹',
+      language: 'भाषा',
+      all: 'सभी',
+      search: 'खोजें',
+      filter: 'फ़िल्टर',
+      details: 'विवरण',
+      noData: 'कोई डेटा उपलब्ध नहीं',
+
+      activeTransaction: 'सक्रिय लेनदेन',
+      apmcProcurementSystem: 'कृषि उपज मंडी समिति खरीद प्रणाली',
+
+      backendOffline: 'बैकएंड ऑफ़लाइन',
+      inMemoryQueue: 'इन-मेमोरी कतार',
+      noActiveTransaction: 'कोई अधिकृत लेनदेन चयनित नहीं है।',
+      tareWeightError: 'भौतिक सीमा उल्लंघन: खाली वजन सकल वजन से अधिक या बराबर नहीं हो सकता।',
+      noMandiSelected: 'कोई कार्यशील मंडी चयनित नहीं है।',
+      reservationFailed: 'आरक्षण विफल रहा',
+      cancellationFailed: 'अपॉइंटमेंट रद्द करने में विफल',
+      networkErrorCancel: 'अपॉइंटमेंट रद्द करने में नेटवर्क त्रुटि।',
+      selectOperationalMandi: 'कृपया एक कार्यशील मंडी चुनें।',
+      unlinkedFarmerReservation: 'प्रमाणित किसान प्रोफ़ाइल लिंक नहीं है। स्लॉट आरक्षण आगे नहीं बढ़ सकता।',
+      noVehiclesInQueue: 'कतार में प्रेषण के लिए वर्तमान में कोई वाहन उपलब्ध नहीं है।',
+      jformMissingNetWeight: 'बिल जनरेट नहीं किया जा सकता: लेनदेन में सत्यापित शुद्ध वजन नहीं है। वाहन को पहले तौलकांटा वजन पूरा करना होगा।',
+      savedLocallyWal: 'IndexedDB transactionsWAL में स्थानीय रूप से सहेजा गया।',
+      generateJformFirst: 'कृपया पहले एक वैध जे-फॉर्म चालान जनरेट या प्राप्त करें।',
+      dualSigAdminNotice: 'दोहरे हस्ताक्षर सत्यापन के लिए निरीक्षक और ऑपरेटर दोनों के हस्ताक्षर आवश्यक हैं। प्रोटोटाइप ऑटो-स्वीकृति के लिए व्यवस्थापक प्राधिकरण की आवश्यकता है।',
+      dbtOfflineWal: '[ऑफ़लाइन वाल] दोहरे हस्ताक्षर डीबीटी प्राधिकरण स्थानीय रूप से सहेजा गया। ऑनलाइन होने पर निपटान के लिए तैयार।',
+      dbtPfmsConfirmed: 'पीएफएमएस निपटान रेल द्वारा प्रत्यक्ष लाभ अंतरण (डीबीटी) की पुष्टि की गई!',
+      dbtOfflineRecorded: 'ऑफ़लाइन ब्लैकआउट: डीबीटी स्थानीय रूप से दर्ज किया गया। ऑनलाइन होने पर मिलान किया जाएगा।',
+      supervisorOverrideRecorded: '[ऑफ़लाइन वाल] पर्यवेक्षक ओवरराइड स्थानीय रूप से दर्ज किया गया। ट्रक को फिर से प्रेषण कतार में शामिल किया गया।',
+      adminBackendUnavailable: 'बैकएंड अनुपलब्ध है। सर्वर-साइड प्रशासन प्रबंधित करने के लिए पुनः कनेक्ट करें।',
+      noMandiSimulation: 'सिमुलेशन के लिए कोई कार्यशील मंडी चयनित नहीं है।',
+      noMandiReset: 'रीसेट के लिए कोई कार्यशील मंडी चयनित नहीं है।',
+      initializing: 'मंडी-क्यू प्रणाली प्रारंभ हो रही है...',
+    },
+    nav: {
+      admin: 'प्रशासन केंद्र',
+      farmer: 'किसान पोर्टल',
+      gate: 'प्रवेश द्वार',
+      quality: 'गुणवत्ता जांच',
+      queue: 'सक्रिय कतार',
+      weighbridge: 'धर्मकांटा तौल',
+      billing: 'बिलिंग एवं भुगतान',
+      sync: 'ऑफलाइन डब्ल्यूएएल',
+      advanceStation: 'अगला स्टेशन',
+      nextStation: 'अगला चरण',
+      demoTools: 'डेमो टूल्स',
+    },
+    roles: {
+      admin: 'प्रशासक',
+      supervisor: 'यार्ड सुपरवाइजर',
+      inspector: 'गुणवत्ता निरीक्षक',
+      operator: 'गेट एवं तौल ऑपरेटर',
+      farmer: 'पंजीकृत किसान',
+    },
+    login: {
+      title: 'एपीएमसी प्रवेश द्वार एवं खरीद गेटवे',
+      subtitle: 'विकेंद्रीकृत कतार प्रबंधन एवं लोकल-फर्स्ट गुणवत्ता Assaying टर्मिनल',
+      selectRole: 'स्टेशन पद चुनें',
+      username: 'ऑपरेटर / आधार पहचान संख्या',
+      usernamePlaceholder: 'अपनी पंजीकृत पहचान संख्या दर्ज करें',
+      password: 'सुरक्षा पासकोड',
+      passwordPlaceholder: 'सुरक्षा पासकोड दर्ज करें',
+      signIn: 'प्रमाणित करें एवं टर्मिनल खोलें',
+      signingIn: 'प्रमाणपत्र सत्यापित हो रहे हैं...',
+      quickDemoUsers: 'त्वरित डेमो पहुंच खाते',
+      credentialsError: 'अमान्य पहचान या पासकोड। कृपया पुनः जांचें।',
+      offlineFallbackNotice: 'ऑफलाइन मोड: स्थानीय संग्रहीत प्रमाणपत्रों द्वारा संचालित।',
+
+      hmacSession: 'क्रिप्टोग्राफिक रूप से हस्ताक्षरित HMAC-SHA256 सत्र',
+      footerStandards: 'मंडीक्यू एपीएमसी खरीद प्रणाली • राष्ट्रीय मानक',
+    },
+    farmer: {
+      greeting: 'नमस्ते, {name}',
+      profileTitle: 'सत्यापित किसान प्रोफ़ाइल',
+      kisanId: 'किसान आईडी',
+      mobile: 'पंजीकृत मोबाइल',
+      remainingCeiling: 'शेष फसल उपज सीमा',
+      availableCapacity: 'उपलब्ध बुकिंग क्षमता',
+      remainingAfterBooking: 'बुकिंग उपरांत शेष क्षमता',
+      targetMandi: 'खरीद मंडी यार्ड',
+      yardOperational: 'मंडी परिचालन सक्रिय',
+      processFlow: 'खरीद प्रक्रिया कार्यप्रवाह',
+      stepOf: 'चरण {current} / {total}',
+      step1Crop: 'पंजीकृत फसल',
+      step2Token: 'टोकन जारी',
+      step3Gate: 'गेट प्रवेश',
+      step4Quality: 'गुणवत्ता परीक्षण',
+      step5Weight: 'तौल धर्मकांटा',
+      step6Payment: 'डीबीटी भुगतान',
+      activeToken: 'सक्रिय फसल वितरण टोकन',
+      tokenNo: 'टोकन संख्या',
+      scanAtGate: 'एपीएमसी प्रवेश द्वार पर आगमन पर यह क्यूआर बारकोड प्रस्तुत करें।',
+      cancelSlot: 'बुकिंग रद्द करें',
+      cancelSlotPrompt: 'क्या आप वाकई इस निर्धारित स्लॉट को रद्द करना चाहते हैं?',
+      viewReceipt: 'डिजिटल जे-फॉर्म रसीद देखें',
+      bookDeliveryTitle: 'फसल वितरण स्लॉट बुक करें',
+      bookDeliverySubtitle: 'सड़क जाम और अनावश्यक प्रतीक्षा से बचने हेतु प्रति घंटा स्लॉट आरक्षित करें।',
+      step1Title: 'पंजीकृत फसल का चयन करें',
+      govtMsp: 'सरकारी एमएसपी',
+      loadingCrops: 'पंजीकृत फसलें लोड हो रही हैं...',
+      noCrops: 'इस मंडी हेतु कोई फसल उपलब्ध नहीं है।',
+      step2Title: 'विक्रय मात्रा (क्विंटल में)',
+      quantityHint: 'मात्रा क्विंटल में दर्ज करें (1 क्विंटल = 100 किग्रा = 0.1 टन)',
+      quickPills: 'त्वरित चयन',
+      step3Title: 'कृषक एवं भूमि स्वामित्व सत्यापन',
+      landTenure: 'कृषक का प्रकार',
+      ownerCultivator: 'स्वयं-भूस्वामी कृषक',
+      ownerDesc: 'सत्यापित एग्रीस्टैक राजस्व रिकॉर्ड युक्त निजी भूमि।',
+      tenantCultivator: 'बटाईदार / पट्टाधारक कृषक',
+      tenantDesc: 'पट्टा या मौखिक समझौते के तहत खेती।',
+      landownerName: 'मूल भूस्वामी का पूरा नाम',
+      landownerNamePlaceholder: 'राजस्व रिकॉर्ड अनुसार नाम दर्ज करें',
+      panchayatCert: 'पंचायत सत्यापन प्रमाण पत्र संख्या',
+      panchayatCertHint: 'ग्राम पंचायत अथवा तहसीलदार से जारी प्रमाण पत्र संख्या',
+      bonaFideDeclaration: 'मैं विधिपूर्वक घोषणा करता हूँ कि यह उपज मेरे द्वारा स्वयं उपजाई गई है।',
+      step4Title: 'फसल लाने की तिथि',
+      scheduledDate: 'मंडी आगमन तिथि चुनें',
+      step5Title: 'उपलब्ध प्रति घंटा स्लॉट',
+      slotsHint: 'प्रति घंटा स्लॉट मंडी प्रांगण में अनावश्यक भीड़ को रोकता है।',
+      loadingSlots: 'उपलब्ध स्लॉट लोड हो रहे हैं...',
+      noSlots: 'इस तिथि हेतु कोई स्लॉट उपलब्ध नहीं है।',
+      capacityRemaining: 'उपलब्ध',
+      confirming: 'स्लॉट आरक्षित हो रहा है...',
+      reserveButton: 'फसल वितरण स्लॉट सुरक्षित करें',
+      slotUnavailable: 'चयनित स्लॉट भर चुका है। कृपया दूसरा समय चुनें।',
+      valQtyPositive: 'मात्रा शून्य से अधिक होनी अनिवार्य है।',
+      valQtyExceedsCeiling: 'अनुरोधित मात्रा आपकी शेष उत्पादन सीमा से अधिक है।',
+      valLandownerRequired: 'बटाईदार कृषकों हेतु भूस्वामी का नाम अनिवार्य है।',
+      valBonaFideRequired: 'स्वप्रमाणित कृषक घोषणा पत्र पर टिक करना अनिवार्य है।',
+      valSlotRequired: 'कृपया आगे बढ़ने हेतु एक आगमन स्लॉट चुनें।',
+      valOfflineBooking: 'ऑफलाइन स्थानीय रिकॉर्ड में सहेजा गया। नेटवर्क मिलने पर सिंक होगा।',
+      appointmentSuccess: 'स्लॉट सफलतापूर्वक आरक्षित! आपका डिजिटल क्यूआर पास तैयार है।',
+
+      targetMandiAndDate: 'लक्षित एपीएमसी मंडी एवं दिनांक',
+      sourceOfTruthSlots: 'प्रति घंटा स्लॉट के लिए प्रामाणिक स्रोत',
+      destinationMandi: 'गंतव्य मंडी',
+      noMandisAvailable: 'कोई क्रियाशील मंडी उपलब्ध नहीं है',
+      scheduledDeliveryDate: 'निर्धारित डिलीवरी दिनांक',
+      minus: 'घटाएं',
+      plus: 'जोड़ें',
+      unlinkedProfileTitle: 'प्रमाणित किसान प्रोफ़ाइल लिंक नहीं है',
+      unlinkedProfileDesc: 'आपका लॉगिन खाता वर्तमान में एपीएमसी डेटाबेस में किसी क्रियाशील किसान प्रोफ़ाइल से लिंक नहीं है। सत्यापित किसान प्रोफ़ाइल लिंक होने तक स्लॉट बुकिंग अक्षम है।',
+    },
+    gate: {
+      title: 'एपीएमसी आवक गेट टर्मिनल',
+      subtitle: 'क्यूआर टोकन डिजिटल सत्यापन एवं त्वरित वाहन प्रवेश',
+      scanQrTitle: 'किसान डिलीवरी पास स्कैन करें',
+      scanQrSubtitle: 'डिजिटल हस्ताक्षर एवं एचएमएसी वैधता की तुरंत जांच करें।',
+      tokenPlaceholder: 'टोकन संख्या दर्ज करें या बारकोड स्कैन करें',
+      verifyButton: 'क्रिप्टोग्राफिक टोकन सत्यापित करें',
+      verifying: 'हस्ताक्षर सत्यापित हो रहे हैं...',
+      driverMobile: 'चालक का मोबाइल नंबर',
+      vehicleNo: 'वाहन पंजीयन संख्या',
+      vehicleNoPlaceholder: 'उदा. MP-04-AB-1234',
+      checkInButton: 'वाहन को मंडी प्रांगण में प्रवेश दें',
+      checkingIn: 'गेट प्रवेश दर्ज हो रहा है...',
+      checkInSuccess: 'वाहन प्रवेश सफल। गुणवत्ता परीक्षण स्टेशन हेतु निर्देशित।',
+      waitingVehicle: 'आवक बैरियर पर प्रतीक्षारत वाहन',
+      entryVerified: 'गेट प्रवेश सफलतापूर्वक सत्यापित',
+      inspectionReady: 'गुणवत्ता परीक्षण केंद्र पर आगे बढ़ें',
+
+      cryptoRules: 'क्रिप्टोग्राफिक प्रोटोकॉल नियम',
+      tamperProtection: 'छेड़छाड़ सुरक्षा',
+      tamperDesc: 'मात्रा, किसान आईडी या स्लॉट में कोई भी परिवर्तन 64-वर्ण वाले एचएमएसी टोकन हस्ताक्षर को अमान्य कर देता है।',
+      offlineResilience: 'ऑफलाइन लचीलापन',
+      offlineDesc: 'सेलुलर ब्लैकआउट के दौरान, गेट सत्यापन स्थानीय रूप से IndexedDB में बिना किसी रुकावट के निष्पादित होता है।',
+      stateProgression: 'स्थिति प्रगति',
+      stateProgressionDesc: 'सफल चेक-इन लेनदेन की स्थिति को इसमें बदल देता है:',
+      stateProgressionSuffix: 'और ट्रक को गुणवत्ता परख के लिए अग्रेषित करता है।',
+      farmerIdPlaceholder: 'किसान आईडी',
+      slotIdPlaceholder: 'स्लॉट आईडी',
+      signaturePlaceholder: '64-वर्ण हेक्स हस्ताक्षर...',
+    },
+    quality: {
+      title: 'डिजिटल गुणवत्ता परीक्षण केंद्र',
+      subtitle: 'सेंसर टेलीमेट्री एवं स्वचालित एपीएमसी ग्रेड मूल्यांकन',
+      sensorReading: 'सेंसर रीडिंग',
+      cropMoisture: 'अनाज नमी प्रतिशत',
+      optimalRange: 'आदर्श नमी: <= 12.0%',
+      maxLimit: 'अधिकतम स्वीकार्य सीमा: 17.0%',
+      assessing: 'गुणवत्ता जांच की जा रही है...',
+      assessButton: 'गुणवत्ता परिणाम दर्ज करें',
+      resultApproved: 'गुणवत्ता स्वीकृत: ग्रेड-ए सरकारी मानक अनुरूप',
+      resultRejected: 'अस्वीकृत: नमी 17.0% की अधिकतम सीमा से अधिक है',
+      eligibleForQueue: 'गतिशील प्राथमिकता कतार हेतु स्वीकृत',
+      routedToDrying: 'प्रांगण में धूप में सुखाने हेतु भेजा गया',
+      routeToDrying: 'सुखाने हेतु यार्ड में भेजें',
+      priorityScore: 'परिकलित DCDQ प्राथमिकता स्कोर',
+      supervisorOverrideTitle: 'सुपरवाइजर विशेष गुणवत्ता ओवरराइड',
+      overrideReason: 'स्वीकृति का आधिकारिक कारण व औचित्य',
+      overrideButton: 'सुपरवाइजर स्वीकृति जारी करें',
+      overriding: 'स्वीकृति जारी हो रही है...',
+
+      supervisorAuthToken: 'पर्यवेक्षक प्राधिकरण टोकन',
+      standardsTitle: 'एपीएमसी लॉट परख मानक',
+      gradeATitle: 'ग्रेड ए (एफएक्यू मानक)',
+      gradeADesc: 'लॉट को सीधे तत्काल तौल एवं इलेक्ट्रॉनिक एमएसपी निपटान के लिए स्वीकार किया जाता है।',
+      gradeBTitle: 'ग्रेड बी (प्राथमिकता लॉट)',
+      gradeBDesc: 'यार्ड में सड़न से बचने और समय पर प्रसंस्करण सुनिश्चित करने के लिए प्राथमिकता कतार में भर्ती।',
+      rejectionTitle: 'गुणवत्ता अस्वीकृति',
+      rejectionDesc: 'अत्यधिक नमी पाई गई। सौर सुखाने वाले एप्रन पर भेजा गया, जब तक कि पर्यवेक्षक द्वारा अधिकृत न हो।',
+      calibratedMoisture: 'कैलिब्रेटेड नमी विश्लेषक रीडिंग',
+      confirmOverride: 'पर्यवेक्षक गुणवत्ता ओवरराइड की पुष्टि करें',
+      dcdqFormula: 'P(लॉट) = 0.35 * P_आगमन + 0.30 * P_नमी + 0.20 * P_प्रतीक्षा + 0.15 * P_विलंब',
+    },
+    queue: {
+      title: 'गतिशील मंडी कतार प्रेषण केंद्र',
+      subtitle: 'वास्तविक समय DCDQ प्राथमिकता एवं एंटी-स्टारवेशन यातायात नियंत्रक',
+      liveQueueStatus: 'सक्रिय मंडी कतार रजिस्टर',
+      vehiclesWaiting: 'तौल हेतु प्रतीक्षारत कुल वाहन',
+      rank: 'वरीयता',
+      tokenNo: 'टोकन नं.',
+      farmer: 'किसान',
+      quantity: 'मात्रा',
+      dcdqScore: 'DCDQ स्कोर',
+      status: 'स्थिति',
+      dispatchButton: 'धर्मकांटा तौल हेतु भेजें',
+      dispatching: 'वाहन भेजा जा रहा है...',
+      emptyQueue: 'कतार खाली है। कोई वाहन प्रतीक्षारत नहीं है।',
+      emptyQueueHint: 'गुणवत्ता परीक्षण से पास होने वाले वाहन स्वतः यहाँ प्रदर्शित होंगे।',
+      dispatchedToWeighbridge: 'वाहन को धर्मकांटा तौल हेतु प्रेषित किया गया।',
+    },
+    weighbridge: {
+      title: 'इलेक्ट्रॉनिक धर्मकांटा तौल स्टेशन',
+      subtitle: 'लोड-सेल टेलीमेट्री एवं कुल/खाली वजन परिकलन',
+      grossWeight: 'सकल वजन (भरे वाहन का कुल वजन)',
+      tareWeight: 'खाली वजन (खाली वाहन का वजन)',
+      netWeight: 'शुद्ध फसल वजन',
+      scaleReading: 'सक्रिय डिजिटल धर्मकांटा वजन',
+      captureGross: 'सकल वजन (Gross) दर्ज करें',
+      capturingGross: 'धर्मकांटा वजन दर्ज हो रहा है...',
+      captureTare: 'खाली वजन (Tare) दर्ज करें',
+      capturingTare: 'खाली वाहन वजन दर्ज हो रहा है...',
+      weightSummary: 'प्रमाणित तौल सारांश',
+      proceedToBilling: 'जे-फॉर्म बिलिंग एवं भुगतान हेतु आगे बढ़ें',
+      tareInstruction: 'अनाज खाली करने के उपरांत खाली वाहन को धर्मकांटे पर लाएं।',
+
+      rulesTitle: 'वे-ब्रिज परिचालन नियम',
+      physicalInvariant: 'भौतिक अपरिवर्तनीय',
+      physicalDesc: 'खाली वजन (टेयर) स्पष्ट रूप से कुल वजन (ग्रॉस) से कम होना चाहिए (टेयर >= ग्रॉस अस्वीकार कर दिया जाता है)।',
+      yieldCeiling: 'उपज सीमा प्रवर्तन',
+      yieldDesc: 'शुद्ध वितरित वजन और पहले वितरित बैच किसान की पंजीकृत उत्पादन सीमा से अधिक नहीं हो सकते।',
+      distributedLock: 'वितरित लॉक सुरक्षा',
+      lockDesc: 'एक ही किसान के लिए समानांतर तौल इस लॉक के तहत क्रमबद्ध होती है:',
+      lockSuffix: 'ताकि रेस कंडीशंस समाप्त हो सकें।',
+      captureUnified: 'प्रमाणित शुद्ध वजन दर्ज करें',
+      scaleInvariance: 'कांटा रीडिंग स्थिरता एवं अंशांकन सत्यापित',
+      twoStepWeighment: 'दो-चरणीय तौल (सकल एवं खाली)',
+      unifiedWeighment: 'एकीकृत तौल टेलीमेट्री',
+    },
+    billing: {
+      title: 'खरीद बिलिंग एवं प्रत्यक्ष लाभ अंतरण (DBT)',
+      subtitle: 'आधिकारिक जे-फॉर्म विक्रय एवं दोहरे क्रिप्टोग्राफिक डिजिटल हस्ताक्षर',
+      jformTitle: 'आधिकारिक जे-फॉर्म संयुक्त विक्रय प्रमाण पत्र',
+      invoiceNo: 'जे-फॉर्म चालान संख्या',
+      mandiName: 'खरीद एपीएमसी मंडी',
+      cropName: 'खरीदी गई फसल',
+      netWeight: 'सत्यापित शुद्ध वजन',
+      mspPrice: 'लागू सरकारी एमएसपी',
+      grossPayable: 'कुल देय फसल मूल्य',
+      mandiDeductions: 'वैधानिक मंडी कटौती',
+      netPayable: 'किसान को देय शुद्ध डीबीटी भुगतान',
+      generateInvoice: 'डिजिटल जे-फॉर्म चालान तैयार करें',
+      generateButton: 'डिजिटल जे-फॉर्म चालान तैयार करें',
+      generating: 'चालान तैयार हो रहा है...',
+      dualSignatureRequired: 'दोहरे क्रिप्टोग्राफिक डिजिटल हस्ताक्षर अनिवार्य',
+      inspectorSig: 'गुणवत्ता निरीक्षक हस्ताक्षर',
+      operatorSig: 'तौल ऑपरेटर हस्ताक्षर',
+      authorizePayout: 'हस्ताक्षर कर डीबीटी भुगतान जारी करें',
+      authorizing: 'हस्ताक्षर सत्यापन एवं भुगतान प्रक्रिया जारी...',
+      payoutSettled: 'भुगतान पूर्ण: डीबीटी बैंक खाता ट्रांसफर संपन्न',
+      dbtReference: 'पीएफएमएस / डीबीटी संदर्भ संख्या',
+
+      deductionsCut: 'नमी या हैंडलिंग कटौती',
+      targetInvoiceAmount: 'लक्षित चालान राशि',
+      verifyingSignatures: 'क्रिप्टोग्राफिक हस्ताक्षरों का सत्यापन जारी...',
+      stageDualSignature: 'दोहरे हस्ताक्षर डीबीटी भुगतान चरणबद्ध करें',
+      simulatePfms: 'पीएफएमएस / एनपीसीआई आधार निपटान डायरेक्ट रेल सिमुलेट करें',
+      officialFormJ: 'आधिकारिक फॉर्म जे — बिक्री सूचना एवं रसीद',
+      totalNetAmount: 'कुल शुद्ध देय राशि',
+      totalDisbursement: 'कुल स्वीकृत संवितरण',
+      farmerName: 'किसान का नाम',
+      commodityNetQty: 'जिंस / शुद्ध मात्रा',
+      ratePerQuintal: 'दर प्रति क्विंटल',
+      totalDeductions: 'कुल कटौती',
+      dbtConfirmation: 'सरकारी डीबीटी निपटान पुष्टिकरण',
+      payoutBlockHash: 'क्रिप्टोग्राफिक भुगतान ब्लॉक हैश',
+      pfmsReference: 'पीएफएमएस आधार संदर्भ',
+      inspectorRemarks: 'निरीक्षक टिप्पणी',
+      inspectorHmac: 'निरीक्षक एचएमएसी-एसएचए256',
+      operatorHmac: 'ऑपरेटर एचएमएसी-एसएचए256',
+      enterOrVerifyHmac: 'एचएमएसी दर्ज करें या सत्यापित करें',
+    },
+    sync: {
+      title: 'ऑफलाइन डब्ल्यूएएल सिंक मॉनिटर',
+      subtitle: 'लोकल-फर्स्ट ट्रांजेक्शन लॉग एवं क्रिप्टोग्राफिक रीप्ले सुरक्षा',
+      walStatus: 'राइट-अहेड लॉग (WAL) रजिस्टर',
+      pendingMutations: 'लंबित ऑफलाइन प्रविष्टियां',
+      syncedMutations: 'सिंक पूर्ण प्रविष्टियां',
+      triggerSync: 'सभी प्रविष्टियों को तुरंत सिंक करें',
+      syncing: 'मंडी सर्वर से सिंक हो रहा है...',
+      mutationId: 'प्रविष्टि आईडी',
+      targetState: 'लक्षित स्थिति',
+      timestamp: 'दर्ज समय',
+      statusLabel: 'सिंक स्थिति',
+    },
+    demoTools: {
+      title: 'मंडीक्यू डेमो प्रदर्शन टूल्स',
+      subtitle: 'प्रदर्शन नियंत्रण, किसान अदला-बदली एवं तकनीकी प्रमाण',
+      tabControls: 'प्रदर्शन क्रियाएं',
+      tabFarmerSwitcher: 'प्रदर्शन किसान बदलें',
+      tabEvidence: 'तकनीकी प्रमाण',
+      resetShowcase: 'डेमो डेटाबेस रीसेट करें',
+      resetting: 'रीसेट हो रहा है...',
+      resetSuccess: 'डेमो डेटाबेस स्वच्छतापूर्वक मूल स्थिति में रीसेट हो गया।',
+      simulateTraffic: 'यातायात वाहन कतार बनाएं',
+      simulatingTraffic: 'वाहन जोड़े जा रहे हैं...',
+      simulateBlackout: 'ग्रामीण बिजली/इंटरनेट गुल सिमुलेशन',
+      blackoutActive: 'आउटेज सिमुलेशन सक्रिय: ऑफलाइन मोड लागू',
+      launchE2E: 'स्वचालित ई2ई परीक्षण यात्रा चलाएं',
+      openUSSD: 'मोबाइल यूएसएसडी फोन खोलें (*247#)',
+      switchFarmerTitle: 'प्रदर्शन किसान चयन',
+      switchFarmerDesc: 'किसान प्रोफाइल, उत्पादन सीमा और बुकिंग व्यवहार प्रदर्शित करने हेतु अधिकृत किसान चुनें।',
+      activeContextNotice: 'प्रोटोटाइप डेमो संदर्भ: केवल व्यवस्थापक और सुपरवाइजर प्रदर्शन के लिए।',
+      technicalEvidenceTitle: 'मंडीक्यू तकनीकी वास्तुकला एवं सिद्धांत',
+      dcdqTitle: 'DCDQ बहु-मानदंडीय प्राथमिकता गणितीय सूत्र',
+      dcdqFormula: 'S_i = alpha * A_i + beta * D_i + gamma * M_i + lambda * W_i',
+      dcdqAlpha: 'alpha * A_i (दूरी घटक): दूरस्थ गांवों से आने वाले किसानों को प्राथमिकता।',
+      dcdqBeta: 'beta * D_i (खराब होने का जोखिम): शीघ्र खराब होने वाली फसलों का संरक्षण।',
+      dcdqGamma: 'gamma * M_i (नमी घटक): 15-17% नमी वाले अनाज को फफूंद से बचाने हेतु प्राथमिकता।',
+      dcdqLambda: 'lambda * W_i (एंटी-स्टारवेशन बोनस): प्रतीक्षा समय के साथ स्कोर बढ़ता है ताकि सूखा अनाज न छूटे।',
+      invariantsTitle: 'गारंटीकृत गणितीय एवं सुरक्षा सिद्धांत',
+      invCeiling: 'किसान उपज सीमा सिद्धांत: सक्रिय बुकिंग पंजीकृत भूमि उत्पादन क्षमता से अधिक नहीं हो सकती।',
+      invSlot: 'स्लॉट क्षमता सिद्धांत: प्रति घंटा वाहन भार मंडी यार्ड सीमा से अधिक नहीं हो सकता।',
+      invState: 'अपरिवर्तनीय जीवन चक्र: चरण कभी छोड़े नहीं जा सकते (गेट -> जांच -> वजन -> बिल -> भुगतान)।',
+      invCrypto: 'क्रिप्टोग्राफिक सुरक्षा: की अथवा डेटा में बदलाव होने पर HMAC तुरंत अस्वीकृत होता है।',
+      invWal: 'लोकल-फर्स्ट ऑफलाइन WAL: बिना नेटवर्क के भी इंडेक्स्ड-डीबी में सुरक्षित डेटा रिकॉर्डिंग।',
+
+      accessRestricted: 'पहुंच प्रतिबंधित',
+      accessRestrictedDesc: 'डेमो टूल्स एवं तकनीकी साक्ष्य केवल मंडी बोर्ड प्रशासकों और एपीएमसी यार्ड पर्यवेक्षकों के लिए प्रतिबंधित हैं।',
+      invCeilingTitle: '1. उपज सीमा अपरिवर्तनीय',
+      invSlotTitle: '2. स्लॉट क्षमता अपरिवर्तनीय',
+      invStateTitle: '3. एकदिशीय जीवनचक्र',
+      invCryptoTitle: '4. HMAC-SHA256 क्रिप्टोग्राफी',
+      invWalTitle: '5. स्थानीय-प्रथम राइट-अहेड लॉग',
+    },
+    receipt: {
+      title: 'डिजिटल जे-फॉर्म खरीद रसीद',
+      govtHeader: 'कृषि उपज मंडी समिति (एपीएमसी)',
+      jformSubheader: 'अधिकृत ई-नाम एवं प्रत्यक्ष लाभ अंतरण (DBT) प्रमाण पत्र',
+      qrValid: 'क्रिप्टोग्राफिक रूप से सत्यापित टोकन',
+      printSlip: 'रसीद प्रिंट करें',
+      close: 'खिड़की बंद करें',
+
+      cryptoAuditTrail: 'क्रिप्टोग्राफिक ऑडिट एवं भुगतान ट्रेल',
+      ledgerHash: 'लेज़र हैश',
+      hmacToken: 'एचएमएसी टोकन',
+      dbtRef: 'डीबीटी संदर्भ',
+    },
+    admin: {
+      title: 'एपीएमसी प्रशासन केंद्र',
+      subtitle: 'राज्य खरीद प्राधिकरण एवं मंडी प्रांगण अवसंरचना प्रबंधन',
+      tabMandis: 'एपीएमसी मंडियां',
+      tabCrops: 'फसलें एवं एमएसपी',
+      tabUsers: 'स्टेशन उपयोगकर्ता',
+      tabSlots: 'खरीद स्लॉट',
+      totalRegisteredFarmers: 'पंजीकृत किसान',
+      activeTransactions: 'सक्रिय यार्ड लेनदेन',
+      queuedVehicles: 'कतारबद्ध वाहन',
+      volumeProcured: 'कुल खरीदी गई मात्रा',
+      payoutSettled: 'कुल डीबीटी भुगतान',
+      qualityInspected: 'परीक्षित लॉट',
+      rejectionRate: 'अस्वीकृति दर',
+      activeWeighbridges: 'सक्रिय धर्मकांटे',
+      dailyCapacity: 'दैनिक क्षमता',
+      operationalStatus: 'परिचालन स्थिति',
+      simulateTraffic: 'यातायात सिमुलेट करें',
+      simulatingTraffic: 'सिमुलेशन जारी...',
+      resetShowcase: 'शोकेस रीसेट करें',
+      resetting: 'रीसेट हो रहा है...',
+      resetConfirmPrompt: 'क्या आप वाकई शोकेस डेटाबेस को मूल स्थिति में रीसेट करना चाहते हैं?',
+      addMandi: 'नई मंडी जोड़ें',
+      addCrop: 'नई फसल जोड़ें',
+      addUser: 'कर्मचारी खाता जोड़ें',
+      generateBatchSlots: 'दैनिक स्लॉट बनाएं',
+      generatingSlots: 'स्लॉट बन रहे हैं...',
+      refreshData: 'डेटा ताज़ा करें',
+      toggleOperational: 'परिचालन स्थिति बदलें',
+      toggleActive: 'सक्रिय स्थिति बदलें',
+      mandiName: 'मंडी का नाम',
+      districtState: 'जिला एवं राज्य',
+      dailyCapacityQt: 'दैनिक क्षमता (क्विंटल)',
+      weighbridges: 'धर्मकांटे',
+      status: 'स्थिति',
+      actions: 'कार्रवाई',
+      cropName: 'फसल का नाम',
+      cropCode: 'फसल कोड',
+      category: 'श्रेणी',
+      mspPrice: 'एमएसपी दर (₹/क्विंटल)',
+      optimalMoisture: 'आदर्श नमी (%)',
+      maxMoisture: 'अधिकतम नमी (%)',
+      username: 'उपयोगकर्ता नाम',
+      fullName: 'पूरा नाम',
+      role: 'निर्धारित पद',
+      assignedMandi: 'आवंटित मंडी',
+      slotTime: 'समय अंतराल',
+      allocatedCapacity: 'आवंटित क्षमता (क्विंटल)',
+      bookedCapacity: 'आरक्षित क्षमता (क्विंटल)',
+      remainingCapacity: 'उपलब्ध क्षमता (क्विंटल)',
+      scheduledDate: 'निर्धारित तिथि',
+      createMandiTitle: 'नई एपीएमसी मंडी पंजीकृत करें',
+      createCropTitle: 'नई खरीद फसल पंजीकृत करें',
+      createUserTitle: 'नया स्टेशन ऑपरेटर खाता बनाएं',
+      generateSlotsTitle: 'प्रति घंटा खरीद स्लॉट बनाएं',
+      mandiNameLabel: 'मंडी यार्ड का नाम',
+      districtLabel: 'जिला',
+      stateLabel: 'राज्य',
+      dailyCapacityLabel: 'दैनिक खरीद क्षमता (क्विंटल)',
+      weighbridgesLabel: 'सक्रिय धर्मकांटों की संख्या',
+      cropNameLabel: 'फसल का नाम',
+      cropCodeLabel: 'फसल कोड',
+      categoryLabel: 'फसल श्रेणी',
+      mspLabel: 'न्यूनतम समर्थन मूल्य (₹/क्विंटल)',
+      optimalMoistureLabel: 'आदर्श नमी मानक (%)',
+      maxMoistureLabel: 'अधिकतम नमी सीमा (%)',
+      usernameLabel: 'लॉगिन पहचान नाम',
+      fullNameLabel: 'ऑपरेटर का पूरा नाम',
+      roleLabel: 'स्टेशन पद',
+      passwordLabel: 'पहुंच पासकोड',
+      targetDateLabel: 'खरीद लक्ष्य तिथि',
+      startHourLabel: 'प्रारंभिक घंटा (24h प्रारूप)',
+      endHourLabel: 'अंतिम घंटा (24h प्रारूप)',
+      capacityPerHourLabel: 'प्रति घंटा स्लॉट क्षमता (क्विंटल)',
+      saveButton: 'रिकॉर्ड सहेजें',
+      cancelButton: 'रद्द करें',
+      activeStatus: 'सक्रिय',
+      inactiveStatus: 'निष्क्रिय',
+      operationalStatusActive: 'सक्रिय परिचालन',
+      operationalStatusInactive: 'बंद',
+      noMandisFound: 'कोई पंजीकृत मंडी उपलब्ध नहीं है।',
+      noCropsFound: 'कोई पंजीकृत फसल उपलब्ध नहीं है।',
+      noUsersFound: 'कोई उपयोगकर्ता खाता नहीं मिला।',
+      noSlotsFound: 'इस तिथि हेतु कोई खरीद स्लॉट नहीं मिला।',
+      selectMandiToViewSlots: 'खरीद समय-सारणी देखने हेतु ऊपर किसी मंडी यार्ड का चयन करें।',
+      offlineNotice: 'प्रशासनिक सेटिंग्स अद्यतन करने हेतु सक्रिय सर्वर नेटवर्क अनिवार्य है।',
+
+      hubSubtitle: 'सिस्टम मास्टर एवं यार्ड शासन केंद्र',
+      hubDesc: 'एपीएमसी मंडियों को कॉन्फ़िगर करें, वैधानिक एमएसपी दरें अपडेट करें, स्टाफ की भूमिकाओं की निगरानी करें और प्रति घंटा गेट क्षमता आवंटित करें।',
+      apmcBoardAdmin: 'एपीएमसी बोर्ड प्रशासन',
+      eNamCloudAuth: 'ई-नाम क्लाउड अधिकृत',
+      offlineWalMode: 'ऑफलाइन वाल मोड',
+      backendOffline: 'मंडीक्यू बैकएंड एपीआई ऑफलाइन है (पोर्ट 8000)',
+      backendOfflineDesc: 'पायथन फास्टएपीआई सर्वर वर्तमान में अनुपलब्ध है। लाइव यार्ड टेलीमेट्री, स्लॉट बुकिंग और डीसीडीक्यू सिमुलेशन के लिए बैकएंड चलना आवश्यक है।',
+      startInTerminal: 'टर्मिनल में प्रारंभ करें:',
+      simulateTooltip: 'गतिशील पुन: रैंकिंग प्रदर्शित करने के लिए चरणों में यथार्थवादी वाहन जोड़ें',
+      resetTooltip: 'प्रदर्शन डेटाबेस को रीसेट करें',
+      liveDynamicStream: 'लाइव गतिशील स्ट्रीम (5s)',
+      dcdqSorted: 'डीसीडीक्यू क्रमबद्ध',
+      totalPipeline: 'कुल पाइपलाइन',
+      quintalsProcured: 'कुल क्विंटल खरीदा',
+      pfmsSettled: 'पीएफएमएस निपटान',
+      moistureRejection: '> 17% नमी',
+      agriStackVerified: 'एग्रीस्टैक सत्यापित',
+      mandisSubtitle: 'निर्धारित वे-ब्रिज और दैनिक टन भार सीमा वाले केंद्रीय रूप से प्रमाणित खरीद यार्ड।',
+      cropsSubtitle: 'स्वचालित जे-फॉर्म बिलिंग और नमी अस्वीकृति सीमा के दौरान लागू मानक खरीद दरें।',
+      usersSubtitle: 'हस्ताक्षरित एचएमएसी क्रिप्टोग्राफिक टोकन से प्राप्त आधिकारिक भूमिका मानचित्रण।',
+      slotsSubtitle: 'रीयल-टाइम स्लॉट अधिभोग की निगरानी करें और बैच बुकिंग विंडो उत्पन्न करें।',
+      universalAccess: 'सार्वभौमिक सिस्टम पहुंच',
+      noMandisAvailable: 'कोई क्रियाशील मंडी उपलब्ध नहीं है',
+      clickGenerateSlots: 'प्रति घंटा विंडो प्रारंभ करने के लिए ऊपर \"स्लॉट उत्पन्न करें (अगले 7 दिन)\" पर क्लिक करें।',
+      slotId: 'स्लॉट आईडी',
+      utilization: 'उपयोग',
+      editMsp: 'एमएसपी संपादित करें',
+      deactivate: 'निष्क्रिय करें',
+      mandiNamePlaceholder: 'उदा. उज्जैन एपीएमसी मंडी',
+      districtPlaceholder: 'उज्जैन',
+      statePlaceholder: 'मध्य प्रदेश',
+      cropNamePlaceholder: 'गेहूँ (शरबती)',
+      mspPriceUnit: 'वैधानिक एमएसपी मूल्य (₹ / क्विंटल)',
+      optimalMoistureUnit: 'इष्टतम नमी %',
+      maxMoistureUnit: 'अधिकतम नमी सीमा %',
+      perQuintal: '/ क्विंटल',
+    },
+    journey: {
+      modalTitle: 'स्वचालित एंड-टू-एंड खरीद यात्रा',
+      modalSubtitle: 'मंडीक्यू के सभी 12 जीवन-चक्र चरणों का इंटरैक्टिव तकनीकी सिमुलेशन',
+      runAll: 'संपूर्ण ई2ई यात्रा निष्पादित करें',
+      runningAll: 'चरण निष्पादित हो रहे हैं...',
+      resetAll: 'सभी चरण रीसेट करें',
+      close: 'विंडो बंद करें',
+      statusPending: 'लंबित',
+      statusRunning: 'प्रक्रिया जारी',
+      statusSuccess: 'सत्यापित सफल',
+      statusFailed: 'विफल',
+      statusBlocked: 'नीति द्वारा अवरुद्ध',
+      stageDetails: 'चरण का तकनीकी विवरण',
+      duration: 'निष्पादन समय',
+      invariantsChecked: 'गणितीय एवं सुरक्षा सिद्धांत',
+      payloadResponse: 'क्रिप्टोग्राफिक पेलोड एवं उत्तर',
+      stage1Title: 'किसान ई-केवाईसी एवं भूमि रिकॉर्ड (सिमुलेटेड)',
+      stage1Desc: 'सत्यापित पहचान एवं उत्पादन सीमा हेतु यूआईडीएआई ई-केवाईसी और एग्रीस्टैक भूमि रजिस्ट्री क्वेरी।',
+      stage2Title: 'परमाण्विक स्लॉट आरक्षण + एचएमएसी',
+      stage2Desc: 'डिलीवरी स्लॉट आरक्षित कर छेड़छाड़-रोधी HMAC-SHA256 बुकिंग टोकन जारी करना।',
+      stage3Title: 'गेट क्यूआर सत्यापन एवं प्रवेश',
+      stage3Desc: 'गेट स्कैनर द्वारा आगमन पर क्रिप्टोग्राफिक एचएमएसी हस्ताक्षर की जांच और ट्रक को प्रवेश।',
+      stage4Title: 'डिजिटल गुणवत्ता परीक्षण',
+      stage4Desc: 'डिजिटल सेंसर द्वारा अनाज नमी परीक्षण। कतार प्रवेश नियम: नमी <= 17.0%।',
+      stage5Title: 'DCDQ प्राथमिकता कतार प्रविष्टि',
+      stage5Desc: 'समग्र प्राथमिकता स्कोर (S_i) का परिकलन और वाहन को प्राथमिकता कतार में स्थान।',
+      stage6Title: 'धर्मकांटा सकल वजन (Gross)',
+      stage6Desc: 'लोड-सेल टेलीमेट्री द्वारा भरे ट्रक के कुल वजन (100.00 क्विंटल) का प्रमाणीकरण।',
+      stage7Title: 'धर्मकांटा खाली एवं शुद्ध वजन (Tare & Net)',
+      stage7Desc: 'खाली ट्रक का वजन (37.50 क्विंटल)। शुद्ध उपज = 62.50 क्विंटल। उपज सीमा की पुनः जांच।',
+      stage8Title: 'जे-फॉर्म संयुक्त विक्रय बिलिंग',
+      stage8Desc: 'आधिकारिक खरीद चालान परिकलन: 62.50 क्विंटल * ₹2,275 एमएसपी = ₹142,187.50।',
+      stage9Title: 'दोहरे हस्ताक्षर डीबीटी स्टेजिंग',
+      stage9Desc: 'निरीक्षक एवं ऑपरेटर के दोहरे क्रिप्टोग्राफिक HMAC-SHA256 हस्ताक्षर ब्लॉक हैश से संबद्ध।',
+      stage10Title: 'पीएफएमएस आधार भुगतान रेल (मॉक)',
+      stage10Desc: 'सरकारी PFMS / NPCI आधार भुगतान ब्रिज द्वारा धनराशि वितरण एवं निस्तारण।',
+      stage11Title: 'ऑफलाइन डब्ल्यूएएल रीप्ले एवं एलडब्ल्यूडब्ल्यू विलय',
+      stage11Desc: 'सर्वर मोनोटोनिक अनुक्रम और संघर्ष समाधान के साथ बैच सिंक्रोनाइज़ेशन।',
+      stage12Title: 'सक्रिय कतार भुखमरी रोकथाम (Anti-Starvation)',
+      stage12Desc: 'सत्यापन कि एंटी-स्टारवेशन लैम्ब्डा बोनस अधिकतम प्रतीक्षा से पूर्व कम-प्राथमिकता अनाज को आगे बढ़ाता है।',
+    },
+    ussd: {
+      simulatorTitle: 'जीरो-डेटा सेल्युलर सिम्युलेटर',
+      simulatorSubtitle: 'जीएसएम मैप लेयर (*247#)',
+      activeCallState: 'कॉल सक्रिय',
+      standbyState: 'स्टैंडबाय',
+      dialPrompt: 'मंडीक्यू फीचर फोन सिम्युलेटर\nजीरो-डेटा सत्र प्रारंभ करने हेतु *247# डायल करें।',
+      sessionEnded: 'सत्र समाप्त हुआ।\nप्रारंभ करने हेतु *247# डायल करें।',
+      networkTimeout: 'नेटवर्क / मैप सिग्नलिंग टाइमआउट।\nकनेक्टिविटी जांचें।',
+      transmittingPacket: 'सिग्नलिंग पैकेट भेजा जा रहा है...',
+      inputLabel: 'इनपुट:',
+      sendDial: 'डायल करें',
+      endCall: 'कॉल समाप्त',
+      clearInput: 'साफ़ करें',
+      callerLabel: 'कॉलर मोबाइल:',
+    },
+    walMonitor: {
+      bannerTag: 'ऑफलाइन स्टोरेज एवं सिंक स्थिति',
+      title: 'क्लाइंट म्यूटेशन लेजर एवं सिंक इंजन',
+      description: 'ग्रामीण एपीएमसी में बिजली/इंटरनेट गुल होने पर लोकल-फर्स्ट इंडेक्स-डीबी लेजर उपकरणों पर ACID सुरक्षा बनाए रखता है। पुनः कनेक्ट होने पर म्यूटेशन Gzip-कंप्रेस होकर /api/v1/sync/wal पर अपलोड होते हैं और सर्वर मोनोटोनिक अनुक्रम द्वारा मिलान होते हैं।',
+      refreshButton: 'स्थानीय रिकॉर्ड ताज़ा करें',
+      syncBatch: 'तुरंत सिंक करें',
+      syncingBatch: 'सिंक हो रहा है...',
+      tabLedger: 'WAL म्यूटेशन लेजर',
+      tabMaterialized: 'मटेरियलाइज्ड क्लाइंट दृश्य',
+      filterAll: 'सभी म्यूटेशन',
+      filterPending: 'सिंक लंबित',
+      filterSynced: 'सिंक पूर्ण',
+      filterFailed: 'विफल',
+      colMutationId: 'म्यूटेशन आईडी',
+      colType: 'म्यूटेशन प्रकार',
+      colEntityId: 'संस्था / लेनदेन आईडी',
+      colStatus: 'स्थिति',
+      colTimestamp: 'दर्ज समय',
+      colActions: 'कार्रवाई',
+      noRecordsFound: 'कोई राइट-अहेड लॉग म्यूटेशन नहीं मिला।',
+      viewPayload: 'पेलोड विवरण देखें',
+      modalPayloadTitle: 'WAL म्यूटेशन पेलोड विवरण',
+      serverMonotonicSeq: 'सर्वर मोनोटोनिक अनुक्रम',
+      statusPending: 'लंबित',
+      statusSynced: 'सिंक पूर्ण',
+      statusFailed: 'विफल',
+      lastSyncResultTitle: 'अंतिम सर्वर सिंक परिणाम',
+      mutationsSynced: 'सफलतापूर्वक मिलान म्यूटेशन',
+      conflictsResolved: 'सुलझाए गए विवाद',
+      errorsEncountered: 'आई हुई त्रुटियां',
+      localTransactionsTitle: 'स्थानीय मटेरियलाइज्ड लेनदेन',
+      noLocalTransactions: 'ऑफलाइन स्टोर में कोई स्थानीय लेनदेन दर्ज नहीं है।',
+      colTxnId: 'लेनदेन संख्या (Txn ID)',
+      colFarmerId: 'किसान आईडी',
+      colMandiId: 'मंडी आईडी',
+      colCurrentState: 'वर्तमान स्थिति',
+
+      totalMutations: 'कुल म्यूटेशन',
+      indexedDbWal: 'IndexedDB लेनदेन वाल',
+      pendingSync: 'लंबित सिंक',
+      queuedReplication: 'सर्वर प्रतिकृति के लिए कतारबद्ध',
+      reconciled: 'सुलझाया गया',
+      acknowledgedServer: 'सर्वर द्वारा स्वीकृत',
+      networkRail: 'नेटवर्क रेल',
+      liveCloudLink: 'लाइव क्लाउड लिंक',
+      offlineAirGap: 'ऑफलाइन एयर-गैप',
+      directRestGzip: 'सीधा REST एवं Gzip WAL',
+      indexedDbLocalFallback: 'IndexedDB स्थानीय फ़ॉलबैक',
+      generateMutations: 'स्थानीय ऑफलाइन वाल म्यूटेशन उत्पन्न करें',
+      generateMutationsSubtitle: 'क्लाउड कनेक्शन के बिना IndexedDB में परीक्षण प्रविष्टियां दर्ज करने के लिए क्लिक करें',
+      transactionId: 'लेनदेन आईडी',
+      currentState: 'वर्तमान स्थिति',
+      farmer: 'किसान',
+      mandi: 'मंडी',
+      syncStatus: 'सिंक स्थिति',
+      lastUpdated: 'अंतिम अपडेट',
+      details: 'विवरण',
+      payloadInspector: 'वाल पेलोड निरीक्षक',
+      mutationUuid: 'म्यूटेशन यूयूआईडी',
+      metadataAttributes: 'मेटाडेटा विशेषताएँ',
+      stateAttributes: 'स्थिति विशेषताएँ',
+      targetState: 'लक्षित स्थिति',
+      hmacIntegrity: 'एचएमएसी अखंडता',
+      parsedPayload: 'पार्स किया गया पेलोड JSON',
+      materializedTransaction: 'सामग्रीकृत लेनदेन',
+      aggregatedPayload: 'एकत्रित पेलोड JSON',
+      lastMutationId: 'अंतिम म्यूटेशन आईडी',
+    },
+  },
+};

@@ -21,6 +21,17 @@ from backend.app.schemas.payout import (
 from backend.app.services.lifecycle_service import validate_lifecycle_transition
 
 
+def format_dbt_settlement_reference(block_hash: str, timestamp: Optional[datetime] = None) -> str:
+    """
+    Produces a canonical, stable settlement reference ID bound to the payout block hash and date.
+    Format: DBT-YYYYMMDD-<FIRST8_HEX_UPPER>
+    """
+    now = timestamp or datetime.now(timezone.utc)
+    date_str = now.strftime("%Y%m%d")
+    short_hash = block_hash[:8].upper()
+    return f"DBT-{date_str}-{short_hash}"
+
+
 def execute_mock_dbt_transfer(
     farmer_id: int,
     amount_inr: float,
@@ -33,9 +44,10 @@ def execute_mock_dbt_transfer(
     Generates a deterministic payout reference ID bound to the transaction/block hash.
     """
     now = datetime.now(timezone.utc)
-    date_str = now.strftime("%Y%m%d")
-    short_hash = (block_hash[:8] if block_hash else uuid.uuid4().hex[:8]).upper()
-    payout_ref = f"DBT-{date_str}-{short_hash}"
+    if block_hash:
+        payout_ref = format_dbt_settlement_reference(block_hash, now)
+    else:
+        payout_ref = f"DBT-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:8].upper()}"
 
     return MockDbtPayoutResponse(
         status="INITIATED",
@@ -83,11 +95,6 @@ def stage_dual_signature_payout(
             detail=f"Transaction '{request.transaction_id}' not found."
         )
 
-    is_demo_sig = (
-        request.inspector_sig_hash == "SAMPLE_INSPECTOR_HMAC_SIG_HASH_DEMO"
-        and request.operator_sig_hash == "SAMPLE_OPERATOR_HMAC_SIG_HASH_DEMO"
-    )
-
     # 4. Idempotency handling: if already in DBT_PAYMENT_INITIATED or PAYMENT_SETTLED
     if log.current_state in ("DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED"):
         expected_inspector = compute_role_signature(
@@ -101,8 +108,8 @@ def stage_dual_signature_payout(
             request.inspector_sig_hash, request.operator_sig_hash
         )
 
-        inspector_matches = is_demo_sig or hmac.compare_digest(request.inspector_sig_hash, expected_inspector)
-        operator_matches = is_demo_sig or hmac.compare_digest(request.operator_sig_hash, expected_operator)
+        inspector_matches = hmac.compare_digest(request.inspector_sig_hash, expected_inspector)
+        operator_matches = hmac.compare_digest(request.operator_sig_hash, expected_operator)
 
         if (
             log.payout_block_hash == computed_block
@@ -115,7 +122,7 @@ def stage_dual_signature_payout(
                 amount_inr=float(log.total_payout_inr or request.invoice_amount_inr),
                 payout_block_hash=log.payout_block_hash,
                 current_state=log.current_state,
-                dbt_reference_id=f"DBT-{log.updated_at.strftime('%Y%m%d')}-{log.payout_block_hash[:8].upper()}",
+                dbt_reference_id=format_dbt_settlement_reference(log.payout_block_hash, log.updated_at),
                 message="Payout already authorized and processed (idempotent repeated request)."
             )
         else:
@@ -157,7 +164,7 @@ def stage_dual_signature_payout(
     expected_inspector_hash = compute_role_signature(
         secret_key, request.transaction_id, amount, request.inspector_id, "INSPECTOR"
     )
-    if not is_demo_sig and not hmac.compare_digest(request.inspector_sig_hash, expected_inspector_hash):
+    if not hmac.compare_digest(request.inspector_sig_hash, expected_inspector_hash):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Inspector Signature"
@@ -167,7 +174,7 @@ def stage_dual_signature_payout(
     expected_operator_hash = compute_role_signature(
         secret_key, request.transaction_id, amount, request.operator_id, "OPERATOR"
     )
-    if not is_demo_sig and not hmac.compare_digest(request.operator_sig_hash, expected_operator_hash):
+    if not hmac.compare_digest(request.operator_sig_hash, expected_operator_hash):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Invalid Operator Signature"

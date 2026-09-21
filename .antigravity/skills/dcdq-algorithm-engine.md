@@ -16,7 +16,8 @@ $$S_i = \alpha \cdot A_i + \beta \cdot D_i + \gamma \cdot M_i + \lambda \cdot W_
 
 ### Component Logic:
 - **$A_i$ (Appointment Adherence, Max 40 points)**:
-  $$A_i = \max\left(0.0, 40.0 - \frac{|t_{\text{actual}} - t_{\text{planned}}|}{60.0} \times 0.5\right)$$
+  $$A_i = \max\left(0.0, 40.0 - 0.5 \cdot \frac{\max(0.0, t_{\text{actual}} - t_{\text{planned}})}{60.0}\right)$$
+  *(Early arrivals $t_{\text{actual}} \le t_{\text{planned}}$ are not penalized: lateness = 0.0 => $A_i = 40.0$. Lateness penalty applies only if $t_{\text{actual}} > t_{\text{planned}}$).*
 - **$D_i$ (Transit Demurrage & Weight, Max 20 points)**:
   $$D_i = \min(20.0, \max(0.0, \text{demurrage\_score}))$$
   *(Prototype default: $\min(20.0, \max(0.0, \text{payload\_quintals} / 10.0))$).*
@@ -27,6 +28,11 @@ $$S_i = \alpha \cdot A_i + \beta \cdot D_i + \gamma \cdot M_i + \lambda \cdot W_
 - **$W_i$ (Anti-Starvation Waiting-Time Bonus, Max 20 points)**:
   $$W_i = \min(20.0, 0.1 \times t_{\text{wait\_minutes}})$$
   *(Anti-Starvation Waiting-Time Bonus: positively added to prevent dry loads from being starved indefinitely as waiting time elapses).*
+
+### Dynamic Re-ranking Mechanism (Option B - Lightweight Event/On-Demand Model)
+- **Lightweight Architecture (AC-012)**: In compliance with the frozen prototype dependency baseline (no external Celery workers or separate daemon processes), queue re-ranking is computed **on-demand** upon queue retrieval (`/api/v1/queue/{mandi_id}`) and weighbridge dispatch (`/api/v1/queue/{mandi_id}/dispatch`) via `rerank_mandi_queue(db, mandi_id)`.
+- **Anti-Starvation Dynamics**: For each vehicle awaiting service, elapsed wait time is re-evaluated ($t_{\text{wait\_minutes}} = \max(0.0, (t_{\text{current}} - t_{\text{actual}})/60.0)$), updating $W_i$ and re-indexing the candidate token's priority score directly in the Redis Sorted Set (`mandi:queue:{mandi_id}`).
+- Over time, a dry load with $M \le 14.0\%$ that waits will steadily gain priority points ($+0.1$ points per minute, up to $+20.0$ points at 200 minutes), preventing perpetual starvation behind newly arrived damp loads.
 
 ---
 
@@ -60,7 +66,7 @@ def calculate_dcdq_priority_score(
     Returns float score rounded to 4 decimal places.
     """
     # 1. Appointment Adherence (A_i)
-    lateness_minutes = abs(actual_arrival_ts - planned_arrival_ts) / 60.0
+    lateness_minutes = max(0.0, float(actual_arrival_ts - planned_arrival_ts)) / 60.0
     a_i = max(0.0, 40.0 - (lateness_minutes * 0.5))
     
     # 2. Demurrage Weight (D_i)

@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.core.config import get_settings
+from backend.app.core.security import create_access_jwt
+from backend.app.services.auth_service import ensure_default_operational_users
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
@@ -338,7 +340,7 @@ def test_supervisor_override_readmits_rejected_lot(client: TestClient, db_sessio
         }
     )
 
-    # 1. Attempt override with invalid supervisor token -> 403
+    # 1. Attempt override without supervisor credentials -> 401/403
     bad_resp = client.post(
         "/api/v1/quality/override",
         json={
@@ -347,14 +349,22 @@ def test_supervisor_override_readmits_rejected_lot(client: TestClient, db_sessio
             "reason": "Test unauthorized override"
         }
     )
-    assert bad_resp.status_code == 403
+    assert bad_resp.status_code in (401, 403)
 
-    # 2. Attempt override with valid supervisor token -> 200
+    # 2. Attempt override with authenticated supervisor JWT -> 200
+    users = ensure_default_operational_users(db_session, mandi_id=mandi.mandi_id)
+    supervisor_user = next(u for u in users if u.role == "SUPERVISOR")
+    supervisor_jwt = create_access_jwt({
+        "sub": str(supervisor_user.user_id),
+        "user_id": supervisor_user.user_id,
+        "username": supervisor_user.username,
+        "role": supervisor_user.role
+    })
     good_resp = client.post(
         "/api/v1/quality/override",
+        headers={"Authorization": f"Bearer {supervisor_jwt}"},
         json={
             "transaction_id": txn_id,
-            "supervisor_token": settings.MANDIQ_SECRET_HMAC_KEY,
             "reason": "Grain sun-dried on apron; re-tested moisture now 14.8%",
             "calibrated_moisture_pct": 14.8
         }

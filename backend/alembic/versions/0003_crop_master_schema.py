@@ -32,8 +32,7 @@ def upgrade() -> None:
         sa.CheckConstraint('max_moisture_pct > 0 AND max_moisture_pct <= 100', name='chk_crop_max_moisture'),
         sa.CheckConstraint('optimal_moisture_pct <= max_moisture_pct', name='chk_crop_moisture_bounds'),
         sa.PrimaryKeyConstraint('crop_id'),
-        sa.UniqueConstraint('crop_name', name='uq_crops_crop_name'),
-        sa.UniqueConstraint('crop_code', name='uq_crops_crop_code')
+        sa.UniqueConstraint('crop_name', name='uq_crops_crop_name')
     )
     op.create_index('ix_crops_crop_id', 'crops', ['crop_id'], unique=False)
     op.create_index('ix_crops_crop_code', 'crops', ['crop_code'], unique=True)
