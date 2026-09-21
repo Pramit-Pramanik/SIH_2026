@@ -23,7 +23,7 @@ def gate_check_in(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(require_roles(["OPERATOR", "SUPERVISOR", "ADMIN"]))
 ) -> GateCheckInResponse:
-    return verify_and_check_in_gate(db=db, request=payload)
+    return verify_and_check_in_gate(db=db, request=payload, current_user=current_user)
 
 
 @router.get(
@@ -37,5 +37,5 @@ def get_gate_status(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(require_roles(["OPERATOR", "SUPERVISOR", "ADMIN", "INSPECTOR", "FARMER"]))
 ) -> GateCheckInResponse:
-    return inspect_gate_transaction(db=db, transaction_id=transaction_id)
+    return inspect_gate_transaction(db=db, transaction_id=transaction_id, current_user=current_user)
 

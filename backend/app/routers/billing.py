@@ -50,5 +50,5 @@ def get_invoice_by_transaction(
     """
     Retrieves the generated J-Form invoice details and financial breakdown for a transaction.
     """
-    return get_jform_invoice(db=db, transaction_id=transaction_id)
+    return get_jform_invoice(db=db, transaction_id=transaction_id, current_user=current_user)
 

@@ -2,6 +2,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.dependencies.get_db import get_db
 from backend.app.dependencies.auth import require_roles
 from backend.app.models.user import User
@@ -35,20 +36,8 @@ def get_authoritative_transaction(
             detail=f"Transaction '{transaction_id}' not found."
         )
 
-    # Role-based scoping checks
-    if current_user and current_user.role == "FARMER":
-        if current_user.farmer_id is not None and current_user.farmer_id != log.farmer_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: You are not authorized to access transactions for another farmer."
-            )
-
-    if current_user and current_user.role in ("SUPERVISOR", "INSPECTOR", "OPERATOR"):
-        if current_user.mandi_id is not None and current_user.mandi_id != log.mandi_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Access denied: Transaction belongs to a different APMC Mandi."
-            )
+    # Role-based scoping checks (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="inspect transaction")
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
     mandi = db.query(Mandi).filter(Mandi.mandi_id == log.mandi_id).first()

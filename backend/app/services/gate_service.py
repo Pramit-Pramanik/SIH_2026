@@ -2,17 +2,21 @@ from datetime import datetime, timezone
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from typing import Optional
 from backend.app.core.security import verify_booking_signature
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
 from backend.app.models.log import ProcurementLog
+from backend.app.models.user import User
 from backend.app.schemas.gate import GateCheckInRequest, GateCheckInResponse
 
 
 def verify_and_check_in_gate(
     db: Session,
-    request: GateCheckInRequest
+    request: GateCheckInRequest,
+    current_user: Optional[User] = None
 ) -> GateCheckInResponse:
     """
     Validates QR gate pass token, enforces cryptographic integrity and transaction
@@ -42,6 +46,9 @@ def verify_and_check_in_gate(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Procurement transaction '{request.transaction_id}' not found."
         )
+
+    # Mandi-scoped authorization check (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="gate entry check-in")
 
     # 3. Transaction Relationship Invariant Validation
     # Token parameters must match database booking record exactly
@@ -142,7 +149,8 @@ def verify_and_check_in_gate(
 
 def inspect_gate_transaction(
     db: Session,
-    transaction_id: str
+    transaction_id: str,
+    current_user: Optional[User] = None
 ) -> GateCheckInResponse:
     """
     Read-only inspection of gate entry status for a transaction.
@@ -155,6 +163,9 @@ def inspect_gate_transaction(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Procurement transaction '{transaction_id}' not found."
         )
+
+    # Mandi-scoped authorization check (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="inspect gate transaction")
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
     mandi = db.query(Mandi).filter(Mandi.mandi_id == log.mandi_id).first()

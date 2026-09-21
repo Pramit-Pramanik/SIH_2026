@@ -4,6 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.models.crop import Crop
 from backend.app.models.farmer import Farmer
 from backend.app.models.log import ProcurementLog
@@ -104,6 +105,9 @@ def generate_jform_invoice(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="generate J-Form invoice")
 
     # 1. Look up farmer details for crop and authoritative rate determination
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
@@ -285,7 +289,8 @@ def generate_jform_invoice(
 
 def get_jform_invoice(
     db: Session,
-    transaction_id: str
+    transaction_id: str,
+    current_user: Optional[User] = None
 ) -> JFormInvoiceResponse:
     """
     Retrieves the generated J-Form invoice details for a transaction.
@@ -299,6 +304,9 @@ def get_jform_invoice(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="inspect J-Form invoice")
 
     if log.current_state not in ("BILL_GENERATED", "DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED"):
         raise HTTPException(

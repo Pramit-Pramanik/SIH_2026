@@ -103,3 +103,7 @@ def require_roles(
         return current_user
 
     return role_dependency
+
+
+# Re-export canonical mandi-scoped authorization helper (AUD-001)
+from backend.app.core.authorization import assert_transaction_scope

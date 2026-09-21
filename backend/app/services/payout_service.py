@@ -5,6 +5,7 @@ from typing import Dict, Any, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.core.security import (
     get_payout_secret_key,
     compute_role_signature,
@@ -12,6 +13,7 @@ from backend.app.core.security import (
 )
 from backend.app.models.farmer import Farmer
 from backend.app.models.log import ProcurementLog
+from backend.app.models.user import User
 from backend.app.schemas.payout import (
     DualSignaturePayoutStageRequest,
     DualSignaturePayoutStageResponse,
@@ -59,7 +61,8 @@ def execute_mock_dbt_transfer(
 
 def stage_dual_signature_payout(
     db: Session,
-    request: DualSignaturePayoutStageRequest
+    request: DualSignaturePayoutStageRequest,
+    current_user: Optional[User] = None
 ) -> DualSignaturePayoutStageResponse:
     """
     Validates dual HMAC-SHA256 cryptographic signatures from both Inspector and Operator
@@ -94,6 +97,9 @@ def stage_dual_signature_payout(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="stage dual-signature payout")
 
     # 4. Idempotency handling: if already in DBT_PAYMENT_INITIATED or PAYMENT_SETTLED
     if log.current_state in ("DBT_PAYMENT_INITIATED", "PAYMENT_SETTLED"):

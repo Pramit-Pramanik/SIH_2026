@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.core.config import get_settings
 from backend.app.core.security import get_hmac_secret_key
 from backend.app.models.log import ProcurementLog
@@ -30,7 +31,8 @@ from backend.app.services.queue_manager import queue_manager
 
 def assess_quality_and_enqueue(
     db: Session,
-    request: QualityAssessmentRequest
+    request: QualityAssessmentRequest,
+    current_user: Optional[User] = None
 ) -> QualityAssessmentResponse:
     """
     Performs digital moisture testing and crop quality assaying on an arrived vehicle (AC-006, AC-007).
@@ -46,6 +48,9 @@ def assess_quality_and_enqueue(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="quality assessment")
 
     # State validation: Transaction must have verified gate entry
     allowed_entry_states = ("GATE_ENTRY_VERIFIED", "IN_QA_QUEUE")
@@ -179,6 +184,9 @@ def override_quality_and_admit(
             detail=f"Transaction '{request.transaction_id}' not found."
         )
 
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="supervisor quality override")
+
     if log.current_state != "QUALITY_REJECTED":
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -233,7 +241,8 @@ def override_quality_and_admit(
 def rerank_mandi_queue(
     db: Session,
     mandi_id: int,
-    current_time: Optional[float] = None
+    current_time: Optional[float] = None,
+    current_user: Optional[User] = None
 ) -> List[Tuple[str, float]]:
     """
     On-demand dynamic queue re-ranking (DCDQ Algorithm 1 Step 3, Option B).
@@ -243,6 +252,9 @@ def rerank_mandi_queue(
     Re-indexes the updated priority score S_i into the Redis Sorted Set (ZSET)
     and returns the re-ranked active queue.
     """
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(mandi_id, current_user, action_desc="queue rerank")
+
     raw_queue = queue_manager.get_queue(mandi_id)
     if not raw_queue:
         return []
@@ -346,12 +358,16 @@ def get_mandi_queue_list(
 
 def dispatch_top_vehicle_from_queue(
     db: Session,
-    mandi_id: int
+    mandi_id: int,
+    current_user: Optional[User] = None
 ) -> QueueDispatchResponse:
     """
     Pops the highest-priority vehicle from the queue (ZPOPMAX with deterministic tie-breaking)
     and transitions its transaction state to ROUTED_TO_WEIGHBRIDGE.
     """
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(mandi_id, current_user, action_desc="queue dispatch")
+
     mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
     if not mandi or not mandi.is_operational:
         raise HTTPException(
@@ -381,6 +397,9 @@ def dispatch_top_vehicle_from_queue(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Dispatched transaction '{txn_id}' record not found."
         )
+
+    # Enforce transaction mandi-scope before mutation
+    assert_transaction_scope(log, current_user, action_desc="queue vehicle dispatch")
 
     if log.current_state == "QUALITY_REJECTED":
         # Vehicle must not be routed to weighbridge if quality was rejected
@@ -452,7 +471,8 @@ def get_vehicle_queue_status(
 
 def get_quality_assessment(
     db: Session,
-    transaction_id: str
+    transaction_id: str,
+    current_user: Optional[User] = None
 ) -> QualityAssessmentResponse:
     """
     Retrieves the quality assessment details for a transaction.
@@ -465,6 +485,9 @@ def get_quality_assessment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="inspect quality assessment")
 
     moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
     is_rejected = log.current_state == "QUALITY_REJECTED" or moisture > 17.0

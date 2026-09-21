@@ -36,7 +36,7 @@ def capture_gross_weight(
     Ingests scale telemetry when a loaded vehicle arrives at the weighbridge.
     Validates gross weight > 0, enforces state transition to WEIGHED_GROSS.
     """
-    return record_gross_weight(db=db, request=payload)
+    return record_gross_weight(db=db, request=payload, current_user=current_user)
 
 
 @router.post(
@@ -55,7 +55,7 @@ def capture_tare_weight(
     Validates gross > tare >= 0, computes Net Weight = Gross - Tare,
     enforces farmer yield ceiling invariance, and transitions state to WEIGHED_TARE.
     """
-    return record_tare_weight(db=db, request=payload)
+    return record_tare_weight(db=db, request=payload, current_user=current_user)
 
 
 @router.post(
@@ -73,7 +73,7 @@ def capture_unified_weighment(
     Simultaneously records gross and tare weights in a single atomic transaction.
     Computes Net Weight = Gross - Tare and transitions state to WEIGHED_TARE.
     """
-    return record_unified_weighment(db=db, request=payload)
+    return record_unified_weighment(db=db, request=payload, current_user=current_user)
 
 
 @router.get(
@@ -90,5 +90,5 @@ def get_transaction_weighment(
     """
     Retrieves current weighment telemetry and settlement state for a transaction.
     """
-    return get_weighment_details(db=db, transaction_id=transaction_id)
+    return get_weighment_details(db=db, transaction_id=transaction_id, current_user=current_user)
 

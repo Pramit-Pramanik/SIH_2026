@@ -36,7 +36,7 @@ def assess_crop_quality(
     - If moisture > 17.0%: Immediately triggers QUALITY_REJECTED and routes vehicle to drying apron.
     - If moisture <= 17.0%: Triggers QUALITY_APPROVED, calculates DCDQ priority score, and enqueues in Redis ZSET.
     """
-    return assess_quality_and_enqueue(db=db, request=payload)
+    return assess_quality_and_enqueue(db=db, request=payload, current_user=current_user)
 
 
 @router.post(
@@ -69,6 +69,6 @@ def get_transaction_quality(
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(require_roles(["INSPECTOR", "SUPERVISOR", "ADMIN", "OPERATOR", "FARMER"]))
 ) -> QualityAssessmentResponse:
-    return get_quality_assessment(db=db, transaction_id=transaction_id)
+    return get_quality_assessment(db=db, transaction_id=transaction_id, current_user=current_user)
 
 

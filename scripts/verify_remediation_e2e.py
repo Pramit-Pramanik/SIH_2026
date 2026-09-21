@@ -68,8 +68,9 @@ def run_e2e_forensic_suite():
     assert mandis_resp.status_code == 200
     mandis = mandis_resp.json()
     assert len(mandis) >= 1
-    mandi_id = mandis[0]["mandi_id"]
-    mandi_name = mandis[0]["name"]
+    target_mandi = next((m for m in mandis if m["mandi_id"] == 1), mandis[0])
+    mandi_id = target_mandi["mandi_id"]
+    mandi_name = target_mandi["name"]
     print(f"  [PASS] Resolved target Mandi: ID #{mandi_id} ({mandi_name})")
 
     # Reserve Slot (2.5 Quintals)

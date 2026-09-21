@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 if not hasattr(status, "__dict__") or "HTTP_422_UNPROCESSABLE_ENTITY" not in status.__dict__:
     status.HTTP_422_UNPROCESSABLE_ENTITY = getattr(status, "HTTP_422_UNPROCESSABLE_CONTENT", 422)
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.dependencies.get_db import get_db
 from backend.app.dependencies.auth import require_roles
 from backend.app.models.user import User
@@ -262,18 +263,14 @@ def cancel_reservation(
             detail="transaction_id is required"
         )
 
-    if current_user and current_user.role == "FARMER":
-        auth_farmer_id = get_authenticated_farmer_id(current_user, db)
-        log = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == txn_id).first()
-        if not log:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Transaction '{txn_id}' not found."
-            )
-        if auth_farmer_id is not None and log.farmer_id != auth_farmer_id:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access forbidden: You do not own transaction '{txn_id}'."
-            )
+    log = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == txn_id).first()
+    if not log:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Transaction '{txn_id}' not found."
+        )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="cancel slot reservation")
 
     return cancel_slot_reservation(db=db, transaction_id=txn_id)

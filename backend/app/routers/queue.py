@@ -98,7 +98,7 @@ def dispatch_vehicle(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Mandi with ID {mandi_id} not found."
         )
-    return dispatch_top_vehicle_from_queue(db=db, mandi_id=mandi_id)
+    return dispatch_top_vehicle_from_queue(db=db, mandi_id=mandi_id, current_user=current_user)
 
 
 @router.post(
@@ -122,7 +122,7 @@ def rerank_queue(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Mandi with ID {mandi_id} not found."
         )
-    rerank_mandi_queue(db=db, mandi_id=mandi_id)
+    rerank_mandi_queue(db=db, mandi_id=mandi_id, current_user=current_user)
     return get_mandi_queue_list(db=db, mandi_id=mandi_id)
 
 

@@ -61,4 +61,4 @@ def stage_payout(
     - Transitions transaction state to PAYMENT_SETTLED and records payout block hash.
     - Fails closed with HTTP 403 if either signature is missing, forged, or amount is tampered.
     """
-    return stage_dual_signature_payout(db=db, request=payload)
+    return stage_dual_signature_payout(db=db, request=payload, current_user=current_user)

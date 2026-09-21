@@ -4,8 +4,10 @@ from fastapi import HTTPException, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.models.farmer import Farmer
 from backend.app.models.log import ProcurementLog
+from backend.app.models.user import User
 from backend.app.schemas.weighbridge import (
     GrossWeightCaptureRequest,
     TareWeightCaptureRequest,
@@ -18,7 +20,8 @@ from backend.app.services.lifecycle_service import validate_lifecycle_transition
 
 def record_gross_weight(
     db: Session,
-    request: GrossWeightCaptureRequest
+    request: GrossWeightCaptureRequest,
+    current_user: Optional[User] = None
 ) -> WeighmentResponse:
     """
     Captures gross weight telemetry for a vehicle that has arrived at the weighbridge.
@@ -41,6 +44,9 @@ def record_gross_weight(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="capture gross weight")
 
     # Idempotency check: repeated telemetry with exact same weight
     if log.current_state == "WEIGHED_GROSS":
@@ -108,7 +114,8 @@ def record_gross_weight(
 
 def record_tare_weight(
     db: Session,
-    request: TareWeightCaptureRequest
+    request: TareWeightCaptureRequest,
+    current_user: Optional[User] = None
 ) -> WeighmentResponse:
     """
     Captures tare weight telemetry for an unloaded vehicle exiting the weighbridge.
@@ -131,6 +138,9 @@ def record_tare_weight(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="capture tare weight")
 
     # Idempotency check: repeated tare telemetry with identical reading
     if log.current_state in ("WEIGHED_TARE", "BILL_GENERATED"):
@@ -231,7 +241,8 @@ def record_tare_weight(
 
 def record_unified_weighment(
     db: Session,
-    request: UnifiedWeighmentRequest
+    request: UnifiedWeighmentRequest,
+    current_user: Optional[User] = None
 ) -> WeighmentResponse:
     """
     Atomically records both gross and tare weights in a single telemetry transaction.
@@ -271,6 +282,9 @@ def record_unified_weighment(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{request.transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="capture unified weighment")
 
     # Idempotency check: repeated submission of exact same weighment
     if log.current_state in ("WEIGHED_TARE", "BILL_GENERATED"):
@@ -386,7 +400,8 @@ def record_unified_weighment(
 
 def get_weighment_details(
     db: Session,
-    transaction_id: str
+    transaction_id: str,
+    current_user: Optional[User] = None
 ) -> WeighmentResponse:
     """
     Retrieves current weighment telemetry and settlement state for a transaction.
@@ -400,6 +415,9 @@ def get_weighment_details(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Transaction '{transaction_id}' not found."
         )
+
+    # Enforce mandi-scoped authorization (AUD-001)
+    assert_transaction_scope(log, current_user, action_desc="inspect weighment details")
 
     return WeighmentResponse(
         transaction_id=log.transaction_id,
