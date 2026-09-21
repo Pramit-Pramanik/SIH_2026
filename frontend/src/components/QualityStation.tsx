@@ -137,6 +137,7 @@ export function QualityStation({
           // Broadcast to Live Queue to refresh instantly without 3s delay
           window.dispatchEvent(new CustomEvent('mandiq:quality-approved', { detail: data }));
           window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
+          window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: targetTxnId, current_state: 'QUALITY_APPROVED' } }));
         }
         await refreshTransaction();
         return;
@@ -232,6 +233,7 @@ export function QualityStation({
         onQualityApproved?.(targetTxnId);
         window.dispatchEvent(new CustomEvent('mandiq:quality-approved', { detail: data }));
         window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: targetTxnId, current_state: 'QUALITY_APPROVED' } }));
         await refreshTransaction();
         return;
       }
@@ -398,7 +400,7 @@ export function QualityStation({
             {/* Elapsed Wait Minutes */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
-                {t('queue.subtitle')}:
+                {t('quality.elapsedWaitMinutes')}:
               </label>
               <div className="relative">
                 <input

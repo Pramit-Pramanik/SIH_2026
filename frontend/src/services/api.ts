@@ -53,6 +53,7 @@ export interface BookingPayload {
   slot_id: number;
   farmer_id: number;
   requested_qty_qt: number;
+  crop_type?: string;
   ownership_status?: OwnershipStatus;
   landowner_name?: string;
   panchayat_certificate_filename?: string;
@@ -62,6 +63,7 @@ export interface BookingPayload {
 export interface BookingResponse {
   status: string;
   transaction_id: string;
+  crop_type?: string;
   mandi_id: number;
   slot_id: number;
   farmer_id: number;

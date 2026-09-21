@@ -240,6 +240,7 @@ def reserve_slot(
         slot_id=payload.slot_id,
         farmer_id=payload.farmer_id,
         requested_qty_qt=payload.requested_qty_qt,
+        crop_type=payload.crop_type,
         demo_run_id=payload.demo_run_id,
     )
 

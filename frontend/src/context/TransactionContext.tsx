@@ -113,6 +113,22 @@ export function TransactionProvider({
     refreshTransaction();
   }, [refreshTransaction]);
 
+  // Reactive cross-station synchronization via mandiq:transactions-changed event
+  useEffect(() => {
+    const handleTxnChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && (customEvent.detail.action === 'reset' || customEvent.detail.action === 'cancelled')) {
+        clearActiveTransaction(`Transaction event: ${customEvent.detail.action}`);
+      } else {
+        refreshTransaction();
+      }
+    };
+    window.addEventListener('mandiq:transactions-changed', handleTxnChanged);
+    return () => {
+      window.removeEventListener('mandiq:transactions-changed', handleTxnChanged);
+    };
+  }, [refreshTransaction, clearActiveTransaction]);
+
   // Clear active transaction on identity changes (Phase 0.3 & Phase 6)
   useEffect(() => {
     // When user or mandi changes, re-evaluate or clear activeTxnId

@@ -119,6 +119,7 @@ export function WeighbridgeStation({
           message: `Gross weight recorded: ${grossWeight.toFixed(2)} qt. State: ${data.current_state}. Now proceed to unload grain and capture tare weight.`,
           details: data,
         });
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: data }));
         await refreshTransaction();
         return;
       }

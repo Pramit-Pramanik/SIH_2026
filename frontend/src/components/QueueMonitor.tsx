@@ -218,6 +218,7 @@ export function QueueMonitor({
         }
 
         setDispatchResult(data);
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: data.transaction_id, current_state: 'ROUTED_TO_WEIGHBRIDGE' } }));
         onVehicleDispatched?.(data.transaction_id);
         onDispatchVehicle?.(data);
         fetchQueue(false);
@@ -233,6 +234,7 @@ export function QueueMonitor({
           new_state: 'ROUTED_TO_WEIGHBRIDGE',
           message: `[OFFLINE LOCAL] Vehicle ${top.transaction_id} popped from local queue and routed to weighbridge.`,
         });
+        window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: top.transaction_id, current_state: 'ROUTED_TO_WEIGHBRIDGE' } }));
         setQueueItems((prev) => prev.slice(1));
         onVehicleDispatched?.(top.transaction_id);
         onDispatchVehicle?.(top);
@@ -275,7 +277,6 @@ export function QueueMonitor({
               </span>
             )}
           </div>
-          <h2 className="text-xl font-black text-emerald-950">{t('queue.subtitle')}</h2>
           <p className="text-xs text-slate-600 mt-0.5">
             {t('queue.liveQueueStatus')}
           </p>

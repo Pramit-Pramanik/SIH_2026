@@ -233,6 +233,7 @@ export interface Translations {
     calibratedMoisture: string;
     confirmOverride: string;
     dcdqFormula: string;
+    elapsedWaitMinutes: string;
   };
   queue: {
     title: string;
@@ -868,9 +869,10 @@ export const translations: Record<'en' | 'hi', Translations> = {
       calibratedMoisture: 'Calibrated Moisture Analyzer Reading',
       confirmOverride: 'Confirm Supervisor Quality Override',
       dcdqFormula: 'P(lot) = 0.35 * P_arrival + 0.30 * P_moisture + 0.20 * P_wait + 0.15 * P_demurrage',
+      elapsedWaitMinutes: 'Elapsed Yard Wait Time',
     },
     queue: {
-      title: 'Dynamic Yard Queue Dispatcher',
+      title: 'real time Yard Queue Dispatcher',
       subtitle: 'Real-Time DCDQ FIFO & Anti-Starvation Traffic Controller',
       liveQueueStatus: 'Live Yard Queue Registry',
       vehiclesWaiting: 'Vehicles Awaiting Weighment',
@@ -1501,9 +1503,10 @@ export const translations: Record<'en' | 'hi', Translations> = {
       calibratedMoisture: 'कैलिब्रेटेड नमी विश्लेषक रीडिंग',
       confirmOverride: 'पर्यवेक्षक गुणवत्ता ओवरराइड की पुष्टि करें',
       dcdqFormula: 'P(लॉट) = 0.35 * P_आगमन + 0.30 * P_नमी + 0.20 * P_प्रतीक्षा + 0.15 * P_विलंब',
+      elapsedWaitMinutes: 'मंडी प्रांगण प्रतीक्षा समय',
     },
     queue: {
-      title: 'गतिशील मंडी कतार प्रेषण केंद्र',
+      title: 'वास्तविक समय मंडी कतार प्रेषण केंद्र',
       subtitle: 'वास्तविक समय DCDQ प्राथमिकता एवं एंटी-स्टारवेशन यातायात नियंत्रक',
       liveQueueStatus: 'सक्रिय मंडी कतार रजिस्टर',
       vehiclesWaiting: 'तौल हेतु प्रतीक्षारत कुल वाहन',

@@ -167,7 +167,7 @@ def get_farmer_latest_booking(
             "slot_id": log.slot_id,
             "farmer_id": log.farmer_id,
             "farmer_name": farmer.name if farmer else "Registered Farmer",
-            "crop_type": farmer.registered_crop_type if farmer else "Wheat",
+            "crop_type": log.crop_type or (farmer.registered_crop_type if farmer else "Wheat"),
             "quantity_qt": float(log.net_weight_qt or 0.0),
             "scheduled_date": str(log.scheduled_date),
             "scheduled_time": time_str,

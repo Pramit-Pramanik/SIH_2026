@@ -51,6 +51,7 @@ class ProcurementLog(Base):
     mandi_id = Column(Integer, ForeignKey("mandis.mandi_id", ondelete="RESTRICT"), nullable=False)
     slot_id = Column(Integer, ForeignKey("procurement_slots.slot_id", ondelete="RESTRICT"), nullable=True)
     scheduled_date = Column(Date, nullable=False)
+    crop_type = Column(String(100), nullable=True)
     crop_moisture_pct = Column(Numeric(4, 2), nullable=True)
     gross_weight_qt = Column(Numeric(10, 2), nullable=True)
     tare_weight_qt = Column(Numeric(10, 2), nullable=True)

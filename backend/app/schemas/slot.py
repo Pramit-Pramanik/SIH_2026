@@ -8,6 +8,7 @@ class SlotReservationRequest(BaseModel):
     slot_id: int = Field(..., gt=0, description="Target hourly procurement slot identifier")
     farmer_id: int = Field(..., gt=0, description="Registered farmer identifier")
     requested_qty_qt: float = Field(..., gt=0.0, description="Requested grain delivery quantity in quintals")
+    crop_type: str | None = Field(default=None, max_length=100, description="Selected crop commodity type")
     demo_run_id: str | None = Field(default=None, max_length=64, description="Controlled local-demo run marker")
 
 
@@ -27,6 +28,7 @@ class SlotReservationResponse(BaseModel):
 
     status: str = Field(default="SUCCESS", description="Reservation status")
     transaction_id: str = Field(..., description="Canonical UUID of the created procurement transaction")
+    crop_type: str | None = Field(default=None, description="Authoritative crop commodity type")
     token: BookingToken = Field(..., description="Cryptographically signed offline gate pass token")
     allocated_capacity_qt: float = Field(..., description="Total allocated capacity for this slot")
     booked_capacity_qt: float = Field(..., description="Updated booked capacity for this slot")

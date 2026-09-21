@@ -9,6 +9,7 @@ import {
 import { verifyOfflineGateEntry } from '../services/offlineCrypto';
 import { getAuthHeaders } from '../services/api';
 import { useLanguage } from '../i18n/LanguageContext';
+import { useAuthoritativeTransaction } from '../context/TransactionContext';
 
 interface GateTerminalProps {
   mandiId: number;
@@ -25,6 +26,7 @@ export function GateTerminal({
   onGateCheckedIn,
   onGateEntryVerified,
 }: GateTerminalProps) {
+  const { refreshTransaction } = useAuthoritativeTransaction();
   const [transactionId, setTransactionId] = useState(activeTxnId || '');
   const [farmerId, setFarmerId] = useState<number>(0);
   const [slotId, setSlotId] = useState<number>(0);
@@ -178,6 +180,12 @@ export function GateTerminal({
           ? `Gate Pass Verified! Authoritative cloud check-in synchronized and vehicle admitted.`
           : `[OFFLINE PROVISIONAL] Gate entry structurally verified and committed to IndexedDB WAL. Vehicle admitted under offline protocol.`,
       });
+      await refreshTransaction();
+      window.dispatchEvent(
+        new CustomEvent('mandiq:transactions-changed', {
+          detail: { transaction_id: transactionId, current_state: 'GATE_ENTRY_VERIFIED' },
+        })
+      );
       onGateCheckedIn?.(transactionId);
       onGateEntryVerified?.(transactionId);
     } catch (err: unknown) {

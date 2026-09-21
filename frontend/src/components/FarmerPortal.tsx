@@ -346,7 +346,8 @@ export function FarmerPortal({
           headers: getAuthHeaders(),
         });
         if (pRes.ok) setProfile(await pRes.json());
-        const sRes = await fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${scheduledDate}&auto_provision=true`, {
+        const dateToFetch = activePass?.scheduled_date || scheduledDate;
+        const sRes = await fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${dateToFetch}&auto_provision=true`, {
           headers: getAuthHeaders(),
         });
         if (sRes.ok) setSlots(await sRes.json());
@@ -365,6 +366,27 @@ export function FarmerPortal({
     setActivePass(null);
     loadSavedPass();
   }, [activeTxnId, effectiveFarmerId, selectedMandiId, effectiveOnline]);
+
+  // Reactive updates on transaction changes
+  useEffect(() => {
+    const handleTxnUpdate = () => {
+      loadSavedPass();
+      if (effectiveFarmerId) {
+        fetch(`/api/v1/farmers/profile?farmer_id=${effectiveFarmerId}`, { headers: getAuthHeaders() })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((p) => { if (p) setProfile(p); });
+      }
+      if (selectedMandiId) {
+        fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${scheduledDate}&auto_provision=true`, { headers: getAuthHeaders() })
+          .then((r) => (r.ok ? r.json() : []))
+          .then((s) => { if (Array.isArray(s)) setSlots(s); });
+      }
+    };
+    window.addEventListener('mandiq:transactions-changed', handleTxnUpdate);
+    return () => {
+      window.removeEventListener('mandiq:transactions-changed', handleTxnUpdate);
+    };
+  }, [effectiveFarmerId, selectedMandiId, scheduledDate]);
 
   // Real-time Capacity Calculations
   const chosenSlot = slots.find((s) => s.slot_id === selectedSlotId);
@@ -460,6 +482,7 @@ export function FarmerPortal({
         slot_id: selectedSlotId,
         farmer_id: effectiveFarmerId,
         requested_qty_qt: requestedQty,
+        crop_type: chosenCrop ? chosenCrop.crop_name : undefined,
         ownership_status: ownershipStatus,
         landowner_name: ownershipStatus === 'TENANT' ? landownerName.trim() : undefined,
         panchayat_certificate_filename: ownershipStatus === 'TENANT' ? (certificateFile?.name || 'panchayat_undertaking.pdf') : undefined,
@@ -504,6 +527,12 @@ export function FarmerPortal({
         headers: getAuthHeaders(),
       });
       if (pRes.ok) setProfile(await pRes.json());
+
+      // Refresh slots immediately to show updated booked capacity & remaining capacity
+      const sRes = await fetch(`/api/v1/slots?mandi_id=${selectedMandiId}&scheduled_date=${scheduledDate}&auto_provision=true`, {
+        headers: getAuthHeaders(),
+      });
+      if (sRes.ok) setSlots(await sRes.json());
 
       onSlotReserved?.(resData.transaction_id);
       onTransactionCreated?.(resData.transaction_id);
@@ -586,7 +615,7 @@ export function FarmerPortal({
             <div className="truncate">
               <div className="flex items-center space-x-2">
                 <h1 className="text-xl font-black text-emerald-950 truncate">
-                  {profile ? `${t('farmer.greeting')}, ${profile.name}` : isUnlinkedFarmer ? 'Unlinked Account' : t('farmer.profileTitle')}
+                  {profile ? t('farmer.greeting', { name: profile.name }) : isUnlinkedFarmer ? 'Unlinked Account' : t('farmer.profileTitle')}
                 </h1>
                 <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-extrabold border border-emerald-300">
                   {t('common.verified')}
@@ -720,7 +749,7 @@ export function FarmerPortal({
             {t('farmer.processFlow')}
           </span>
           <span className="font-bold text-emerald-700">
-            {t('farmer.stepOf')} {activeStageIndex} / 6
+            {t('farmer.stepOf', { current: activeStageIndex, total: 6 })}
           </span>
         </div>
 

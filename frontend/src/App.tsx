@@ -76,6 +76,7 @@ function StationManager({
     activeTxnId,
     setActiveTxnId,
     activeTransaction,
+    refreshTransaction,
     clearActiveTransaction,
   } = useAuthoritativeTransaction();
 
@@ -105,6 +106,13 @@ function StationManager({
       }
     }
   }, [currentUser, activeTab]);
+
+  // Re-synchronize authoritative transaction whenever tab changes so stations receive latest state
+  useEffect(() => {
+    if (activeTxnId) {
+      refreshTransaction();
+    }
+  }, [activeTab, activeTxnId, refreshTransaction]);
 
   useEffect(() => {
     refreshWAL();
@@ -141,8 +149,13 @@ function StationManager({
       const customEvent = e as CustomEvent;
       if (customEvent.detail && customEvent.detail.action === 'reset') {
         clearActiveTransaction('Showcase database reset');
+      } else if (customEvent.detail && customEvent.detail.action === 'cancelled') {
+        clearActiveTransaction('Appointment cancelled');
       } else if (customEvent.detail && customEvent.detail.transaction_id) {
         setActiveTxnId(customEvent.detail.transaction_id);
+        refreshTransaction();
+      } else {
+        refreshTransaction();
       }
     };
 

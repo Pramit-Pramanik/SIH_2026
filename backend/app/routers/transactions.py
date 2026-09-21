@@ -61,7 +61,7 @@ def get_authoritative_transaction(
         mandi_name=mandi.name if mandi else None,
         slot_id=log.slot_id,
         scheduled_date=log.scheduled_date.isoformat() if log.scheduled_date else "",
-        crop_type=farmer.registered_crop_type if farmer else "Wheat",
+        crop_type=log.crop_type or (farmer.registered_crop_type if farmer else "Wheat"),
         crop_moisture_pct=float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else None,
         gross_weight_qt=float(log.gross_weight_qt) if log.gross_weight_qt is not None else None,
         tare_weight_qt=float(log.tare_weight_qt) if log.tare_weight_qt is not None else None,

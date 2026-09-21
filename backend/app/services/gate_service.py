@@ -74,7 +74,7 @@ def verify_and_check_in_gate(
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == request.farmer_id).first()
     farmer_name = farmer.name if farmer else "Unknown Farmer"
-    crop_type = farmer.registered_crop_type if farmer else "Unknown Crop"
+    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else "Unknown Crop")
 
     # 5. Idempotent State Machine Transition
     if log.current_state == "GATE_ENTRY_VERIFIED":
@@ -165,7 +165,7 @@ def inspect_gate_transaction(
         current_state=log.current_state,
         farmer_id=log.farmer_id,
         farmer_name=farmer.name if farmer else "Unknown Farmer",
-        crop_type=farmer.registered_crop_type if farmer else "Unknown Crop",
+        crop_type=log.crop_type or (farmer.registered_crop_type if farmer else "Unknown Crop"),
         mandi_name=mandi.name if mandi else "Unknown Mandi",
         slot_id=log.slot_id,
         scheduled_date=str(log.scheduled_date),

@@ -107,7 +107,7 @@ def generate_jform_invoice(
 
     # 1. Look up farmer details for crop and authoritative rate determination
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
-    crop_type = farmer.registered_crop_type if farmer else "Wheat"
+    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else "Wheat")
     farmer_name = farmer.name if farmer else "Registered Farmer"
 
     authoritative_rate = resolve_authoritative_crop_msp(db, crop_type)
@@ -307,7 +307,7 @@ def get_jform_invoice(
         )
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
-    crop_type = farmer.registered_crop_type if farmer else "Wheat"
+    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else "Wheat")
     farmer_name = farmer.name if farmer else "Registered Farmer"
 
     authoritative_rate = resolve_authoritative_crop_msp(db, crop_type)

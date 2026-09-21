@@ -66,6 +66,7 @@ def reserve_slot_atomic(
     slot_id: int,
     farmer_id: int,
     requested_qty_qt: float,
+    crop_type: Optional[str] = None,
     demo_run_id: Optional[str] = None,
 ) -> SlotReservationResponse:
     """
@@ -162,6 +163,10 @@ def reserve_slot_atomic(
             slot.booked_capacity_qt = round(booked + requested_qty_qt, 4)
             slot.version += 1
 
+            # Determine authoritative crop commodity
+            final_crop_type = (crop_type.strip() if crop_type and crop_type.strip()
+                               else (farmer.registered_crop_type if farmer and farmer.registered_crop_type else "Wheat (HD-2967)"))
+
             # Create canonical procurement log entry
             txn_id = f"TXN-E2E-{uuid.uuid4().hex[:12].upper()}" if demo_run_id else f"TXN-{uuid.uuid4().hex[:12].upper()}"
             procurement_log = ProcurementLog(
@@ -170,6 +175,7 @@ def reserve_slot_atomic(
                 mandi_id=mandi_id,
                 slot_id=slot_id,
                 scheduled_date=slot.scheduled_date,
+                crop_type=final_crop_type,
                 current_state="SLOT_BOOKED",
                 net_weight_qt=requested_qty_qt,
                 token_signature=signature,
@@ -214,6 +220,7 @@ def reserve_slot_atomic(
             return SlotReservationResponse(
                 status="SUCCESS",
                 transaction_id=txn_id,
+                crop_type=final_crop_type,
                 token=booking_token,
                 allocated_capacity_qt=float(slot.allocated_capacity_qt),
                 booked_capacity_qt=float(slot.booked_capacity_qt),
@@ -258,6 +265,15 @@ def cancel_slot_reservation(
 
     log.current_state = "CANCELLED"
     db.commit()
+
+    # Sync Redis tracking keys if Redis is active
+    r = lock_manager._get_redis()
+    if r is not None and qty > 0:
+        try:
+            r.incrbyfloat(f"capacity:booked:{log.mandi_id}:{log.slot_id}", -qty)
+            r.incrbyfloat(f"farmer:cumulative_booked:{log.farmer_id}", -qty)
+        except Exception:
+            pass
 
     return {
         "status": "SUCCESS",
