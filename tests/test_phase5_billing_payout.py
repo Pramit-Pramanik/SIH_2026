@@ -15,6 +15,7 @@ from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
 from backend.app.models.log import ProcurementLog
+from backend.app.models.crop import Crop
 from backend.app.services.reservation_service import reserve_slot_atomic
 from backend.app.services.gate_service import verify_and_check_in_gate
 from backend.app.schemas.gate import GateCheckInRequest
@@ -52,6 +53,30 @@ def setup_weighed_lot_environment(
         registered_crop_type=crop_type,
         production_ceiling_qt=200.00
     )
+    existing_crop = db.query(Crop).filter(Crop.crop_name == crop_type).first()
+    if not existing_crop:
+        default_price = 2275.00
+        clean_crop = crop_type.lower()
+        if "paddy" in clean_crop:
+            default_price = 2320.00
+        elif "mustard" in clean_crop:
+            default_price = 5650.00
+        elif "soybean" in clean_crop:
+            default_price = 4892.00
+        elif "gram" in clean_crop or "chana" in clean_crop:
+            default_price = 5440.00
+
+        crop = Crop(
+            crop_name=crop_type,
+            crop_code=crop_type.upper()[:10].replace(" ", "_"),
+            category="CEREAL",
+            msp_price_inr=default_price,
+            optimal_moisture_pct=14.0,
+            max_moisture_pct=17.0,
+            is_active=True
+        )
+        db.add(crop)
+
     db.add_all([mandi, farmer])
     db.commit()
     db.refresh(mandi)
@@ -507,24 +532,24 @@ def test_custom_rate_and_deductions_calculation(client: TestClient, db_session: 
     assert "Unauthorized rate override" in unauth_resp.json()["detail"]
 
     # 2. Authenticated supervisor/admin can authorize rate override
-    sup_user = db_session.query(User).filter(User.role.in_(["SUPERVISOR", "ADMIN"])).first()
-    if not sup_user:
-        sup_user = User(
-            username="sup_billing_auth",
-            hashed_password="hashed_pw_test",
-            full_name="Billing Supervisor",
-            role="SUPERVISOR",
-            is_active=True
-        )
-        db_session.add(sup_user)
-        db_session.commit()
-        db_session.refresh(sup_user)
+    sup_user = User(
+        username=f"sup_billing_{txn_id.lower()}",
+        hashed_password="hashed_pw_test",
+        full_name="Billing Supervisor",
+        role="SUPERVISOR",
+        mandi_id=mandi.mandi_id,
+        is_active=True
+    )
+    db_session.add(sup_user)
+    db_session.commit()
+    db_session.refresh(sup_user)
 
     sup_jwt = create_access_jwt({
         "sub": str(sup_user.user_id),
         "user_id": sup_user.user_id,
         "username": sup_user.username,
-        "role": sup_user.role
+        "role": sup_user.role,
+        "mandi_id": sup_user.mandi_id
     })
 
     bill_resp = client.post(

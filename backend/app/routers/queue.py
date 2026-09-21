@@ -146,4 +146,4 @@ def check_vehicle_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Mandi with ID {mandi_id} not found."
         )
-    return get_vehicle_queue_status(mandi_id=mandi_id, transaction_id=transaction_id)
+    return get_vehicle_queue_status(mandi_id=mandi_id, transaction_id=transaction_id, db=db)

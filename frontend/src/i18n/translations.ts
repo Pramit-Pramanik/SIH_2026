@@ -62,6 +62,18 @@ export interface Translations {
     noMandiSimulation: string;
     noMandiReset: string;
     initializing: string;
+    txnPlaceholder: string;
+    load: string;
+    txnNotFound: string;
+    txnNotFoundServer: string;
+    txnNotFoundLocally: string;
+    txnFarmerMismatch: string;
+    txnMandiMismatch: string;
+    txnInvalidState: string;
+    networkError: string;
+    adminDataUnavailable: string;
+    demoFarmersError: string;
+    crop: string;
   };
   nav: {
     admin: string;
@@ -171,6 +183,10 @@ export interface Translations {
     plus: string;
     unlinkedProfileTitle: string;
     unlinkedProfileDesc: string;
+    appointmentCancelledSuccess: string;
+    invalidQuantityError: string;
+    ceilingExceededError: string;
+    slotCapacityExhaustedError: string;
   };
   gate: {
     title: string;
@@ -201,6 +217,17 @@ export interface Translations {
     farmerIdPlaceholder: string;
     slotIdPlaceholder: string;
     signaturePlaceholder: string;
+    entryVerifiedDetails: string;
+    passValidationFailed: string;
+    checkinRejected: string;
+    passVerifiedOnline: string;
+    passVerifiedOffline: string;
+    verificationFailed: string;
+    noTxnPrompt: string;
+    hmacFormatInvalid: string;
+    hmacMissing: string;
+    mandiMismatchError: string;
+    yieldCeilingExceeded: string;
   };
   quality: {
     title: string;
@@ -234,6 +261,14 @@ export interface Translations {
     confirmOverride: string;
     dcdqFormula: string;
     elapsedWaitMinutes: string;
+    cannotAssessState: string;
+    assessmentRejected: string;
+    assessmentFailed: string;
+    offlineRejected: string;
+    offlineApproved: string;
+    overrideFailed: string;
+    supervisorOverrideAuthorized: string;
+    preflightNotice: string;
   };
   queue: {
     title: string;
@@ -251,6 +286,15 @@ export interface Translations {
     emptyQueue: string;
     emptyQueueHint: string;
     dispatchedToWeighbridge: string;
+    offlineNotice: string;
+    fetchError: string;
+    simulationInjected: string;
+    simulationError: string;
+    resetSuccess: string;
+    resetError: string;
+    dispatchFailed: string;
+    offlineDispatched: string;
+    dispatchError: string;
   };
   weighbridge: {
     title: string;
@@ -279,6 +323,21 @@ export interface Translations {
     scaleInvariance: string;
     twoStepWeighment: string;
     unifiedWeighment: string;
+    vehicleMustBeRouted: string;
+    grossRejected: string;
+    grossRecordedProceedTare: string;
+    offlineGrossSaved: string;
+    errorGross: string;
+    grossMustBeCapturedBeforeTare: string;
+    tareRejected: string;
+    tareRecordedNetSettlement: string;
+    offlineTareSaved: string;
+    errorTare: string;
+    unifiedRejected: string;
+    unifiedCaptured: string;
+    offlineUnifiedSaved: string;
+    errorWeighment: string;
+    preflightNotice: string;
   };
   billing: {
     title: string;
@@ -322,6 +381,27 @@ export interface Translations {
     inspectorHmac: string;
     operatorHmac: string;
     enterOrVerifyHmac: string;
+    noCropSpecified: string;
+    mspNotFoundInMaster: string;
+    failedFetchCropMaster: string;
+    vehicleMustBeWeighedTare: string;
+    mspUnresolvedWait: string;
+    jformRejectedServer: string;
+    invoiceGeneratedDualSig: string;
+    offlineInvoiceSaved: string;
+    unknownBillingError: string;
+    failedGenerateDemoSigs: string;
+    couldNotObtainDemoSigs: string;
+    payoutStagingFailed: string;
+    payoutStagedSettled: string;
+    generateJformFirstDbt: string;
+    pfmsSimRejected: string;
+    dbtFailed: string;
+    preflightNotice: string;
+    mspRatePlaceholder: string;
+    resolvingMsp: string;
+    unresolved: string;
+    resolvingAuthoritativeMsp: string;
   };
   sync: {
     title: string;
@@ -375,6 +455,7 @@ export interface Translations {
     invStateTitle: string;
     invCryptoTitle: string;
     invWalTitle: string;
+    farmerSwitched: string;
   };
   receipt: {
     title: string;
@@ -512,6 +593,29 @@ export interface Translations {
     optimalMoistureUnit: string;
     maxMoistureUnit: string;
     perQuintal: string;
+    dataUnavailable: string;
+    showcaseInjected: string;
+    errorSimulating: string;
+    showcaseResetClean: string;
+    errorResetting: string;
+    failedCreateMandi: string;
+    mandiRegisteredSuccess: string;
+    errorCreatingMandi: string;
+    failedUpdateStatus: string;
+    errorUpdatingMandiStatus: string;
+    failedUpdateCommodity: string;
+    commodityMspUpdated: string;
+    errorUpdatingCrop: string;
+    confirmDeactivateCommodity: string;
+    failedDeactivateCommodity: string;
+    commodityDeactivatedSuccess: string;
+    errorDeactivatingCommodity: string;
+    failedGenerateSlots: string;
+    errorGeneratingSlots: string;
+    slotsGeneratedSuccess: string;
+    cropCodePlaceholder: string;
+    resetFailed: string;
+    simulationFailed: string;
   };
   journey: {
     modalTitle: string;
@@ -553,6 +657,11 @@ export interface Translations {
     stage11Desc: string;
     stage12Title: string;
     stage12Desc: string;
+    networkFailure: string;
+    stageError: string;
+    resetFailed: string;
+    preflightFailed: string;
+    stageFailed: string;
   };
   ussd: {
     simulatorTitle: string;
@@ -698,6 +807,18 @@ export const translations: Record<'en' | 'hi', Translations> = {
       noMandiSimulation: 'No operational mandi selected for simulation.',
       noMandiReset: 'No operational mandi selected for reset.',
       initializing: 'Initializing MandiQ System...',
+      txnPlaceholder: 'e.g. TXN-...',
+      load: 'Load',
+      txnNotFound: 'Authoritative transaction "{txnId}" not found.',
+      txnNotFoundServer: 'Authoritative transaction "{txnId}" not found on server.',
+      txnNotFoundLocally: 'Transaction "{txnId}" not found locally or remotely.',
+      txnFarmerMismatch: 'Transaction belongs to Farmer #{txnFarmerId}, but active session is Farmer #{sessionFarmerId}',
+      txnMandiMismatch: 'Transaction belongs to Mandi #{txnMandiId}, but selected Mandi is #{selectedMandiId}',
+      txnInvalidState: 'Transaction is in state \'{currentState}\', but required state is one of: [{allowedStates}]',
+      networkError: 'Network connection error. Please verify your connection.',
+      adminDataUnavailable: 'Admin data unavailable: {errors}',
+      demoFarmersError: 'Network error fetching demo farmers',
+      crop: 'Crop',
     },
     nav: {
       admin: 'Admin Hub',
@@ -807,6 +928,10 @@ export const translations: Record<'en' | 'hi', Translations> = {
       plus: 'Plus',
       unlinkedProfileTitle: 'Authenticated farmer profile is not linked',
       unlinkedProfileDesc: 'Your login account is not currently linked to an operational farmer profile in the APMC database. Slot reservations are disabled until a verified farmer profile is linked.',
+      appointmentCancelledSuccess: 'Scheduled delivery slot reservation cancelled successfully.',
+      invalidQuantityError: 'Please enter a valid procurement quantity in quintals greater than zero.',
+      ceilingExceededError: 'Specified quantity exceeds your remaining verified land ceiling ({remaining} Qtl).',
+      slotCapacityExhaustedError: 'The selected arrival slot capacity is exhausted. Please select another slot.',
     },
     gate: {
       title: 'APMC Inbound Gate Terminal',
@@ -837,6 +962,17 @@ export const translations: Record<'en' | 'hi', Translations> = {
       farmerIdPlaceholder: 'Farmer ID',
       slotIdPlaceholder: 'Slot ID',
       signaturePlaceholder: '64-character hex signature...',
+      entryVerifiedDetails: 'Gate Entry Verified for {farmerName} ({crop}). State: {state}. Authorized for mandi yard staging entry.',
+      passValidationFailed: 'Gate pass failed cryptographic signature or structural validation.',
+      checkinRejected: 'Gate check-in rejected.',
+      passVerifiedOnline: 'Gate Pass Verified! Authoritative cloud check-in synchronized and vehicle admitted.',
+      passVerifiedOffline: '[OFFLINE PROVISIONAL] Gate entry structurally verified and committed to IndexedDB WAL. Vehicle admitted under offline protocol.',
+      verificationFailed: 'Gate verification failed',
+      noTxnPrompt: 'No active transaction selected. Please select an active transaction from the queue or recent workflow, or enter a Transaction ID below:',
+      hmacFormatInvalid: 'Invalid HMAC signature format: expected 64-character hexadecimal digest, received {length} chars',
+      hmacMissing: 'Missing cryptographic token signature',
+      mandiMismatchError: 'Mandi Mismatch: Gate pass is registered for Mandi ID {passMandi}, but this terminal is Mandi ID {terminalMandi}',
+      yieldCeilingExceeded: 'Yield Ceiling Exceeded: {projected} qt would exceed farmer ceiling of {ceiling} qt',
     },
     quality: {
       title: 'Digital Quality Assaying Gate',
@@ -870,6 +1006,14 @@ export const translations: Record<'en' | 'hi', Translations> = {
       confirmOverride: 'Confirm Supervisor Quality Override',
       dcdqFormula: 'P(lot) = 0.35 * P_arrival + 0.30 * P_moisture + 0.20 * P_wait + 0.15 * P_demurrage',
       elapsedWaitMinutes: 'Elapsed Yard Wait Time',
+      cannotAssessState: 'Cannot assess quality: Transaction is in state \'{state}\'. Expected \'GATE_ENTRY_VERIFIED\'.',
+      assessmentRejected: 'Quality assessment rejected by server',
+      assessmentFailed: 'Quality assessment failed',
+      offlineRejected: '[OFFLINE WAL] Lot rejected: Moisture exceeds 17.0% limit. Stored locally.',
+      offlineApproved: '[OFFLINE WAL] Quality approved and stored to IndexedDB transactionsWAL. Will sync to Redis queue when online.',
+      overrideFailed: 'Supervisor override failed',
+      supervisorOverrideAuthorized: 'Supervisor Override Authorized: {message}',
+      preflightNotice: 'Please book a slot and complete Gate Entry verification before quality assaying.',
     },
     queue: {
       title: 'real time Yard Queue Dispatcher',
@@ -887,6 +1031,15 @@ export const translations: Record<'en' | 'hi', Translations> = {
       emptyQueue: 'Queue is clear. No vehicles awaiting weighment.',
       emptyQueueHint: 'Admitted vehicles from Quality Assaying will appear here.',
       dispatchedToWeighbridge: 'Vehicle dispatched to Weighbridge Scale.',
+      offlineNotice: 'Queue offline: displaying locally cached queue if available.',
+      fetchError: 'Network error fetching queue',
+      simulationInjected: 'Showcase traffic injected. Live DCDQ re-ordered queue.',
+      simulationError: 'Simulation error',
+      resetSuccess: 'Showcase queue reset to clean baseline.',
+      resetError: 'Reset error',
+      dispatchFailed: 'Dispatch failed',
+      offlineDispatched: '[OFFLINE LOCAL] Vehicle {txnId} popped from local queue and routed to weighbridge.',
+      dispatchError: 'Dispatch error',
     },
     weighbridge: {
       title: 'Electronic Weighbridge Scale',
@@ -915,6 +1068,21 @@ export const translations: Record<'en' | 'hi', Translations> = {
       scaleInvariance: 'Scale Reading Invariance & Calibration Verified',
       twoStepWeighment: 'Two-Step Weighment (Gross & Tare)',
       unifiedWeighment: 'Unified Weighment Telemetry',
+      vehicleMustBeRouted: 'Transaction is in state \'{state}\'. Vehicle must be routed to weighbridge before gross capture.',
+      grossRejected: 'Gross weighment rejected by server',
+      grossRecordedProceedTare: 'Gross weight recorded: {gross} qt. State: {state}. Now proceed to unload grain and capture tare weight.',
+      offlineGrossSaved: '[OFFLINE WAL] Gross weight ({gross} qt) saved to IndexedDB transactionsWAL.',
+      errorGross: 'Error capturing gross weight',
+      grossMustBeCapturedBeforeTare: 'Transaction is in state \'{state}\'. Gross weight must be captured before tare weight.',
+      tareRejected: 'Tare weighment rejected by server',
+      tareRecordedNetSettlement: 'Tare weight recorded: {tare} qt. Net Settlement: {net} qt. State: {state}. Ready for J-Form billing.',
+      offlineTareSaved: '[OFFLINE WAL] Tare weight ({tare} qt) saved to IndexedDB transactionsWAL. Net weight: {net} qt.',
+      errorTare: 'Error capturing tare weight',
+      unifiedRejected: 'Unified weighment rejected by server',
+      unifiedCaptured: 'Unified Weighment Captured: Gross={gross} qt, Tare={tare} qt, Net={net} qt. State: {state}.',
+      offlineUnifiedSaved: '[OFFLINE WAL] Unified weighment saved to IndexedDB transactionsWAL. Net weight: {net} qt.',
+      errorWeighment: 'Error capturing weighment',
+      preflightNotice: 'Please dispatch a vehicle from the Live Priority Queue to perform weighbridge scale capture.',
     },
     billing: {
       title: 'Procurement Billing & Direct Benefit Transfer',
@@ -958,6 +1126,27 @@ export const translations: Record<'en' | 'hi', Translations> = {
       inspectorHmac: 'Inspector HMAC-SHA256',
       operatorHmac: 'Operator HMAC-SHA256',
       enterOrVerifyHmac: 'Enter or auto-verify HMAC',
+      noCropSpecified: 'No crop commodity specified for active transaction.',
+      mspNotFoundInMaster: 'Authoritative MSP not found in Crop Master for \'{crop}\'.',
+      failedFetchCropMaster: 'Failed to fetch Crop Master directory.',
+      vehicleMustBeWeighedTare: 'Transaction is in state \'{state}\'. Vehicle must be in \'WEIGHED_TARE\' before generating J-Form.',
+      mspUnresolvedWait: 'Authoritative crop MSP is unresolved. Please wait for Crop Master resolution.',
+      jformRejectedServer: 'J-Form billing rejected by server',
+      invoiceGeneratedDualSig: 'Official J-Form invoice generated: ₹{amount}. State: {state}. Ready for dual-signature payout staging.',
+      offlineInvoiceSaved: '[OFFLINE WAL] J-Form invoice (₹{amount}) saved to IndexedDB transactionsWAL.',
+      unknownBillingError: 'Unknown billing error',
+      failedGenerateDemoSigs: 'Failed to generate demo signatures.',
+      couldNotObtainDemoSigs: 'Could not obtain demo signatures.',
+      payoutStagingFailed: 'Payout staging failed',
+      payoutStagedSettled: 'DBT Payout Staged & Settled! Block Hash: {hash}...',
+      generateJformFirstDbt: 'Cannot trigger DBT disbursement: Please generate a J-Form invoice first.',
+      pfmsSimRejected: 'PFMS Aadhaar Payment Rail simulation rejected.',
+      dbtFailed: 'DBT disbursement failed',
+      preflightNotice: 'Please complete weighbridge net settlement before generating J-Form billing.',
+      mspRatePlaceholder: 'Authoritative MSP rate',
+      resolvingMsp: 'Resolving MSP...',
+      unresolved: 'Unresolved',
+      resolvingAuthoritativeMsp: 'Resolving Authoritative MSP...',
     },
     sync: {
       title: 'Offline Write-Ahead Log (WAL) Sync',
@@ -1011,6 +1200,7 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invStateTitle: '3. Monotonic Lifecycle',
       invCryptoTitle: '4. HMAC-SHA256 Cryptography',
       invWalTitle: '5. Local-First Write-Ahead Log',
+      farmerSwitched: 'Active demo farmer switched to: {name} (Farmer ID: {id}).',
     },
     receipt: {
       title: 'Digital J-Form Joint-Sale Certificate',
@@ -1148,6 +1338,29 @@ export const translations: Record<'en' | 'hi', Translations> = {
       optimalMoistureUnit: 'Optimal Moisture %',
       maxMoistureUnit: 'Max Moisture Ceiling %',
       perQuintal: '/ Qt',
+      dataUnavailable: 'Admin data unavailable: {errors}',
+      showcaseInjected: 'Live showcase traffic successfully injected into database and priority queue!',
+      errorSimulating: 'Error simulating showcase traffic',
+      showcaseResetClean: 'Showcase database and priority queue cleanly reset!',
+      errorResetting: 'Error resetting showcase database',
+      failedCreateMandi: 'Failed to create mandi',
+      mandiRegisteredSuccess: 'APMC Mandi "{name}" registered successfully!',
+      errorCreatingMandi: 'Error creating mandi',
+      failedUpdateStatus: 'Failed to update status',
+      errorUpdatingMandiStatus: 'Error updating mandi status',
+      failedUpdateCommodity: 'Failed to update commodity',
+      commodityMspUpdated: 'Commodity "{name}" MSP updated to ₹{msp}/Qt!',
+      errorUpdatingCrop: 'Error updating crop',
+      confirmDeactivateCommodity: 'Are you sure you want to deactivate commodity "{name}"?',
+      failedDeactivateCommodity: 'Failed to deactivate commodity',
+      commodityDeactivatedSuccess: 'Commodity "{name}" deactivated successfully.',
+      errorDeactivatingCommodity: 'Error deactivating commodity',
+      failedGenerateSlots: 'Failed to generate slots',
+      errorGeneratingSlots: 'Error generating slots',
+      slotsGeneratedSuccess: 'Hourly procurement slots generated successfully for the next 7 days.',
+      cropCodePlaceholder: 'e.g., WHEAT_SHARBATI',
+      resetFailed: 'Reset failed',
+      simulationFailed: 'Simulation failed',
     },
     journey: {
       modalTitle: 'Automated End-to-End Procurement Journey',
@@ -1189,6 +1402,11 @@ export const translations: Record<'en' | 'hi', Translations> = {
       stage11Desc: 'Batch synchronization with monotonic server receive sequence and conflict resolution.',
       stage12Title: 'Live Queue Starvation Prevention',
       stage12Desc: 'Verify anti-starvation lambda bonus promotes low-priority grain before max wait threshold.',
+      networkFailure: 'Network failure occurred',
+      stageError: 'Unexpected error during stage execution',
+      resetFailed: 'Reset failed',
+      preflightFailed: 'Pre-flight reset failed',
+      stageFailed: 'Stage failed',
     },
     ussd: {
       simulatorTitle: 'Zero-Data Cellular Simulator',
@@ -1332,6 +1550,18 @@ export const translations: Record<'en' | 'hi', Translations> = {
       noMandiSimulation: 'सिमुलेशन के लिए कोई कार्यशील मंडी चयनित नहीं है।',
       noMandiReset: 'रीसेट के लिए कोई कार्यशील मंडी चयनित नहीं है।',
       initializing: 'मंडी-क्यू प्रणाली प्रारंभ हो रही है...',
+      txnPlaceholder: 'उदा. TXN-...',
+      load: 'लोड करें',
+      txnNotFound: 'प्राधिकृत लेनदेन "{txnId}" नहीं मिला।',
+      txnNotFoundServer: 'सर्वर पर प्राधिकृत लेनदेन "{txnId}" नहीं मिला।',
+      txnNotFoundLocally: 'लेनदेन "{txnId}" स्थानीय या रिमोट में नहीं मिला।',
+      txnFarmerMismatch: 'लेनदेन किसान #{txnFarmerId} का है, लेकिन सक्रिय सत्र किसान #{sessionFarmerId} का है',
+      txnMandiMismatch: 'लेनदेन मंडी #{txnMandiId} का है, लेकिन चयनित मंडी #{selectedMandiId} है',
+      txnInvalidState: 'लेनदेन \'{currentState}\' स्थिति में है, लेकिन आवश्यक स्थिति इनमें से एक होनी चाहिए: [{allowedStates}]',
+      networkError: 'नेटवर्क कनेक्शन त्रुटि। कृपया अपने कनेक्शन की पुष्टि करें।',
+      adminDataUnavailable: 'प्रशासन डेटा अनुपलब्ध: {errors}',
+      demoFarmersError: 'डेमो किसानों को प्राप्त करने में नेटवर्क त्रुटि',
+      crop: 'फसल',
     },
     nav: {
       admin: 'प्रशासन केंद्र',
@@ -1441,6 +1671,10 @@ export const translations: Record<'en' | 'hi', Translations> = {
       plus: 'जोड़ें',
       unlinkedProfileTitle: 'प्रमाणित किसान प्रोफ़ाइल लिंक नहीं है',
       unlinkedProfileDesc: 'आपका लॉगिन खाता वर्तमान में एपीएमसी डेटाबेस में किसी क्रियाशील किसान प्रोफ़ाइल से लिंक नहीं है। सत्यापित किसान प्रोफ़ाइल लिंक होने तक स्लॉट बुकिंग अक्षम है।',
+      appointmentCancelledSuccess: 'निर्धारित डिलीवरी स्लॉट आरक्षण सफलतापूर्वक रद्द कर दिया गया।',
+      invalidQuantityError: 'कृपया शून्य से अधिक क्विंटल में एक मान्य खरीद मात्रा दर्ज करें।',
+      ceilingExceededError: 'निर्दिष्ट मात्रा आपकी शेष सत्यापित भूमि सीमा ({remaining} क्विंटल) से अधिक है।',
+      slotCapacityExhaustedError: 'चयनित आगमन स्लॉट की क्षमता समाप्त हो गई है। कृपया दूसरा स्लॉट चुनें।',
     },
     gate: {
       title: 'एपीएमसी आवक गेट टर्मिनल',
@@ -1471,6 +1705,17 @@ export const translations: Record<'en' | 'hi', Translations> = {
       farmerIdPlaceholder: 'किसान आईडी',
       slotIdPlaceholder: 'स्लॉट आईडी',
       signaturePlaceholder: '64-वर्ण हेक्स हस्ताक्षर...',
+      entryVerifiedDetails: '{farmerName} ({crop}) के लिए गेट प्रवेश सत्यापित। स्थिति: {state}। मंडी यार्ड स्टेजिंग प्रवेश के लिए अधिकृत।',
+      passValidationFailed: 'गेट पास क्रिप्टोग्राफिक हस्ताक्षर या संरचनात्मक सत्यापन में विफल रहा।',
+      checkinRejected: 'गेट चेक-इन अस्वीकृत।',
+      passVerifiedOnline: 'गेट पास सत्यापित! प्राधिकृत क्लाउड चेक-इन सिंक हुआ और वाहन को प्रवेश दिया गया।',
+      passVerifiedOffline: '[ऑफलाइन अनंतिम] गेट प्रवेश संरचनात्मक रूप से सत्यापित और IndexedDB WAL में सहेजा गया। वाहन को ऑफलाइन प्रोटोकॉल के तहत प्रवेश दिया गया।',
+      verificationFailed: 'गेट सत्यापन विफल',
+      noTxnPrompt: 'कोई सक्रिय लेनदेन चयनित नहीं है। कृपया कतार या हालिया कार्यप्रवाह से एक सक्रिय लेनदेन चुनें, या नीचे लेनदेन आईडी दर्ज करें:',
+      hmacFormatInvalid: 'अमान्य HMAC हस्ताक्षर प्रारूप: 64-वर्ण हेक्साडेसिमल डाइजेस्ट अपेक्षित, {length} वर्ण प्राप्त हुए',
+      hmacMissing: 'क्रिप्टोग्राफिक टोकन हस्ताक्षर गायब है',
+      mandiMismatchError: 'मंडी बेमेल: गेट पास मंडी आईडी {passMandi} के लिए पंजीकृत है, लेकिन यह टर्मिनल मंडी आईडी {terminalMandi} है',
+      yieldCeilingExceeded: 'उत्पादन सीमा पार: {projected} क्विंटल किसान सीमा {ceiling} क्विंटल से अधिक होगा',
     },
     quality: {
       title: 'डिजिटल गुणवत्ता परीक्षण केंद्र',
@@ -1504,6 +1749,14 @@ export const translations: Record<'en' | 'hi', Translations> = {
       confirmOverride: 'पर्यवेक्षक गुणवत्ता ओवरराइड की पुष्टि करें',
       dcdqFormula: 'P(लॉट) = 0.35 * P_आगमन + 0.30 * P_नमी + 0.20 * P_प्रतीक्षा + 0.15 * P_विलंब',
       elapsedWaitMinutes: 'मंडी प्रांगण प्रतीक्षा समय',
+      cannotAssessState: 'गुणवत्ता का आकलन नहीं किया जा सकता: लेनदेन \'{state}\' स्थिति में है। \'GATE_ENTRY_VERIFIED\' अपेक्षित है।',
+      assessmentRejected: 'सर्वर द्वारा गुणवत्ता मूल्यांकन अस्वीकृत',
+      assessmentFailed: 'गुणवत्ता मूल्यांकन विफल',
+      offlineRejected: '[ऑफलाइन WAL] लॉट अस्वीकृत: नमी 17.0% सीमा से अधिक है। स्थानीय रूप से सहेजा गया।',
+      offlineApproved: '[ऑफलाइन WAL] गुणवत्ता स्वीकृत और IndexedDB transactionsWAL में संग्रहीत। ऑनलाइन होने पर Redis कतार में सिंक होगी।',
+      overrideFailed: 'पर्यवेक्षक अधिरोहण विफल',
+      supervisorOverrideAuthorized: 'पर्यवेक्षक अधिरोहण अधिकृत: {message}',
+      preflightNotice: 'कृपया गुणवत्ता परीक्षण से पहले स्लॉट बुक करें और गेट प्रवेश सत्यापन पूर्ण करें।',
     },
     queue: {
       title: 'वास्तविक समय मंडी कतार प्रेषण केंद्र',
@@ -1521,6 +1774,15 @@ export const translations: Record<'en' | 'hi', Translations> = {
       emptyQueue: 'कतार खाली है। कोई वाहन प्रतीक्षारत नहीं है।',
       emptyQueueHint: 'गुणवत्ता परीक्षण से पास होने वाले वाहन स्वतः यहाँ प्रदर्शित होंगे।',
       dispatchedToWeighbridge: 'वाहन को धर्मकांटा तौल हेतु प्रेषित किया गया।',
+      offlineNotice: 'कतार ऑफलाइन है: यदि उपलब्ध हो तो स्थानीय रूप से कैश्ड कतार प्रदर्शित हो रही है।',
+      fetchError: 'कतार प्राप्त करने में नेटवर्क त्रुटि',
+      simulationInjected: 'शोकेस ट्रैफ़िक प्रविष्ट किया गया। लाइव DCDQ ने कतार को पुन: व्यवस्थित किया।',
+      simulationError: 'सिमुलेशन त्रुटि',
+      resetSuccess: 'शोकेस कतार स्वच्छ बेसलाइन पर रीसेट की गई।',
+      resetError: 'रीसेट त्रुटि',
+      dispatchFailed: 'प्रेषण विफल',
+      offlineDispatched: '[ऑफलाइन स्थानीय] वाहन {txnId} स्थानीय कतार से निकाला गया और धर्मकांटे पर भेजा गया।',
+      dispatchError: 'प्रेषण त्रुटि',
     },
     weighbridge: {
       title: 'इलेक्ट्रॉनिक धर्मकांटा तौल स्टेशन',
@@ -1549,6 +1811,21 @@ export const translations: Record<'en' | 'hi', Translations> = {
       scaleInvariance: 'कांटा रीडिंग स्थिरता एवं अंशांकन सत्यापित',
       twoStepWeighment: 'दो-चरणीय तौल (सकल एवं खाली)',
       unifiedWeighment: 'एकीकृत तौल टेलीमेट्री',
+      vehicleMustBeRouted: 'लेनदेन \'{state}\' स्थिति में है। सकल वजन दर्ज करने से पहले वाहन को धर्मकांटे पर भेजा जाना चाहिए।',
+      grossRejected: 'सर्वर द्वारा सकल वजन अस्वीकृत',
+      grossRecordedProceedTare: 'सकल वजन दर्ज: {gross} क्विंटल। स्थिति: {state}। अब अनाज खाली करने और खाली वजन लेने के लिए आगे बढ़ें।',
+      offlineGrossSaved: '[ऑफलाइन WAL] सकल वजन ({gross} क्विंटल) IndexedDB transactionsWAL में सहेजा गया।',
+      errorGross: 'सकल वजन दर्ज करने में त्रुटि',
+      grossMustBeCapturedBeforeTare: 'लेनदेन \'{state}\' स्थिति में है। खाली वजन से पहले सकल वजन दर्ज किया जाना चाहिए।',
+      tareRejected: 'सर्वर द्वारा खाली वजन अस्वीकृत',
+      tareRecordedNetSettlement: 'खाली वजन दर्ज: {tare} क्विंटल। शुद्ध निपटान: {net} क्विंटल। स्थिति: {state}। जे-फॉर्म बिलिंग के लिए तैयार।',
+      offlineTareSaved: '[ऑफलाइन WAL] खाली वजन ({tare} क्विंटल) IndexedDB transactionsWAL में सहेजा गया। शुद्ध वजन: {net} क्विंटल।',
+      errorTare: 'खाली वजन दर्ज करने में त्रुटि',
+      unifiedRejected: 'सर्वर द्वारा एकीकृत वजन अस्वीकृत',
+      unifiedCaptured: 'एकीकृत वजन दर्ज: सकल={gross} क्विंटल, खाली={tare} क्विंटल, शुद्ध={net} क्विंटल। स्थिति: {state}।',
+      offlineUnifiedSaved: '[ऑफलाइन WAL] एकीकृत वजन IndexedDB transactionsWAL में सहेजा गया। शुद्ध वजन: {net} क्विंटल।',
+      errorWeighment: 'वजन दर्ज करने में त्रुटि',
+      preflightNotice: 'धर्मकांटा माप दर्ज करने के लिए कृपया लाइव प्राथमिकता कतार से एक वाहन प्रेषित करें।',
     },
     billing: {
       title: 'खरीद बिलिंग एवं प्रत्यक्ष लाभ अंतरण (DBT)',
@@ -1592,6 +1869,27 @@ export const translations: Record<'en' | 'hi', Translations> = {
       inspectorHmac: 'निरीक्षक एचएमएसी-एसएचए256',
       operatorHmac: 'ऑपरेटर एचएमएसी-एसएचए256',
       enterOrVerifyHmac: 'एचएमएसी दर्ज करें या सत्यापित करें',
+      noCropSpecified: 'सक्रिय लेनदेन के लिए कोई फसल वस्तु निर्दिष्ट नहीं है।',
+      mspNotFoundInMaster: '\'{crop}\' के लिए फसल मास्टर में प्राधिकृत एमएसपी नहीं मिला।',
+      failedFetchCropMaster: 'फसल मास्टर निर्देशिका प्राप्त करने में विफल।',
+      vehicleMustBeWeighedTare: 'लेनदेन \'{state}\' स्थिति में है। जे-फॉर्म उत्पन्न करने से पहले वाहन \'WEIGHED_TARE\' स्थिति में होना चाहिए।',
+      mspUnresolvedWait: 'प्राधिकृत फसल एमएसपी अनसुलझा है। कृपया फसल मास्टर समाधान की प्रतीक्षा करें।',
+      jformRejectedServer: 'सर्वर द्वारा जे-फॉर्म बिलिंग अस्वीकृत',
+      invoiceGeneratedDualSig: 'आधिकारिक जे-फॉर्म चालान उत्पन्न: ₹{amount}। स्थिति: {state}। दोहरे हस्ताक्षर भुगतान स्टेजिंग के लिए तैयार।',
+      offlineInvoiceSaved: '[ऑफलाइन WAL] जे-फॉर्म चालान (₹{amount}) IndexedDB transactionsWAL में सहेजा गया।',
+      unknownBillingError: 'अज्ञात बिलिंग त्रुटि',
+      failedGenerateDemoSigs: 'डेमो हस्ताक्षर उत्पन्न करने में विफल।',
+      couldNotObtainDemoSigs: 'डेमो हस्ताक्षर प्राप्त नहीं किए जा सके।',
+      payoutStagingFailed: 'भुगतान स्टेजिंग विफल',
+      payoutStagedSettled: 'डीबीटी भुगतान स्टेज और निपटारा पूर्ण! ब्लॉक हैश: {hash}...',
+      generateJformFirstDbt: 'डीबीटी संवितरण शुरू नहीं किया जा सकता: कृपया पहले जे-फॉर्म चालान उत्पन्न करें।',
+      pfmsSimRejected: 'पीएफएमएस आधार भुगतान रेल सिमुलेशन अस्वीकृत।',
+      dbtFailed: 'डीबीटी संवितरण विफल',
+      preflightNotice: 'जे-फॉर्म बिलिंग उत्पन्न करने से पहले कृपया धर्मकांटा शुद्ध निपटान पूर्ण करें।',
+      mspRatePlaceholder: 'प्राधिकृत एमएसपी दर',
+      resolvingMsp: 'एमएसपी समाधान हो रहा है...',
+      unresolved: 'अनसुलझा',
+      resolvingAuthoritativeMsp: 'प्राधिकृत एमएसपी समाधान हो रहा है...',
     },
     sync: {
       title: 'ऑफलाइन डब्ल्यूएएल सिंक मॉनिटर',
@@ -1645,6 +1943,7 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invStateTitle: '3. एकदिशीय जीवनचक्र',
       invCryptoTitle: '4. HMAC-SHA256 क्रिप्टोग्राफी',
       invWalTitle: '5. स्थानीय-प्रथम राइट-अहेड लॉग',
+      farmerSwitched: 'सक्रिय डेमो किसान बदला गया: {name} (किसान आईडी: {id})।',
     },
     receipt: {
       title: 'डिजिटल जे-फॉर्म खरीद रसीद',
@@ -1782,6 +2081,29 @@ export const translations: Record<'en' | 'hi', Translations> = {
       optimalMoistureUnit: 'इष्टतम नमी %',
       maxMoistureUnit: 'अधिकतम नमी सीमा %',
       perQuintal: '/ क्विंटल',
+      dataUnavailable: 'प्रशासन डेटा अनुपलब्ध: {errors}',
+      showcaseInjected: 'लाइव शोकेस ट्रैफ़िक सफलतापूर्वक डेटाबेस और प्राथमिकता कतार में प्रविष्ट किया गया!',
+      errorSimulating: 'शोकेस ट्रैफ़िक सिमुलेशन में त्रुटि',
+      showcaseResetClean: 'शोकेस डेटाबेस और प्राथमिकता कतार स्वच्छ रूप से रीसेट किए गए!',
+      errorResetting: 'शोकेस डेटाबेस रीसेट करने में त्रुटि',
+      failedCreateMandi: 'मंडी बनाने में विफल',
+      mandiRegisteredSuccess: 'एपीएमसी मंडी "{name}" सफलतापूर्वक पंजीकृत की गई!',
+      errorCreatingMandi: 'मंडी बनाने में त्रुटि',
+      failedUpdateStatus: 'स्थिति अद्यतन करने में विफल',
+      errorUpdatingMandiStatus: 'मंडी स्थिति अद्यतन करने में त्रुटि',
+      failedUpdateCommodity: 'वस्तु अद्यतन करने में विफल',
+      commodityMspUpdated: 'वस्तु "{name}" एमएसपी ₹{msp}/क्विंटल पर अद्यतन किया गया!',
+      errorUpdatingCrop: 'फसल अद्यतन करने में त्रुटि',
+      confirmDeactivateCommodity: 'क्या आप वाकई वस्तु "{name}" को निष्क्रिय करना चाहते हैं?',
+      failedDeactivateCommodity: 'वस्तु निष्क्रिय करने में विफल',
+      commodityDeactivatedSuccess: 'वस्तु "{name}" सफलतापूर्वक निष्क्रिय कर दी गई।',
+      errorDeactivatingCommodity: 'वस्तु निष्क्रिय करने में त्रुटि',
+      failedGenerateSlots: 'स्लॉट उत्पन्न करने में विफल',
+      errorGeneratingSlots: 'स्लॉट उत्पन्न करने में त्रुटि',
+      slotsGeneratedSuccess: 'अगले 7 दिनों के लिए प्रति घंटा खरीद स्लॉट सफलतापूर्वक उत्पन्न किए गए।',
+      cropCodePlaceholder: 'उदा. WHEAT_SHARBATI',
+      resetFailed: 'रीसेट विफल',
+      simulationFailed: 'सिमुलेशन विफल',
     },
     journey: {
       modalTitle: 'स्वचालित एंड-टू-एंड खरीद यात्रा',
@@ -1823,6 +2145,11 @@ export const translations: Record<'en' | 'hi', Translations> = {
       stage11Desc: 'सर्वर मोनोटोनिक अनुक्रम और संघर्ष समाधान के साथ बैच सिंक्रोनाइज़ेशन।',
       stage12Title: 'सक्रिय कतार भुखमरी रोकथाम (Anti-Starvation)',
       stage12Desc: 'सत्यापन कि एंटी-स्टारवेशन लैम्ब्डा बोनस अधिकतम प्रतीक्षा से पूर्व कम-प्राथमिकता अनाज को आगे बढ़ाता है।',
+      networkFailure: 'नेटवर्क विफलता हुई',
+      stageError: 'चरण निष्पादन के दौरान अप्रत्याशित त्रुटि',
+      resetFailed: 'रीसेट विफल',
+      preflightFailed: 'प्री-फ़्लाइट रीसेट विफल',
+      stageFailed: 'चरण विफल',
     },
     ussd: {
       simulatorTitle: 'जीरो-डेटा सेल्युलर सिम्युलेटर',

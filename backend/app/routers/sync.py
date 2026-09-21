@@ -89,7 +89,7 @@ async def sync_offline_wal(
             detail=f"Schema validation error: {exc}"
         )
 
-    response = process_wal_batch_sync(db=db, request=sync_req)
+    response = process_wal_batch_sync(db=db, request=sync_req, current_user=current_user)
     return response
 
 @router.get(

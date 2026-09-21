@@ -153,8 +153,8 @@ def test_modal_12_stage_full_journey(client: TestClient, db_session: Session):
                 {
                     "client_mutation_id": f"mut-wal-test-{txn_id}",
                     "transaction_id": txn_id,
-                    "farmer_id": 1,
-                    "mandi_id": 1,
+                    "farmer_id": farmer_id,
+                    "mandi_id": mandi_id,
                     "current_state": "PAYMENT_SETTLED",
                     "payload": {"status": "SYNCED_E2E"},
                     "hmac_signature": "SIG_E2E_WAL_REPLAY",

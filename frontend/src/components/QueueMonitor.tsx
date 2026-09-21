@@ -70,7 +70,7 @@ export function QueueMonitor({
             setQueueLastUpdated(new Date());
             setQueueConnectionState('connected');
           } else {
-            let errMsg = `Queue service returned error (HTTP ${resp.status})`;
+            let errMsg = t('queue.fetchError');
             try {
               const errJson = await resp.json();
               if (errJson.detail) errMsg = errJson.detail;
@@ -80,17 +80,17 @@ export function QueueMonitor({
           }
         } else {
           setQueueConnectionState('offline');
-          setQueueError('Queue offline: displaying locally cached queue if available.');
+          setQueueError(t('queue.offlineNotice'));
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Network error fetching queue';
+        const msg = err instanceof Error ? err.message : t('queue.fetchError');
         setQueueError(msg);
         setQueueConnectionState('error');
       } finally {
         if (!silent) setIsLoading(false);
       }
     },
-    [mandiId, effectiveOnline]
+    [mandiId, effectiveOnline, t]
   );
 
   // Auto-polling effect (every 3 seconds when live feed is active)
@@ -140,16 +140,16 @@ export function QueueMonitor({
         headers: getAuthHeaders(),
         body: JSON.stringify({ mandi_id: Number(mandiId) }),
       });
-      const data = await parseResponseSafe(resp, 'Simulation injection failed');
+      const data = await parseResponseSafe(resp, t('queue.simulationError'));
       setDispatchResult({
         transaction_id: 'SHOWCASE-SIMULATION',
         priority_score: 0,
         new_state: 'INJECTED',
-        message: data.message || 'Showcase traffic injected. Live DCDQ re-ordered queue.',
+        message: data.message || t('queue.simulationInjected'),
       });
       await fetchQueue(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Simulation error';
+      const msg = err instanceof Error ? err.message : t('queue.simulationError');
       setDispatchResult({
         transaction_id: '',
         priority_score: 0,
@@ -180,16 +180,16 @@ export function QueueMonitor({
         headers: getAuthHeaders(),
         body: JSON.stringify({ mandi_id: Number(mandiId) }),
       });
-      const data = await parseResponseSafe(resp, 'Reset failed');
+      const data = await parseResponseSafe(resp, t('queue.resetError'));
       setDispatchResult({
         transaction_id: 'RESET',
         priority_score: 0,
         new_state: 'RESET_SUCCESS',
-        message: data.message || 'Showcase queue reset to clean baseline.',
+        message: data.message || t('queue.resetSuccess'),
       });
       await fetchQueue(false);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Reset error';
+      const msg = err instanceof Error ? err.message : t('queue.resetError');
       setDispatchResult({
         transaction_id: '',
         priority_score: 0,
@@ -214,7 +214,7 @@ export function QueueMonitor({
 
         const data = await resp.json();
         if (!resp.ok) {
-          throw new Error(data.detail || 'Dispatch failed');
+          throw new Error(data.detail || t('queue.dispatchFailed'));
         }
 
         setDispatchResult(data);
@@ -232,7 +232,7 @@ export function QueueMonitor({
           transaction_id: top.transaction_id,
           priority_score: top.priority_score,
           new_state: 'ROUTED_TO_WEIGHBRIDGE',
-          message: `[OFFLINE LOCAL] Vehicle ${top.transaction_id} popped from local queue and routed to weighbridge.`,
+          message: t('queue.offlineDispatched', { txnId: top.transaction_id }),
         });
         window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: top.transaction_id, current_state: 'ROUTED_TO_WEIGHBRIDGE' } }));
         setQueueItems((prev) => prev.slice(1));
@@ -240,7 +240,7 @@ export function QueueMonitor({
         onDispatchVehicle?.(top);
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Dispatch error';
+      const msg = err instanceof Error ? err.message : t('queue.dispatchError');
       setDispatchResult({
         transaction_id: '',
         priority_score: 0,
@@ -293,7 +293,7 @@ export function QueueMonitor({
             }`}
           >
             {isLivePolling ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{isLivePolling ? t('common.online') : 'Paused'}</span>
+            <span>{isLivePolling ? t('common.online') : t('common.pending')}</span>
           </button>
 
           {/* Refresh Button */}
@@ -382,7 +382,7 @@ export function QueueMonitor({
             onClick={() => fetchQueue(false)}
             className="px-2.5 py-1 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-lg font-bold text-[11px] cursor-pointer"
           >
-            Retry
+            {t('common.refresh')}
           </button>
         </div>
       )}

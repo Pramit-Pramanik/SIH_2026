@@ -11,6 +11,7 @@ from backend.app.core.security import (
     get_payout_secret_key,
     compute_role_signature
 )
+from backend.app.models.crop import Crop
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
@@ -61,6 +62,17 @@ def seed_test_lot(db: Session, farmer_ceiling: float = 150.0, slot_cap: float = 
         registered_crop_type="Wheat (HD-2967)",
         production_ceiling_qt=farmer_ceiling
     )
+    crop = db.query(Crop).filter(Crop.crop_name == "Wheat (HD-2967)").first()
+    if not crop:
+        crop = Crop(
+            crop_name="Wheat (HD-2967)",
+            crop_code="WHEAT_HD2967",
+            category="CEREAL",
+            msp_price_inr=2275.00,
+            is_active=True
+        )
+        db.add(crop)
+
     db.add_all([mandi, farmer])
     db.commit()
     db.refresh(mandi)

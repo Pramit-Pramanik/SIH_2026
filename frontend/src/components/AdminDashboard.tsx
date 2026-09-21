@@ -233,7 +233,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
           .map(result => result.reason instanceof Error ? result.reason.message : 'request failed');
         if (failures.length) {
-          setFeedback({ type: 'error', message: `Admin data unavailable: ${failures.join('; ')}` });
+          setFeedback({ type: 'error', message: t('admin.dataUnavailable') });
         }
       } else {
         setFeedback({ type: 'error', message: t('common.adminBackendUnavailable') });
@@ -281,17 +281,17 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         headers: getHeaders(),
         body: JSON.stringify({ mandi_id: Number(targetMandi) }),
       });
-      const data = await parseResponseSafe(res, 'Simulation injection failed');
+      const data = await parseResponseSafe(res, t('admin.simulationFailed'));
       setFeedback({
         type: 'success',
-        message: data.message || 'Live showcase traffic successfully injected into database and priority queue!',
+        message: data.message || t('admin.showcaseInjected'),
       });
       setIsBackendHealthy(true);
       window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
       window.dispatchEvent(new CustomEvent('mandiq:transactions-changed'));
       await refreshAll();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error simulating showcase traffic';
+      const msg = err instanceof Error ? err.message : t('admin.errorSimulating');
       setFeedback({
         type: 'error',
         message: msg,
@@ -316,17 +316,17 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         headers: getHeaders(),
         body: JSON.stringify({ mandi_id: Number(targetMandi) }),
       });
-      const data = await parseResponseSafe(res, 'Reset failed');
+      const data = await parseResponseSafe(res, t('admin.resetFailed'));
       setFeedback({
         type: 'success',
-        message: data.message || 'Showcase database and priority queue cleanly reset!',
+        message: data.message || t('admin.showcaseResetClean'),
       });
       setIsBackendHealthy(true);
       window.dispatchEvent(new CustomEvent('mandiq:queue-updated'));
       window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { action: 'reset' } }));
       await refreshAll();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Error resetting showcase database';
+      const msg = err instanceof Error ? err.message : t('admin.errorResetting');
       setFeedback({
         type: 'error',
         message: msg,
@@ -349,19 +349,19 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || 'Failed to create mandi');
+        throw new Error(err.detail || t('admin.failedCreateMandi'));
       }
       const newMandi: Mandi = await res.json();
       // Immediate local state update before full reload
       setMandis((prev) => [...prev, newMandi]);
-      setFeedback({ type: 'success', message: `APMC Mandi "${newMandi.name}" registered successfully!` });
+      setFeedback({ type: 'success', message: t('admin.mandiRegisteredSuccess', { name: newMandi.name }) });
       setIsMandiModalOpen(false);
       setMandiForm({ name: '', district: '', state: '', daily_capacity_qt: 10000, active_weighbridges: 2, is_operational: true });
       // Broadcast system-wide event so Header, FarmerPortal, and stations update immediately
       window.dispatchEvent(new CustomEvent('mandiq:mandis-changed', { detail: newMandi }));
       loadMandis();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error creating mandi' });
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : t('admin.errorCreatingMandi') });
     }
   };
 
@@ -380,13 +380,13 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           is_operational: !m.is_operational,
         }),
       });
-      if (!res.ok) throw new Error('Failed to update status');
+      if (!res.ok) throw new Error(t('admin.failedUpdateStatus'));
       const updatedMandi: Mandi = await res.json();
       setMandis((prev) => prev.map((item) => item.mandi_id === updatedMandi.mandi_id ? updatedMandi : item));
       window.dispatchEvent(new CustomEvent('mandiq:mandis-changed', { detail: updatedMandi }));
       loadMandis();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error updating mandi status' });
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : t('admin.errorUpdatingMandiStatus') });
     }
   };
 
@@ -402,7 +402,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
       });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.detail || 'Failed to update commodity');
+        throw new Error(err.detail || t('admin.failedUpdateCommodity'));
       }
       const savedCrop: Crop = await res.json();
       // Immediate local state update before full reload
@@ -415,31 +415,31 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         }
         return [...prev, savedCrop];
       });
-      setFeedback({ type: 'success', message: `Commodity "${savedCrop.crop_name}" MSP updated to ₹${savedCrop.msp_price_inr}/Qt!` });
+      setFeedback({ type: 'success', message: t('admin.commodityMspUpdated', { name: savedCrop.crop_name, msp: String(savedCrop.msp_price_inr) }) });
       setIsCropModalOpen(false);
       setEditingCrop(null);
       // Broadcast system-wide event so billing and portals resolve authoritative MSP immediately
       window.dispatchEvent(new CustomEvent('mandiq:crops-changed', { detail: savedCrop }));
       loadCrops();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error updating crop' });
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : t('admin.errorUpdatingCrop') });
     }
   };
 
   const handleDeleteCrop = async (c: Crop) => {
-    if (!confirm(`Are you sure you want to deactivate commodity "${c.crop_name}"?`)) return;
+    if (!confirm(t('admin.confirmDeactivateCommodity', { name: c.crop_name }))) return;
     try {
       const res = await fetch(`/api/v1/admin/crops/${c.crop_id}`, {
         method: 'DELETE',
         headers: getHeaders(),
       });
-      if (!res.ok) throw new Error('Failed to deactivate commodity');
+      if (!res.ok) throw new Error(t('admin.failedDeactivateCommodity'));
       setCrops((prev) => prev.filter((item) => item.crop_id !== c.crop_id));
-      setFeedback({ type: 'success', message: `Commodity "${c.crop_name}" deactivated successfully.` });
+      setFeedback({ type: 'success', message: t('admin.commodityDeactivatedSuccess', { name: c.crop_name }) });
       window.dispatchEvent(new CustomEvent('mandiq:crops-changed', { detail: c }));
       loadCrops();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error deactivating commodity' });
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : t('admin.errorDeactivatingCommodity') });
     }
   };
 
@@ -457,12 +457,12 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
           hourly_capacity_qt: 500.0,
         }),
       });
-      if (!res.ok) throw new Error('Failed to generate slots');
-      const data = await res.json();
-      setFeedback({ type: 'success', message: data.message });
+      if (!res.ok) throw new Error(t('admin.failedGenerateSlots'));
+      await res.json();
+      setFeedback({ type: 'success', message: t('admin.slotsGeneratedSuccess') });
       loadSlots();
     } catch (err: unknown) {
-      setFeedback({ type: 'error', message: err instanceof Error ? err.message : 'Error generating slots' });
+      setFeedback({ type: 'error', message: err instanceof Error ? err.message : t('admin.errorGeneratingSlots') });
     }
   };
 
@@ -1158,7 +1158,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <input
                     type="text"
                     required
-                    placeholder="WHEAT_SHARBATI"
+                    placeholder={t('admin.cropCodePlaceholder')}
                     value={cropForm.crop_code}
                     onChange={(e) => setCropForm({ ...cropForm, crop_code: e.target.value.toUpperCase() })}
                     className="w-full h-10 px-3 rounded-xl bg-slate-50 border border-slate-300 font-mono font-bold text-slate-900 uppercase"

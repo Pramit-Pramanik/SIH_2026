@@ -144,12 +144,15 @@ def test_supervisor_authorized_msp_override_with_audit(client: TestClient, db_se
     from backend.app.models.user import User
     from backend.app.core.security import create_access_jwt
 
-    # Create supervisor user
+    mandi, farmer, slot, txn_id = setup_weighed_lot_environment(db_session, net_weight=40.0)
+
+    # Create supervisor user scoped to the mandi
     supervisor = User(
         username="mandi_supervisor_bill",
         full_name="Mandi Supervisor",
         hashed_password="dummy_hashed_password",
         role="SUPERVISOR",
+        mandi_id=mandi.mandi_id,
         is_active=True
     )
     db_session.add(supervisor)
@@ -160,10 +163,9 @@ def test_supervisor_authorized_msp_override_with_audit(client: TestClient, db_se
         "sub": str(supervisor.user_id),
         "user_id": supervisor.user_id,
         "username": supervisor.username,
-        "role": supervisor.role
+        "role": supervisor.role,
+        "mandi_id": supervisor.mandi_id
     })
-
-    mandi, farmer, slot, txn_id = setup_weighed_lot_environment(db_session, net_weight=40.0)
 
     resp = client.post(
         "/api/v1/billing/generate",

@@ -16,6 +16,8 @@ from backend.app.dependencies.get_db import get_db
 from backend.app.dependencies.auth import get_current_user
 from backend.app.models.user import User
 from backend.app.models.farmer import Farmer
+from backend.app.models.mandi import Mandi
+from backend.app.models.log import ProcurementLog
 from backend.app.schemas.auth import (
     UserLoginRequest,
     TokenResponse,
@@ -67,6 +69,9 @@ class OtpChallengeStore:
 
             if challenge["used"]:
                 return False, "This OTP has already been used. Please request a new OTP."
+
+            if challenge["role"].upper() != role.upper():
+                return False, f"Role mismatch: OTP was requested for role '{challenge['role']}', cannot verify for '{role}'."
 
             if challenge["otp"] != otp.strip():
                 return False, "Invalid OTP code entered."
@@ -143,35 +148,42 @@ def lookup_farmer_by_mobile(
     farmer = db.query(Farmer).filter(Farmer.mobile_number == clean_num).first()
 
     if farmer:
-        name_hi = "बलविंदर सिंह" if "bal" in farmer.name.lower() else ("रमेश कुमार" if "ramesh" in farmer.name.lower() else "सुरेश पटेल")
-        pass_id = "08234" if farmer.farmer_id == 2 else f"{farmer.farmer_id:05d}"
-        last4 = clean_num[-4:] if len(clean_num) >= 4 else "5201"
+        pass_id = f"{farmer.farmer_id:05d}"
+        last4 = clean_num[-4:] if len(clean_num) >= 4 else "0000"
+
+        # Resolve mandi dynamically from farmer's procurement records or default operational mandi
+        latest_log = db.query(ProcurementLog).filter(ProcurementLog.farmer_id == farmer.farmer_id).order_by(ProcurementLog.created_at.desc()).first()
+        mandi = None
+        if latest_log and latest_log.mandi_id:
+            mandi = db.query(Mandi).filter(Mandi.mandi_id == latest_log.mandi_id).first()
+        if not mandi:
+            mandi = db.query(Mandi).filter(Mandi.is_operational == True).order_by(Mandi.mandi_id.asc()).first()
+
         return FarmerMobileLookupResponse(
             found=True,
             farmer_id=farmer.farmer_id,
             name=farmer.name,
-            name_hi=name_hi,
+            name_hi=None,
             mandi_pass_id=pass_id,
             mobile_number=clean_num,
             aadhaar_masked=f"XXXX-XXXX-{last4}",
             land_area_hectares=float(farmer.land_area_hectares),
             registered_crop_type=farmer.registered_crop_type,
-            mandi_name="Khanna Grain Mandi"
+            mandi_name=mandi.name if mandi else None
         )
 
-    # Showcase fallback: Balwinder Singh (ID: 08234)
-    last4 = clean_num[-4:] if len(clean_num) >= 4 else "5201"
+    # Strictly return found=False with NO fabricated identity data for unknown mobiles
     return FarmerMobileLookupResponse(
-        found=True,
-        farmer_id=2,
-        name="Balwinder Singh",
-        name_hi="बलविंदर सिंह",
-        mandi_pass_id="08234",
+        found=False,
+        farmer_id=None,
+        name=None,
+        name_hi=None,
+        mandi_pass_id=None,
         mobile_number=clean_num,
-        aadhaar_masked=f"XXXX-XXXX-{last4}",
-        land_area_hectares=4.0,
-        registered_crop_type="Wheat (HD-2967)",
-        mandi_name="Khanna Grain Mandi"
+        aadhaar_masked=None,
+        land_area_hectares=None,
+        registered_crop_type=None,
+        mandi_name=None
     )
 
 
@@ -186,16 +198,39 @@ def send_login_otp(
     db: Session = Depends(get_db)
 ) -> MobileOtpResponse:
     clean_num = payload.mobile_number.replace("+91", "").strip().replace(" ", "").replace("-", "")
+    target_role = payload.role.upper()
+
+    if target_role not in ("FARMER", "TRADER", "OFFICIAL"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid authentication role '{payload.role}'."
+        )
+
     farmer_lookup = lookup_farmer_by_mobile(clean_num, db)
 
+    # For FARMER role, reject unknown mobile numbers with clear controlled error
+    if target_role == "FARMER" and not farmer_lookup.found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Mobile number +91 {clean_num} is not registered as an authorized farmer. Please register with your local APMC Mandi."
+        )
+
+    # For TRADER / OFFICIAL, only registered identities may receive OTP
+    if target_role in ("TRADER", "OFFICIAL") and not farmer_lookup.found:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Mobile number +91 {clean_num} is not registered in the system."
+        )
+
     settings = get_settings()
-    # In prototype/demo mode, issue deterministic demo OTP '123456'; in production generate secure 6-digit random code
+    # In prototype/demo mode, issue deterministic demo OTP '123456' for registered demo mobiles;
+    # in production generate secure 6-digit random code
     otp_code = "123456" if settings.ENVIRONMENT != "production" else f"{secrets.randbelow(900000) + 100000}"
     ttl = 300
 
     _otp_store.set_challenge(
         mobile_number=clean_num,
-        role=payload.role.upper(),
+        role=target_role,
         otp=otp_code,
         ttl_seconds=ttl
     )
@@ -207,7 +242,7 @@ def send_login_otp(
         mobile_number=clean_num,
         otp_demo=otp_code,
         expires_in_seconds=ttl,
-        linked_pass=farmer_lookup.model_dump()
+        linked_pass=farmer_lookup.model_dump() if farmer_lookup.found else None
     )
 
 
@@ -254,11 +289,16 @@ def verify_login_otp(
             detail="Authentication failed: Default operational user not initialized."
         )
 
-    # Customize display name if farmer has custom profile
+    # For FARMER role, verify real registered farmer profile exists
     farmer = db.query(Farmer).filter(Farmer.mobile_number == clean_num).first()
     farmer_id_override = None
-    if farmer and target_role == "FARMER":
-        user.full_name = f"{farmer.name} (Pass ID: 08234)"
+    if target_role == "FARMER":
+        if not farmer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Authentication failed: No registered farmer found for mobile number +91 {clean_num}."
+            )
+        user.full_name = f"{farmer.name} (Pass ID: {farmer.farmer_id:05d})"
         farmer_id_override = farmer.farmer_id
 
     return create_user_token(user, farmer_id=farmer_id_override)

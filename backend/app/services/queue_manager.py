@@ -2,7 +2,18 @@ import threading
 import time
 from typing import Dict, List, Optional, Tuple
 import redis
+from fastapi import HTTPException, status
 from backend.app.core.config import get_settings
+
+
+class QueueDataIntegrityError(HTTPException):
+    """
+    Controlled domain error raised when a transaction entering, waiting in,
+    or being reconstructed in the priority queue is missing mandatory authoritative data
+    (such as crop moisture, net weight / quantity, or arrival timestamp).
+    """
+    def __init__(self, detail: str):
+        super().__init__(status_code=status.HTTP_409_CONFLICT, detail=detail)
 
 
 class InMemoryQueueRegistry:
@@ -161,6 +172,23 @@ class QueueManager:
                 pass
 
         return _in_memory_queue.zadd(queue_key, transaction_id, priority_score, arrival_ts)
+
+    def push(
+        self,
+        mandi_id: int,
+        transaction_id: str,
+        priority_score: float,
+        arrival_ts: Optional[float] = None
+    ) -> int:
+        """
+        Alias for enqueue() supporting standard queue operation naming.
+        """
+        return self.enqueue(
+            mandi_id=mandi_id,
+            transaction_id=transaction_id,
+            priority_score=priority_score,
+            arrival_ts=arrival_ts
+        )
 
     def update_score(self, mandi_id: int, transaction_id: str, new_score: float) -> bool:
         """

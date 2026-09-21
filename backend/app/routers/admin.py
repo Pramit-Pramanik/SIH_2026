@@ -621,6 +621,8 @@ def simulate_showcase_traffic(
                 total_payout_inr=item["payout"],
                 current_state=item["state"],
                 token_signature=tok_sig,
+                is_showcase=True,
+                demo_run_id=f"SHOWCASE_SIM_{mandi_id}",
                 payout_block_hash=hashlib.sha256(f"PFMS_{item['transaction_id']}".encode()).hexdigest() if item["payout"] else None
             )
             db.add(log)
@@ -632,6 +634,8 @@ def simulate_showcase_traffic(
             existing.total_payout_inr = item["payout"]
             existing.current_state = item["state"]
             existing.token_signature = tok_sig
+            existing.is_showcase = True
+            existing.demo_run_id = f"SHOWCASE_SIM_{mandi_id}"
             if item["payout"]:
                 existing.payout_block_hash = hashlib.sha256(f"PFMS_{item['transaction_id']}".encode()).hexdigest()
 
@@ -703,9 +707,6 @@ def reset_showcase_database(
             )
     elif admin_user and getattr(admin_user, "mandi_id", None) is not None:
         mandi_id = admin_user.mandi_id
-    else:
-        first_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
-        mandi_id = first_mandi.mandi_id if first_mandi else None
 
     raw_farmer = payload.get("farmer_id") if payload else None
     farmer_id = None
@@ -721,22 +722,5 @@ def reset_showcase_database(
             )
 
     result = reset_showcase_data(db, mandi_id=mandi_id, farmer_id=farmer_id)
-
-    if mandi_id is not None:
-        target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
-        if not target_mandi:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Mandi with ID {mandi_id} not found."
-            )
-
-    if farmer_id is not None:
-        target_farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
-        if not target_farmer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Farmer with ID {farmer_id} not found."
-            )
-
     return result
 

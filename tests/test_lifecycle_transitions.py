@@ -111,6 +111,7 @@ def test_wal_rejects_uninitialized_transaction_skipping_to_advanced_state(
     """
     Verifies that an offline client cannot forge an uninitialized transaction
     directly into WEIGHED_TARE or PAYMENT_SETTLED via WAL batch sync.
+    Under AUD-002, nonexistent transactions are rejected with HTTP 404.
     """
     mandi, farmer = setup_lifecycle_test_env(db_session)
 
@@ -130,14 +131,9 @@ def test_wal_rejects_uninitialized_transaction_skipping_to_advanced_state(
     }
 
     res = client.post("/api/v1/sync/wal", json=bad_batch)
-    assert res.status_code == 200
+    assert res.status_code == 404
     data = res.json()
-    assert data["success"] is False
-    assert data["synced_count"] == 0
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Lifecycle transition rejected" in result["message"]
-    assert "prohibited by procurement lifecycle" in result["message"]
+    assert "Cannot synchronize mutation: authoritative transaction does not exist." in data["detail"]
 
     # Invariant: No ledger record created
     log = db_session.query(ProcurementLog).filter_by(transaction_id="TXN-FORGED-001").first()
@@ -186,14 +182,10 @@ def test_wal_rejects_backward_state_regression(client: TestClient, db_session: S
     }
 
     res = client.post("/api/v1/sync/wal", json=regress_batch)
-    assert res.status_code == 200
+    assert res.status_code == 409
     data = res.json()
-    assert data["success"] is False
-    assert data["synced_count"] == 0
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Cannot revert procurement state" in result["message"]
-    assert "cannot regress to earlier state 'GATE_ENTRY_VERIFIED'" in result["message"]
+    assert "Cannot revert procurement state" in data["detail"]
+    assert "cannot regress to earlier state 'GATE_ENTRY_VERIFIED'" in data["detail"]
 
     # Verify ledger state is preserved unmodified
     db_session.refresh(log)
@@ -236,12 +228,9 @@ def test_wal_rejects_premature_state_skip(client: TestClient, db_session: Sessio
     }
 
     res = client.post("/api/v1/sync/wal", json=skip_batch)
-    assert res.status_code == 200
+    assert res.status_code == 409
     data = res.json()
-    assert data["success"] is False
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Cannot skip required prior state" in result["message"]
+    assert "Cannot skip required prior state" in data["detail"]
 
     db_session.refresh(log)
     assert log.current_state == "SLOT_BOOKED"
@@ -309,13 +298,10 @@ def test_wal_enforces_yield_ceiling_invariant(client: TestClient, db_session: Se
     }
 
     res = client.post("/api/v1/sync/wal", json=ceiling_batch)
-    assert res.status_code == 200
+    assert res.status_code == 409
     data = res.json()
-    assert data["success"] is False
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Farmer yield ceiling exceeded" in result["message"]
-    assert "110.00 qt total" in result["message"]
+    assert "Farmer yield ceiling exceeded" in data["detail"]
+    assert "110.00 qt total" in data["detail"]
 
     # Verify state remains WEIGHED_GROSS, net weight not applied
     db_session.refresh(current_log)
@@ -364,11 +350,9 @@ def test_wal_enforces_moisture_threshold_and_supervisor_override(
     }
 
     res1 = client.post("/api/v1/sync/wal", json=unauthorized_qa)
-    assert res1.status_code == 200
+    assert res1.status_code == 409
     data1 = res1.json()
-    assert data1["success"] is False
-    assert data1["results"][0]["status"] == "REJECTED"
-    assert "Crop moisture 18.5% exceeds maximum allowable threshold" in data1["results"][0]["message"]
+    assert "Crop moisture 18.5% exceeds maximum allowable threshold" in data1["detail"]
 
     # High moisture (18.5%) WITH supervisor override -> ACCEPTED
     authorized_qa = {
@@ -412,6 +396,7 @@ def test_wal_enforces_tare_less_than_gross(client: TestClient, db_session: Sessi
         transaction_id="TXN-TARE-PHYS-001",
         farmer_id=farmer.farmer_id,
         mandi_id=mandi.mandi_id,
+        crop_type="WHEAT",
         scheduled_date=date.today(),
         current_state="WEIGHED_GROSS",
         gross_weight_qt=50.00,
@@ -438,12 +423,9 @@ def test_wal_enforces_tare_less_than_gross(client: TestClient, db_session: Sessi
     }
 
     res = client.post("/api/v1/sync/wal", json=bad_tare_batch)
-    assert res.status_code == 200
+    assert res.status_code == 422
     data = res.json()
-    assert data["success"] is False
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Tare weight (55.00 qt) cannot be greater than or equal to Gross weight (50.00 qt)" in result["message"]
+    assert "cannot be greater than or equal to Gross weight" in data["detail"]
 
     db_session.refresh(log)
     assert log.current_state == "WEIGHED_GROSS"
@@ -453,8 +435,22 @@ def test_wal_full_valid_lifecycle_progression(client: TestClient, db_session: Se
     """
     Verifies that a valid ordered sequence of offline WAL mutations correctly advances
     through the entire lifecycle from initial check-in to tare weighment.
+    Under AUD-002, the transaction must be pre-created authoritatively (e.g. online booking).
     """
     mandi, farmer = setup_lifecycle_test_env(db_session)
+
+    # Pre-seed authoritative transaction from online booking
+    init_log = ProcurementLog(
+        transaction_id="TXN-PROG-001",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        crop_type="WHEAT",
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="SIG_PROG_INIT"
+    )
+    db_session.add(init_log)
+    db_session.commit()
 
     progression_batch = {
         "mutations": [

@@ -528,14 +528,13 @@ export const E2EJourneyModal: React.FC<E2EJourneyModalProps> = ({ isOpen, onClos
             method: 'POST',
             body: JSON.stringify({
               transaction_id: txnId,
-              rate_per_qt: 2275.0,
               deductions_inr: 0.0,
-              inspector_notes: 'FAQ Grade A Wheat verified',
+              inspector_notes: 'FAQ Grade lot verified',
             }),
           }),
         data => ({
           'Invoice Reference': data.invoice_id,
-          'Crop Commodity': `${data.crop_type ?? 'Wheat'} (FAQ Standard)`,
+          'Crop Commodity': `${data.crop_type ?? 'Active Crop'} (FAQ Standard)`,
           'Agmarknet MSP': `₹${Number(data.rate_per_qt).toLocaleString('en-IN')}/qt`,
           'Invoice Total': `₹${Number(data.invoice_amount_inr).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
         })

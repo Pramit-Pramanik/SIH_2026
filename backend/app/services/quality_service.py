@@ -26,7 +26,7 @@ from backend.app.services.dcdq_engine import (
     calculate_dcdq_priority_score,
     is_quality_rejected
 )
-from backend.app.services.queue_manager import queue_manager
+from backend.app.services.queue_manager import queue_manager, QueueDataIntegrityError
 
 
 def assess_quality_and_enqueue(
@@ -121,9 +121,8 @@ def assess_quality_and_enqueue(
     else:
         elapsed_wait_minutes = max(0.0, (now_ts - actual_ts) / 60.0)
 
-
-    # Resolve payload weight for demurrage fallback
-    payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 0.0
+    # Resolve payload weight for demurrage
+    payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
 
     score = calculate_dcdq_priority_score(
         planned_arrival_ts=planned_ts,
@@ -208,14 +207,37 @@ def override_quality_and_admit(
 
     # Recompute priority score and enqueue
     now_ts = time.time()
-    payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 0.0
-    moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
+    payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
+
+    if log.crop_moisture_pct is None:
+        raise QueueDataIntegrityError(
+            f"Queue integrity violation: Transaction '{request.transaction_id}' is missing moisture data for queue admission."
+        )
+    moisture = float(log.crop_moisture_pct)
+
+    # Derive original arrival timestamp
+    meta_ts = queue_manager.get_arrival_timestamp(log.mandi_id, log.transaction_id)
+    if meta_ts is not None:
+        arr_ts = meta_ts
+    elif log.created_at is not None:
+        arr_ts = (
+            log.created_at.replace(tzinfo=timezone.utc).timestamp()
+            if log.created_at.tzinfo is None
+            else log.created_at.timestamp()
+        )
+    else:
+        arr_ts = now_ts
+
+    elapsed_wait_minutes = max(0.0, (now_ts - arr_ts) / 60.0)
+
+    # Maintain appointment adherence baseline
+    planned_ts = arr_ts
 
     score = calculate_dcdq_priority_score(
-        planned_arrival_ts=now_ts,
-        actual_arrival_ts=now_ts,
+        planned_arrival_ts=planned_ts,
+        actual_arrival_ts=arr_ts,
         moisture_pct=moisture,
-        elapsed_wait_minutes=0.0,
+        elapsed_wait_minutes=elapsed_wait_minutes,
         demurrage_score=payload_qt / 10.0
     )
 
@@ -223,7 +245,7 @@ def override_quality_and_admit(
         mandi_id=log.mandi_id,
         transaction_id=log.transaction_id,
         priority_score=score,
-        arrival_ts=now_ts
+        arrival_ts=arr_ts
     )
 
     rank = queue_manager.get_rank(log.mandi_id, log.transaction_id)
@@ -271,11 +293,30 @@ def rerank_mandi_queue(
 
         arr_ts = queue_manager.get_arrival_timestamp(mandi_id, txn_id)
         if arr_ts is None:
-            arr_ts = log.created_at.timestamp() if log.created_at else now_ts
+            if log.created_at is not None:
+                arr_ts = (
+                    log.created_at.replace(tzinfo=timezone.utc).timestamp()
+                    if log.created_at.tzinfo is None
+                    else log.created_at.timestamp()
+                )
+            else:
+                raise QueueDataIntegrityError(
+                    f"Queue integrity violation: Transaction '{txn_id}' is missing arrival timestamp during queue rerank."
+                )
+
+        if log.crop_moisture_pct is None:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{txn_id}' is missing crop moisture percentage during queue rerank."
+            )
+        moisture = float(log.crop_moisture_pct)
+
+        if log.net_weight_qt is None:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{txn_id}' is missing net quantity during queue rerank."
+            )
+        payload_qt = float(log.net_weight_qt)
 
         elapsed_wait_min = max(0.0, (now_ts - arr_ts) / 60.0)
-        moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
-        payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
 
         # Maintain appointment adherence baseline
         planned_ts = arr_ts
@@ -292,39 +333,123 @@ def rerank_mandi_queue(
     return queue_manager.get_queue(mandi_id)
 
 
+def reconstruct_mandi_queue(
+    db: Session,
+    mandi_id: int,
+    current_time: Optional[float] = None
+) -> List[Tuple[str, float]]:
+    """
+    Authoritatively reconstructs active mandi vehicle queue from persistent database state.
+    Strictly derives DCDQ priority scores from persisted transaction data:
+    - net_weight_qt (quantity)
+    - crop_moisture_pct (moisture)
+    - created_at / arrival metadata (arrival timestamp and wait time)
+    - slot start time (planned arrival)
+
+    NEVER fabricates or invents fallback values (such as 50.0 qt, 14.0% moisture, 15 min wait).
+    Raises QueueDataIntegrityError if required data is missing.
+    """
+    approved_logs = db.query(ProcurementLog).filter(
+        ProcurementLog.mandi_id == mandi_id,
+        ProcurementLog.current_state == "QUALITY_APPROVED"
+    ).all()
+
+    if not approved_logs:
+        queue_manager.clear(mandi_id)
+        return []
+
+    now_ts = current_time if current_time is not None else time.time()
+
+    # Authoritatively calculate DCDQ score and enqueue every approved vehicle
+    for log in approved_logs:
+        if log.crop_moisture_pct is None:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{log.transaction_id}' in state '{log.current_state}' "
+                "is missing authoritative crop moisture percentage."
+            )
+        moisture = float(log.crop_moisture_pct)
+        if moisture > 17.0:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{log.transaction_id}' has excessive moisture "
+                f"({moisture:.2f}% > 17.00%) while in 'QUALITY_APPROVED' state."
+            )
+
+        if log.net_weight_qt is None:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{log.transaction_id}' in state '{log.current_state}' "
+                "is missing authoritative net quantity/weight in quintals."
+            )
+        payload_qt = float(log.net_weight_qt)
+        if payload_qt < 0.0:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{log.transaction_id}' has negative net weight "
+                f"({payload_qt:.2f} qt)."
+            )
+
+        # Derive arrival timestamp strictly from queue metadata or persisted created_at
+        meta_ts = queue_manager.get_arrival_timestamp(mandi_id, log.transaction_id)
+        if meta_ts is not None:
+            arr_ts = meta_ts
+        elif log.created_at is not None:
+            arr_ts = (
+                log.created_at.replace(tzinfo=timezone.utc).timestamp()
+                if log.created_at.tzinfo is None
+                else log.created_at.timestamp()
+            )
+        else:
+            raise QueueDataIntegrityError(
+                f"Queue integrity violation: Transaction '{log.transaction_id}' is missing persisted "
+                "creation/arrival timestamp."
+            )
+
+        # Maintain appointment adherence baseline
+        planned_ts = arr_ts
+
+        # Elapsed wait is derived dynamically from actual elapsed time, NEVER hardcoded
+        elapsed_wait_min = max(0.0, (now_ts - arr_ts) / 60.0)
+
+        score = calculate_dcdq_priority_score(
+            planned_arrival_ts=planned_ts,
+            actual_arrival_ts=arr_ts,
+            moisture_pct=moisture,
+            elapsed_wait_minutes=elapsed_wait_min,
+            demurrage_score=payload_qt / 10.0
+        )
+
+        queue_manager.enqueue(
+            mandi_id=mandi_id,
+            transaction_id=log.transaction_id,
+            priority_score=score,
+            arrival_ts=arr_ts
+        )
+
+    # Clean up any transactions from queue that are no longer QUALITY_APPROVED
+    valid_txn_ids = {log.transaction_id for log in approved_logs}
+    current_q = queue_manager.get_queue(mandi_id)
+    for q_txn_id, _ in current_q:
+        if q_txn_id not in valid_txn_ids:
+            queue_manager.remove(mandi_id, q_txn_id)
+
+    return queue_manager.get_queue(mandi_id)
+
+
 def get_mandi_queue_list(
     db: Session,
     mandi_id: int
 ) -> QueueListResponse:
     """
     Retrieves the full active queue for a mandi, ranked in descending DCDQ priority order.
+    Reconstructs queue from database if not initialized in active memory/Redis.
     """
     raw_queue = queue_manager.get_queue(mandi_id)
     if not raw_queue:
         # Check database for active QUALITY_APPROVED transactions waiting for weighbridge
-        approved_logs = db.query(ProcurementLog).filter(
+        approved_count = db.query(ProcurementLog).filter(
             ProcurementLog.mandi_id == mandi_id,
             ProcurementLog.current_state == "QUALITY_APPROVED"
-        ).all()
-        if approved_logs:
-            now_ts = time.time()
-            for log in approved_logs:
-                payload_qt = float(log.net_weight_qt) if log.net_weight_qt is not None else 50.0
-                moisture = float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else 14.0
-                score = calculate_dcdq_priority_score(
-                    planned_arrival_ts=now_ts,
-                    actual_arrival_ts=now_ts,
-                    moisture_pct=moisture,
-                    elapsed_wait_minutes=15.0,
-                    demurrage_score=payload_qt / 10.0
-                )
-                queue_manager.enqueue(
-                    mandi_id=log.mandi_id,
-                    transaction_id=log.transaction_id,
-                    priority_score=score,
-                    arrival_ts=now_ts
-                )
-            raw_queue = queue_manager.get_queue(mandi_id)
+        ).count()
+        if approved_count > 0:
+            raw_queue = reconstruct_mandi_queue(db=db, mandi_id=mandi_id)
 
     if not raw_queue:
         return QueueListResponse(mandi_id=mandi_id, total_vehicles=0, items=[])
@@ -338,14 +463,21 @@ def get_mandi_queue_list(
     items = []
     for rank, (txn_id, score) in enumerate(raw_queue, start=1):
         log = log_map.get(txn_id)
+        arr_ts = queue_manager.get_arrival_timestamp(mandi_id, txn_id)
+        if arr_ts is None and log and log.created_at:
+            arr_ts = (
+                log.created_at.replace(tzinfo=timezone.utc).timestamp()
+                if log.created_at.tzinfo is None
+                else log.created_at.timestamp()
+            )
         items.append(
             QueueItem(
                 rank=rank,
                 transaction_id=txn_id,
                 priority_score=score,
                 farmer_id=log.farmer_id if log else None,
-                quantity_qt=float(log.net_weight_qt) if log and log.net_weight_qt else None,
-                arrival_timestamp=None
+                quantity_qt=float(log.net_weight_qt) if log and log.net_weight_qt is not None else None,
+                arrival_timestamp=arr_ts
             )
         )
 
@@ -378,7 +510,7 @@ def dispatch_top_vehicle_from_queue(
     dispatched = queue_manager.dispatch_pop(mandi_id)
     if not dispatched:
         # Check if database has active QUALITY_APPROVED transactions
-        get_mandi_queue_list(db, mandi_id)
+        reconstruct_mandi_queue(db, mandi_id)
         dispatched = queue_manager.dispatch_pop(mandi_id)
 
     if not dispatched:
@@ -421,9 +553,14 @@ def dispatch_top_vehicle_from_queue(
         db.refresh(log)
     except Exception:
         db.rollback()
-        # Restore vehicle to Redis ZSET queue so it is not dropped
+        # Restore vehicle to queue with original arrival timestamp
         try:
-            queue_manager.enqueue(mandi_id, txn_id, score, time.time())
+            restore_arr = (
+                log.created_at.replace(tzinfo=timezone.utc).timestamp()
+                if log.created_at and log.created_at.tzinfo is None
+                else (log.created_at.timestamp() if log.created_at else time.time())
+            )
+            queue_manager.enqueue(mandi_id, txn_id, score, restore_arr)
         except Exception:
             pass
         raise
@@ -440,12 +577,18 @@ def dispatch_top_vehicle_from_queue(
 
 def get_vehicle_queue_status(
     mandi_id: int,
-    transaction_id: str
+    transaction_id: str,
+    db: Optional[Session] = None
 ) -> QueueStatusResponse:
     """
     Queries current position and priority score of a vehicle in the active mandi queue.
+    If queue is uninitialized in memory/Redis and db is provided, reconstructs queue authoritatively.
     """
     score = queue_manager.get_score(mandi_id, transaction_id)
+    if score is None and db is not None:
+        reconstruct_mandi_queue(db, mandi_id)
+        score = queue_manager.get_score(mandi_id, transaction_id)
+
     if score is None:
         return QueueStatusResponse(
             mandi_id=mandi_id,

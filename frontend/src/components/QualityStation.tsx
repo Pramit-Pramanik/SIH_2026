@@ -82,7 +82,7 @@ export function QualityStation({
     if (!isReadyForAssessment && !isAlreadyApproved) {
       setResult({
         status: 'ERROR',
-        message: `Cannot assess quality: Transaction is in state '${activeTransaction.current_state}'. Expected 'GATE_ENTRY_VERIFIED'.`,
+        message: t('quality.cannotAssessState', { state: activeTransaction.current_state }),
       });
       return;
     }
@@ -114,7 +114,7 @@ export function QualityStation({
 
         const data = await resp.json();
         if (!resp.ok) {
-          throw new Error(data.detail || 'Quality assessment rejected by server');
+          throw new Error(data.detail || t('quality.assessmentRejected'));
         }
 
         // Commit synced state to local IndexedDB mirror
@@ -161,8 +161,8 @@ export function QualityStation({
         priority_score: isRejected ? 0.0 : 85.5,
         queue_position: isRejected ? undefined : 1,
         message: isRejected
-          ? '[OFFLINE WAL] Lot rejected: Moisture exceeds 17.0% limit. Stored locally.'
-          : '[OFFLINE WAL] Quality approved and stored to IndexedDB transactionsWAL. Will sync to Redis queue when online.',
+          ? t('quality.offlineRejected')
+          : t('quality.offlineApproved'),
       });
 
       if (!isRejected) {
@@ -171,7 +171,7 @@ export function QualityStation({
       }
       await refreshTransaction();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Quality assessment failed';
+      const msg = err instanceof Error ? err.message : t('quality.assessmentFailed');
       setResult({ status: 'ERROR', message: msg });
     } finally {
       setIsSubmitting(false);
@@ -207,7 +207,7 @@ export function QualityStation({
 
         const data = await resp.json();
         if (!resp.ok) {
-          throw new Error(data.detail || 'Supervisor override failed');
+          throw new Error(data.detail || t('quality.overrideFailed'));
         }
 
         await executeLocalTransactionMutation({
@@ -226,7 +226,7 @@ export function QualityStation({
           status: 'QUALITY_APPROVED',
           priority_score: data.priority_score,
           queue_position: data.queue_position,
-          message: `Supervisor Override Authorized: ${data.message}`,
+          message: t('quality.supervisorOverrideAuthorized', { message: data.message }),
         });
         setShowOverride(false);
         onQualityAssessed?.(targetTxnId);
@@ -261,7 +261,7 @@ export function QualityStation({
       onQualityApproved?.(targetTxnId);
       await refreshTransaction();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Supervisor override failed';
+      const msg = err instanceof Error ? err.message : t('quality.overrideFailed');
       setResult({ status: 'ERROR', message: msg });
     } finally {
       setIsOverriding(false);
@@ -280,7 +280,7 @@ export function QualityStation({
             <span>{t('quality.title')} — {t('common.noData')}</span>
           </div>
           <p className="text-slate-600">
-            {resolutionError || 'Please book a slot and complete Gate Entry verification before quality assaying.'}
+            {resolutionStatus === 'NOT_FOUND' ? t('common.txnNotFound', { txnId: targetTxnId || activeTxnId || '' }) : resolutionStatus === 'FARMER_MISMATCH' ? t('common.txnFarmerMismatch') : resolutionStatus === 'MANDI_MISMATCH' ? t('common.txnMandiMismatch') : (resolutionError || t('quality.preflightNotice'))}
           </p>
         </div>
         <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
@@ -288,7 +288,7 @@ export function QualityStation({
             type="text"
             value={manualTxnInput}
             onChange={(e) => setManualTxnInput(e.target.value.trim())}
-            placeholder="e.g. TXN-..."
+            placeholder={t('common.txnPlaceholder')}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-600 focus:outline-none"
           />
           <button
@@ -298,7 +298,7 @@ export function QualityStation({
             disabled={!manualTxnInput}
             className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
           >
-            Load
+            {t('common.load')}
           </button>
         </div>
       </div>
@@ -336,8 +336,7 @@ export function QualityStation({
             <div>
               <span className="font-bold">{t('common.status')}: </span>
               <span>
-                Transaction is currently in state <code className="font-mono font-bold bg-white px-1 py-0.5 rounded border border-amber-200">{activeTransaction.current_state}</code>.
-                {isAlreadyApproved ? ' Quality assaying has already been approved.' : ' Entry check-in required before quality assaying.'}
+                {t('quality.cannotAssessState', { state: activeTransaction.current_state })}
               </span>
             </div>
           </div>

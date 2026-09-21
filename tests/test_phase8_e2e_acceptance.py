@@ -10,6 +10,7 @@ from backend.app.core.security import (
     compute_role_signature,
     compute_payout_block_hash
 )
+from backend.app.models.crop import Crop
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
 from backend.app.models.slot import ProcurementSlot
@@ -59,6 +60,18 @@ def setup_mandi_and_farmer(
     else:
         farmer.production_ceiling_qt = production_ceiling_qt
         farmer.cumulative_booked_qt = 0.00
+
+    crop = db.query(Crop).filter(Crop.crop_name == crop_type).first()
+    if not crop:
+        crop = Crop(
+            crop_name=crop_type,
+            crop_code="CROP_" + crop_type.upper()[:10],
+            category="CEREAL",
+            msp_price_inr=2275.00,
+            is_active=True
+        )
+        db.add(crop)
+
     db.commit()
     db.refresh(farmer)
 

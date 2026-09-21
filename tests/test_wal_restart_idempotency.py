@@ -37,6 +37,21 @@ def test_wal_idempotency_survives_process_restart(client: TestClient, db_session
         ]
     }
 
+    # Authoritative transaction seeded online via booking
+    from datetime import date, datetime, timezone
+    initial_log = ProcurementLog(
+        transaction_id=txn_id,
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="AUTH_INIT_SIG",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db_session.add(initial_log)
+    db_session.commit()
+
     # Step 1: Initial mutation submission
     resp1 = client.post("/api/v1/sync/wal", json=batch_payload)
     assert resp1.status_code == 200

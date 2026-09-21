@@ -11,6 +11,11 @@ Verifies:
 import time
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import Session
+
+from backend.app.models.farmer import Farmer
+from backend.app.models.mandi import Mandi
+from backend.app.services.auth_service import ensure_default_operational_users
 from backend.app.routers.auth import _otp_store
 
 
@@ -19,6 +24,31 @@ def clear_otp_store():
     _otp_store.clear()
     yield
     _otp_store.clear()
+
+
+@pytest.fixture(autouse=True)
+def seed_test_farmer(db_session: Session):
+    ensure_default_operational_users(db_session)
+    mandi = Mandi(
+        name="Sehore APMC Mandi",
+        district="Sehore",
+        state="Madhya Pradesh",
+        daily_capacity_qt=10000.0,
+        active_weighbridges=3,
+        is_operational=True
+    )
+    farmer = Farmer(
+        name="Ramesh Kumar",
+        aadhaar_hash="aadhaar_hash_otp_001",
+        mobile_number="9876543210",
+        bank_account_hash="bank_hash_otp_001",
+        ifsc_code="SBIN0001040",
+        land_area_hectares=12.5,
+        registered_crop_type="Wheat (HD-2967)",
+        production_ceiling_qt=600.0
+    )
+    db_session.add_all([mandi, farmer])
+    db_session.commit()
 
 
 def test_otp_happy_path_demo_mode(client: TestClient):
@@ -117,3 +147,26 @@ def test_otp_rejected_on_reuse(client: TestClient):
     })
     assert res_2.status_code == 400
     assert "already been used" in res_2.json()["detail"].lower()
+
+
+def test_otp_rejected_for_unknown_mobile(client: TestClient):
+    """Verifies that requesting OTP for an unknown mobile is rejected with 404."""
+    unknown_mobile = "9999999999"
+    res = client.post("/api/v1/auth/send-otp", json={"mobile_number": unknown_mobile, "role": "FARMER"})
+    assert res.status_code == 404
+    assert "not registered" in res.json()["detail"].lower()
+
+
+def test_otp_rejected_on_role_mismatch(client: TestClient):
+    """Verifies that requesting OTP as FARMER and attempting verify as TRADER is rejected with 400."""
+    mobile = "9876543210"
+    res_send = client.post("/api/v1/auth/send-otp", json={"mobile_number": mobile, "role": "FARMER"})
+    assert res_send.status_code == 200
+
+    res_mismatch = client.post("/api/v1/auth/verify-otp", json={
+        "mobile_number": mobile,
+        "otp": "123456",
+        "role": "TRADER"
+    })
+    assert res_mismatch.status_code == 400
+    assert "role mismatch" in res_mismatch.json()["detail"].lower()

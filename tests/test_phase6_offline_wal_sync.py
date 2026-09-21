@@ -53,6 +53,21 @@ def test_offline_wal_batch_sync_success(client: TestClient, db_session: Session)
     """
     mandi, farmer = setup_sync_test_environment(db_session)
 
+    # Pre-seed authoritative transaction from online booking
+    from datetime import datetime, timezone
+    init_log = ProcurementLog(
+        transaction_id="TXN-SYNC-001",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="AUTH_SIG_SYNC_INIT",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db_session.add(init_log)
+    db_session.commit()
+
     batch_payload = {
         "mutations": [
             {
@@ -113,6 +128,21 @@ def test_gzip_batch_sync_compression_and_size_ac008(client: TestClient, db_sessi
     """
     mandi, farmer = setup_sync_test_environment(db_session)
 
+    # Pre-seed 50 authoritative transactions from online booking
+    from datetime import datetime, timezone
+    for i in range(50):
+        db_session.add(ProcurementLog(
+            transaction_id=f"TXN-GZIP-{i:03d}",
+            farmer_id=farmer.farmer_id,
+            mandi_id=mandi.mandi_id,
+            scheduled_date=date.today(),
+            current_state="SLOT_BOOKED",
+            token_signature=f"AUTH_SIG_GZIP_{i}",
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
+        ))
+    db_session.commit()
+
     # Construct 50 records as specified in AC-008
     records = []
     for i in range(50):
@@ -163,6 +193,20 @@ def test_idempotent_replay_duplicate_mutation(client: TestClient, db_session: Se
     client_mutation_id does NOT create duplicate records or re-execute transitions.
     """
     mandi, farmer = setup_sync_test_environment(db_session)
+
+    # Pre-seed authoritative transaction
+    from datetime import datetime, timezone
+    db_session.add(ProcurementLog(
+        transaction_id="TXN-IDEMP-001",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="AUTH_SIG_IDEMP",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    ))
+    db_session.commit()
 
     mutation = {
         "client_mutation_id": "mut-idempotency-test-01",
@@ -316,17 +360,49 @@ def test_out_of_order_older_sequence_does_not_overwrite():
 def test_sync_preserves_database_invariants(client: TestClient, db_session: Session):
     """
     Verifies that invalid mutations are cleanly REJECTED:
-    - Non-existent farmer / foreign key violation
-    - Invalid procurement state
-    - Negative weights
-    - Moisture out of bounds (> 100%)
+    - Non-existent transaction -> 404
+    - Farmer ID mismatch on existing transaction -> 403
+    - Invalid procurement state -> 422
+    - Negative weights -> 422
+    - Moisture out of bounds (> 100%) -> 422
     """
     mandi, farmer = setup_sync_test_environment(db_session)
 
-    # 1. Non-existent farmer
-    res_fk = client.post("/api/v1/sync/wal", json={
+    # 1. Non-existent transaction -> 404
+    res_nonexistent = client.post("/api/v1/sync/wal", json={
         "mutations": [{
             "client_mutation_id": "mut-bad-fk-001",
+            "transaction_id": "TXN-NONEXISTENT-999",
+            "farmer_id": farmer.farmer_id,
+            "mandi_id": mandi.mandi_id,
+            "current_state": "GATE_ENTRY_VERIFIED",
+            "client_timestamp": 1715000000.0
+        }]
+    })
+    assert res_nonexistent.status_code == 404
+    assert "authoritative transaction does not exist" in res_nonexistent.json()["detail"]
+
+    # Pre-seed transactions for subsequent invariant tests
+    for txn_id in ["TXN-BAD-01", "TXN-BAD-02", "TXN-BAD-03", "TXN-BAD-04"]:
+        log = ProcurementLog(
+            transaction_id=txn_id,
+            farmer_id=farmer.farmer_id,
+            mandi_id=mandi.mandi_id,
+            crop_type="WHEAT",
+            scheduled_date=date.today(),
+            token_signature=f"AUTH_SIG_{txn_id}",
+            current_state="SLOT_BOOKED",
+            gross_weight_qt=100.0,
+            tare_weight_qt=20.0,
+            net_weight_qt=80.0
+        )
+        db_session.add(log)
+    db_session.commit()
+
+    # 2. Farmer ID mismatch -> 403
+    res_fk = client.post("/api/v1/sync/wal", json={
+        "mutations": [{
+            "client_mutation_id": "mut-bad-fk-002",
             "transaction_id": "TXN-BAD-01",
             "farmer_id": 99999,
             "mandi_id": mandi.mandi_id,
@@ -334,11 +410,10 @@ def test_sync_preserves_database_invariants(client: TestClient, db_session: Sess
             "client_timestamp": 1715000000.0
         }]
     })
-    assert res_fk.status_code == 200
-    assert res_fk.json()["results"][0]["status"] == "REJECTED"
-    assert "Foreign key violation" in res_fk.json()["results"][0]["message"]
+    assert res_fk.status_code == 403
+    assert "does not match transaction farmer ID" in res_fk.json()["detail"]
 
-    # 2. Invalid state
+    # 3. Invalid state -> 422
     res_state = client.post("/api/v1/sync/wal", json={
         "mutations": [{
             "client_mutation_id": "mut-bad-state-002",
@@ -349,11 +424,10 @@ def test_sync_preserves_database_invariants(client: TestClient, db_session: Sess
             "client_timestamp": 1715000000.0
         }]
     })
-    assert res_state.status_code == 200
-    assert res_state.json()["results"][0]["status"] == "REJECTED"
-    assert "Invalid procurement state" in res_state.json()["results"][0]["message"]
+    assert res_state.status_code == 422
+    assert "Invalid procurement state" in res_state.json()["detail"]
 
-    # 3. Negative weight
+    # 4. Negative weight -> 422
     res_weight = client.post("/api/v1/sync/wal", json={
         "mutations": [{
             "client_mutation_id": "mut-bad-weight-003",
@@ -365,25 +439,23 @@ def test_sync_preserves_database_invariants(client: TestClient, db_session: Sess
             "client_timestamp": 1715000000.0
         }]
     })
-    assert res_weight.status_code == 200
-    assert res_weight.json()["results"][0]["status"] == "REJECTED"
-    assert "cannot be negative" in res_weight.json()["results"][0]["message"]
+    assert res_weight.status_code == 422
+    assert "cannot be negative" in res_weight.json()["detail"]
 
-    # 4. Out-of-bounds moisture
+    # 5. Out-of-bounds moisture -> 422
     res_moisture = client.post("/api/v1/sync/wal", json={
         "mutations": [{
             "client_mutation_id": "mut-bad-moisture-004",
             "transaction_id": "TXN-BAD-04",
             "farmer_id": farmer.farmer_id,
             "mandi_id": mandi.mandi_id,
-            "current_state": "QUALITY_APPROVED",
+            "current_state": "GATE_ENTRY_VERIFIED",
             "payload": {"crop_moisture_pct": 115.00},
             "client_timestamp": 1715000000.0
         }]
     })
-    assert res_moisture.status_code == 200
-    assert res_moisture.json()["results"][0]["status"] == "REJECTED"
-    assert "out of valid range" in res_moisture.json()["results"][0]["message"]
+    assert res_moisture.status_code == 422
+    assert "out of valid range" in res_moisture.json()["detail"]
 
 
 def test_sync_status_endpoint(client: TestClient):

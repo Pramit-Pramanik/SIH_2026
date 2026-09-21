@@ -3,6 +3,7 @@ from sqlalchemy import (
     Column,
     Integer,
     BigInteger,
+    Boolean,
     String,
     Numeric,
     Date,
@@ -62,6 +63,8 @@ class ProcurementLog(Base):
     payout_block_hash = Column(String(64), nullable=True)
     client_mutation_id = Column(String(36), nullable=True)
     server_receive_sequence = Column(BigInteger, nullable=True)
+    is_showcase = Column(Boolean, default=False, nullable=False, index=True)
+    demo_run_id = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(
         DateTime,

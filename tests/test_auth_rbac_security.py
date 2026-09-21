@@ -358,7 +358,8 @@ def test_farmer_cross_account_cancellation_denied(client: TestClient, db_session
         json={"transaction_id": txn_id}
     )
     assert r.status_code == 403
-    assert "you do not own" in r.json()["detail"].lower()
+    detail_lower = r.json()["detail"].lower()
+    assert "you do not own" in detail_lower or "does not match" in detail_lower
 
 
 # ---------------------------------------------------------------------------

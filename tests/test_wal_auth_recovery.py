@@ -12,6 +12,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from datetime import date
+from backend.app.models.log import ProcurementLog
 from backend.app.core.security import create_access_jwt
 from backend.app.models.mandi import Mandi
 from backend.app.models.farmer import Farmer
@@ -54,7 +56,8 @@ def setup_wal_fixture(db: Session):
         "sub": str(operator_user.user_id),
         "user_id": operator_user.user_id,
         "username": operator_user.username,
-        "role": operator_user.role
+        "role": operator_user.role,
+        "mandi_id": mandi.mandi_id
     })
     farmer_jwt = create_access_jwt({
         "sub": str(farmer_user.user_id),
@@ -111,9 +114,21 @@ def test_sync_wal_rejects_offline_provisional_tokens(client: TestClient, db_sess
 def test_sync_wal_accepts_valid_operator_jwt(client: TestClient, db_session: Session):
     """
     Once user is re-authenticated with a genuine server JWT, /sync/wal processes mutations
-    and returns HTTP 200 with status SYNCED.
+    and returns HTTP 200 with status SYNCED for an existing transaction.
     """
     mandi, farmer, operator_jwt, _ = setup_wal_fixture(db_session)
+
+    init_log = ProcurementLog(
+        transaction_id="TXN-VALID-01",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        crop_type="Paddy",
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="SIG_VALID_INIT"
+    )
+    db_session.add(init_log)
+    db_session.commit()
 
     payload = {
         "mutations": [
@@ -150,6 +165,18 @@ def test_sync_wal_idempotent_duplicate_replay(client: TestClient, db_session: Se
     with the previously assigned sequence number preserved.
     """
     mandi, farmer, operator_jwt, _ = setup_wal_fixture(db_session)
+
+    init_log = ProcurementLog(
+        transaction_id="TXN-IDEMPOTENT-01",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        crop_type="Paddy",
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="SIG_IDEM_INIT"
+    )
+    db_session.add(init_log)
+    db_session.commit()
 
     payload = {
         "mutations": [
@@ -190,17 +217,18 @@ def test_sync_wal_idempotent_duplicate_replay(client: TestClient, db_session: Se
 
 def test_sync_wal_domain_rejection_marks_failed(client: TestClient, db_session: Session):
     """
-    Mutations violating domain constraints (e.g. non-existent farmer) return HTTP 200
-    with status REJECTED so client can mark them permanently FAILED.
+    Under AUD-002, submitting mutations for a nonexistent transaction returns HTTP 404.
+    If the transaction exists but the farmer does not match, returns HTTP 403.
     """
-    mandi, _, operator_jwt, _ = setup_wal_fixture(db_session)
+    mandi, farmer, operator_jwt, _ = setup_wal_fixture(db_session)
 
-    payload = {
+    # 1. Nonexistent transaction -> 404
+    payload_nonexistent = {
         "mutations": [
             {
                 "client_mutation_id": "mut-bad-domain-01",
-                "transaction_id": "TXN-BAD-01",
-                "farmer_id": 999999,  # Non-existent farmer
+                "transaction_id": "TXN-NONEXISTENT-999",
+                "farmer_id": farmer.farmer_id,
                 "mandi_id": mandi.mandi_id,
                 "current_state": "GATE_ENTRY_VERIFIED",
                 "payload": {"gate_id": 1},
@@ -211,14 +239,50 @@ def test_sync_wal_domain_rejection_marks_failed(client: TestClient, db_session: 
         ]
     }
 
-    response = client.post(
+    response_404 = client.post(
         "/api/v1/sync/wal",
         headers={"Authorization": f"Bearer {operator_jwt}"},
-        json=payload
+        json=payload_nonexistent
     )
-    assert response.status_code == 200
-    assert response.json()["results"][0]["status"] == "REJECTED"
-    assert "does not exist" in response.json()["results"][0]["message"].lower()
+    assert response_404.status_code == 404
+    assert "authoritative transaction does not exist" in response_404.json()["detail"].lower()
+
+    # 2. Existing transaction with wrong farmer -> 403
+    init_log = ProcurementLog(
+        transaction_id="TXN-BAD-01",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        crop_type="Paddy",
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="SIG_BAD_INIT"
+    )
+    db_session.add(init_log)
+    db_session.commit()
+
+    payload_wrong_farmer = {
+        "mutations": [
+            {
+                "client_mutation_id": "mut-bad-domain-02",
+                "transaction_id": "TXN-BAD-01",
+                "farmer_id": 999999,  # Mismatched farmer
+                "mandi_id": mandi.mandi_id,
+                "current_state": "GATE_ENTRY_VERIFIED",
+                "payload": {"gate_id": 1},
+                "hmac_signature": "HMAC_BAD",
+                "client_timestamp": 1715000000.0,
+                "mutation_type": "GATE_ENTRY_VERIFIED"
+            }
+        ]
+    }
+
+    response_403 = client.post(
+        "/api/v1/sync/wal",
+        headers={"Authorization": f"Bearer {operator_jwt}"},
+        json=payload_wrong_farmer
+    )
+    assert response_403.status_code == 403
+    assert "does not match transaction farmer id" in response_403.json()["detail"].lower()
 
 
 def test_sync_wal_farmer_role_forbidden(client: TestClient, db_session: Session):

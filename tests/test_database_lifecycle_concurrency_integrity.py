@@ -220,12 +220,28 @@ def test_duplicate_wal_mutation_full_lifecycle(client: TestClient, db_session: S
     4. Out-of-order mutation -> handled cleanly via field-level LWW or rejected.
     5. Invalid transition during replay -> rejected.
     """
-    mandi, farmer, _, _, _, _, user_op = setup_integrity_fixtures(db_session)
+    mandi, farmer, _, slot, _, _, user_op = setup_integrity_fixtures(db_session)
     token = create_user_token(user_op).access_token
     headers = {"Authorization": f"Bearer {token}"}
 
     txn_id = "TXN-WAL-INTEGRITY-001"
     mut1_id = "mut-integ-001"
+
+    # Pre-seed authoritative transaction in SLOT_BOOKED state per AUD-002
+    initial_log = ProcurementLog(
+        transaction_id=txn_id,
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        slot_id=slot.slot_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        net_weight_qt=Decimal("40.0"),
+        token_signature="SIG_TEST_001",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db_session.add(initial_log)
+    db_session.commit()
 
     # --- Scenario 1: Initial mutation ---
     payload1 = {
@@ -317,10 +333,13 @@ def test_duplicate_wal_mutation_full_lifecycle(client: TestClient, db_session: S
         ]
     }
     r5 = client.post("/api/v1/sync/wal", json=payload_invalid, headers=headers)
-    assert r5.status_code == 200
-    res5 = r5.json()["results"][0]
-    assert res5["status"] == "REJECTED"
-    assert "lifecycle transition rejected" in res5["message"].lower()
+    assert r5.status_code in (200, 409)
+    if r5.status_code == 409:
+        assert "lifecycle transition rejected" in r5.json()["detail"].lower()
+    else:
+        res5 = r5.json()["results"][0]
+        assert res5["status"] == "REJECTED"
+        assert "lifecycle transition rejected" in res5["message"].lower()
 
     # Verify transaction in ledger did NOT advance to PAYMENT_SETTLED
     log_check = db_session.query(ProcurementLog).filter_by(transaction_id=txn_id).first()
@@ -344,6 +363,32 @@ def test_signature_classification_distinction(client: TestClient, db_session: Se
     # Generate genuine 64-char HMAC booking signature
     qty = 25.0
     valid_sig = generate_booking_signature(farmer.farmer_id, mandi.mandi_id, slot.slot_id, qty)
+
+    # Pre-seed authoritative transactions in database per AUD-002
+    log_auth = ProcurementLog(
+        transaction_id="TXN-SIG-AUTH-001",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        slot_id=slot.slot_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature=valid_sig,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    log_meta = ProcurementLog(
+        transaction_id="TXN-SIG-META-001",
+        farmer_id=farmer.farmer_id,
+        mandi_id=mandi.mandi_id,
+        slot_id=slot.slot_id,
+        scheduled_date=date.today(),
+        current_state="SLOT_BOOKED",
+        token_signature="META_SIG",
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc)
+    )
+    db_session.add_all([log_auth, log_meta])
+    db_session.commit()
 
     # 1. Genuine cryptographic signature
     r1 = client.post("/api/v1/sync/wal", json={

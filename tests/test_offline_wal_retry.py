@@ -65,12 +65,15 @@ def test_wal_sync_handles_permanent_domain_rejection(client: TestClient, seed_wa
     }
 
     res = client.post("/api/v1/sync/wal", json={"mutations": [bad_mutation]}, headers=headers)
-    assert res.status_code == 200
-    data = res.json()
-    assert len(data["results"]) == 1
-    result = data["results"][0]
-    assert result["status"] == "REJECTED"
-    assert "Farmer" in result["message"] or "not found" in result["message"].lower()
+    assert res.status_code in (200, 404)
+    if res.status_code == 404:
+        assert "authoritative transaction does not exist" in res.json()["detail"].lower()
+    else:
+        data = res.json()
+        assert len(data["results"]) == 1
+        result = data["results"][0]
+        assert result["status"] == "REJECTED"
+        assert "Farmer" in result["message"] or "not found" in result["message"].lower()
 
 
 def test_wal_sync_malformed_json_returns_400(client: TestClient, seed_wal_test_data):

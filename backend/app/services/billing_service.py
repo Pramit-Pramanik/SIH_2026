@@ -15,49 +15,40 @@ from backend.app.schemas.billing import (
 )
 from backend.app.services.lifecycle_service import validate_lifecycle_transition
 
-# Authoritative Government of India Minimum Support Price (MSP) Rates (₹ / quintal)
-DEFAULT_MSP_RATES = {
-    "wheat": 2275.00,
-    "wheat (sharbati)": 2275.00,
-    "wheat (hd-2967)": 2275.00,
-    "soybean": 4892.00,
-    "soybean (js-335)": 4892.00,
-    "paddy": 2300.00,
-    "paddy (basmati)": 2300.00,
-    "gram": 5440.00,
-    "mustard": 5650.00,
-}
-FALLBACK_MSP_RATE = 2275.00
-
-
-def get_crop_msp_rate(crop_name: Optional[str]) -> float:
-    """
-    Returns the fallback MSP rate per quintal for the given crop type,
-    defaulting to 2275.00 (Standard Wheat MSP per AC-009).
-    """
-    if not crop_name:
-        return FALLBACK_MSP_RATE
-    key = crop_name.strip().lower()
-    return DEFAULT_MSP_RATES.get(key, FALLBACK_MSP_RATE)
-
-
 def resolve_authoritative_crop_msp(db: Session, crop_name: Optional[str]) -> float:
     """
-    Resolves the authoritative procurement MSP from the active Crop database master table.
-    Falls back to canonical Government of India MSP table if not present in the DB.
+    Authoritatively resolves the procurement Minimum Support Price (MSP) strictly
+    from the active Crop database master table (AC-009 / AUD-007).
+
+    Invariants:
+    - Never uses hardcoded fallback tables.
+    - Never defaults to ₹2275.00 or substitutes Wheat.
+    - Requires active Crop record with a valid, positive msp_price_inr.
+    - Raises controlled HTTPException (404/422) if crop is missing, unknown, inactive, or unpriced.
     """
-    if not crop_name:
-        return FALLBACK_MSP_RATE
+    if not crop_name or not str(crop_name).strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Missing crop commodity name for authoritative MSP resolution."
+        )
 
-    clean_name = crop_name.strip().lower()
+    clean_name = str(crop_name).strip().lower()
 
-    # 1. Exact match on crop_name
+    # 1. Exact match on lower(crop_name)
     crop = db.query(Crop).filter(
         func.lower(Crop.crop_name) == clean_name,
         Crop.is_active == True
     ).first()
 
-    # 2. Match without variety parenthetical (e.g. "Wheat (HD-2967)" -> "Wheat")
+    # 2. Exact match on upper(crop_code)
+    if not crop:
+        crop = db.query(Crop).filter(
+            func.upper(Crop.crop_code) == str(crop_name).strip().upper(),
+            Crop.is_active == True
+        ).first()
+
+    # 3. Match base commodity if crop_name specifies a variety in parentheses:
+    #    e.g. "Wheat (HD-2967)" -> matches base "Wheat"
     if not crop and "(" in clean_name:
         base_name = clean_name.split("(")[0].strip()
         crop = db.query(Crop).filter(
@@ -65,17 +56,34 @@ def resolve_authoritative_crop_msp(db: Session, crop_name: Optional[str]) -> flo
             Crop.is_active == True
         ).first()
 
-    # 3. Match on crop_code
+    # 4. Match if active Crop record has variety in parentheses and starts with clean_name:
+    #    e.g. input "Wheat" matches active Crop "Wheat (HD-2967)" or "Wheat (PB-2026)"
     if not crop:
         crop = db.query(Crop).filter(
-            Crop.crop_code == crop_name.strip().upper(),
+            func.lower(Crop.crop_name).startswith(clean_name),
             Crop.is_active == True
         ).first()
 
-    if crop and crop.msp_price_inr is not None:
-        return round(float(crop.msp_price_inr), 2)
+    # 5. Case-insensitive substring match
+    if not crop:
+        crop = db.query(Crop).filter(
+            func.lower(Crop.crop_name).contains(clean_name),
+            Crop.is_active == True
+        ).first()
 
-    return get_crop_msp_rate(crop_name)
+    if not crop:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Authoritative crop record not found for '{crop_name}'. MSP cannot be resolved from Crop Master."
+        )
+
+    if crop.msp_price_inr is None or float(crop.msp_price_inr) <= 0.0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Active crop '{crop.crop_name}' has no valid authoritative MSP rate configured in Crop Master."
+        )
+
+    return round(float(crop.msp_price_inr), 2)
 
 
 def generate_jform_invoice(
@@ -111,7 +119,12 @@ def generate_jform_invoice(
 
     # 1. Look up farmer details for crop and authoritative rate determination
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
-    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else "Wheat")
+    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else None)
+    if not crop_type or not str(crop_type).strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot determine authoritative crop commodity for transaction '{log.transaction_id}': neither transaction nor farmer record has a registered crop."
+        )
     farmer_name = farmer.name if farmer else "Registered Farmer"
 
     authoritative_rate = resolve_authoritative_crop_msp(db, crop_type)
@@ -315,7 +328,12 @@ def get_jform_invoice(
         )
 
     farmer = db.query(Farmer).filter(Farmer.farmer_id == log.farmer_id).first()
-    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else "Wheat")
+    crop_type = log.crop_type or (farmer.registered_crop_type if farmer else None)
+    if not crop_type or not str(crop_type).strip():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot determine authoritative crop commodity for transaction '{log.transaction_id}': neither transaction nor farmer record has a registered crop."
+        )
     farmer_name = farmer.name if farmer else "Registered Farmer"
 
     authoritative_rate = resolve_authoritative_crop_msp(db, crop_type)

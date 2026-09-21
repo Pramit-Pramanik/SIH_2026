@@ -5,9 +5,13 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from fastapi import HTTPException, status as http_status
+
 from backend.app.models.log import ProcurementLog, WALMutationJournal, VALID_PROCUREMENT_STATES
 from backend.app.models.farmer import Farmer
 from backend.app.models.mandi import Mandi
+from backend.app.models.user import User
+from backend.app.core.authorization import assert_transaction_scope
 from backend.app.schemas.sync import (
     WALMutationRecord,
     WALBatchSyncRequest,
@@ -35,10 +39,11 @@ def classify_signature(
     if len(sig) == 64:
         try:
             from backend.app.core.security import verify_booking_signature
-            slot_id = incoming_fields.get("slot_id") or 1
-            qty = incoming_fields.get("quantity_qt") or incoming_fields.get("net_weight_qt") or 0.0
-            if verify_booking_signature(rec.farmer_id, rec.mandi_id, int(slot_id), float(qty), sig):
-                return SignatureClassification.AUTHENTICATED_SIGNATURE
+            slot_id = incoming_fields.get("slot_id")
+            if slot_id is not None:
+                qty = incoming_fields.get("quantity_qt") or incoming_fields.get("net_weight_qt") or 0.0
+                if verify_booking_signature(rec.farmer_id, rec.mandi_id, int(slot_id), float(qty), sig):
+                    return SignatureClassification.AUTHENTICATED_SIGNATURE
         except Exception:
             pass
 
@@ -119,12 +124,18 @@ def resolve_field_level_lww_merge(
 def process_single_wal_mutation(
     db: Session,
     rec: WALMutationRecord,
-    forced_sequence: Optional[int] = None
+    forced_sequence: Optional[int] = None,
+    current_user: Optional[User] = None
 ) -> WALMutationResult:
     """
     Applies a single WAL mutation record idempotently with field-level LWW merge,
     authoritative server sequence assignment, cryptographic/metadata signature classification,
     and persistent WAL journal tracking across process restarts.
+
+    AUD-002 ENFORCEMENT:
+    WAL synchronization must NEVER create an authoritative procurement transaction.
+    If rec.transaction_id does not already exist in ProcurementLog, REJECT IT with HTTP 404:
+    'Cannot synchronize mutation: authoritative transaction does not exist.'
     """
     # 1. Extract incoming payload attributes early to enable validation & signature classification
     incoming_fields: Dict[str, Any] = {"current_state": rec.current_state}
@@ -186,7 +197,7 @@ def process_single_wal_mutation(
             message="Mutation already processed by the persisted WAL journal (idempotent replay)"
         )
 
-    # Fallback to ProcurementLog check
+    # Fallback to ProcurementLog client_mutation_id check
     persisted_duplicate = db.query(ProcurementLog).filter(
         ProcurementLog.client_mutation_id == rec.client_mutation_id
     ).first()
@@ -206,230 +217,175 @@ def process_single_wal_mutation(
             message="Mutation already processed by the persisted ledger (idempotent replay)"
         )
 
-    # 3. Assign authoritative monotonic server receive sequence
-    server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
+    # 3. Check if ProcurementLog exists (AUD-002: WAL mutations can NEVER create authoritative transactions)
+    log = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == rec.transaction_id).first()
+    if not log:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail="Cannot synchronize mutation: authoritative transaction does not exist."
+        )
 
-    # 4. Validate foreign keys and basic invariants
+    # 4. Validate foreign keys and tenant matches against the authoritative transaction
+    if rec.farmer_id != log.farmer_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=f"Access forbidden: Mutation farmer ID ({rec.farmer_id}) does not match transaction farmer ID ({log.farmer_id})."
+        )
+
     farmer = db.query(Farmer).filter(Farmer.farmer_id == rec.farmer_id).first()
     if not farmer:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            signature_type=sig_classification,
-            message=f"Foreign key violation: Farmer {rec.farmer_id} does not exist"
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Foreign key violation: Farmer {rec.farmer_id} does not exist"
+        )
+
+    if rec.mandi_id != log.mandi_id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail=f"Access forbidden: Mutation mandi ID ({rec.mandi_id}) does not match transaction mandi ID ({log.mandi_id})."
         )
 
     mandi = db.query(Mandi).filter(Mandi.mandi_id == rec.mandi_id).first()
     if not mandi:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            signature_type=sig_classification,
-            message=f"Foreign key violation: Mandi {rec.mandi_id} does not exist"
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail=f"Foreign key violation: Mandi {rec.mandi_id} does not exist"
         )
 
-    # Validate state validity
+    # 5. Role scope authorization (AUD-001 tenant boundary enforcement)
+    assert_transaction_scope(log, current_user, action_desc="sync WAL mutation")
+
+    # 6. Validate state validity and numerical invariants
     if rec.current_state not in VALID_PROCUREMENT_STATES:
-        return WALMutationResult(
-            client_mutation_id=rec.client_mutation_id,
-            transaction_id=rec.transaction_id,
-            status="REJECTED",
-            server_receive_sequence=server_seq,
-            current_state=None,
-            signature_type=sig_classification,
-            message=f"Invalid procurement state: '{rec.current_state}'"
+        raise HTTPException(
+            status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid procurement state: '{rec.current_state}'"
         )
 
-    # Invariant validation for numerical fields
     if "crop_moisture_pct" in incoming_fields and incoming_fields["crop_moisture_pct"] is not None:
         val = float(incoming_fields["crop_moisture_pct"])
         if val < 0 or val > 100:
-            return WALMutationResult(
-                client_mutation_id=rec.client_mutation_id,
-                transaction_id=rec.transaction_id,
-                status="REJECTED",
-                server_receive_sequence=server_seq,
-                current_state=rec.current_state,
-                signature_type=sig_classification,
-                message=f"Moisture percentage {val}% out of valid range [0, 100]"
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Moisture percentage {val}% out of valid range [0, 100]"
             )
 
     for weight_field in ("gross_weight_qt", "tare_weight_qt", "net_weight_qt", "total_payout_inr"):
         if weight_field in incoming_fields and incoming_fields[weight_field] is not None:
             val = float(incoming_fields[weight_field])
             if val < 0:
-                return WALMutationResult(
-                    client_mutation_id=rec.client_mutation_id,
-                    transaction_id=rec.transaction_id,
-                    status="REJECTED",
-                    server_receive_sequence=server_seq,
-                    current_state=rec.current_state,
-                    signature_type=sig_classification,
-                    message=f"{weight_field} cannot be negative ({val})"
+                raise HTTPException(
+                    status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"{weight_field} cannot be negative ({val})"
                 )
 
-    # 5. Check if ProcurementLog exists
-    log = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == rec.transaction_id).first()
-
-    status = "SYNCED"
-
-    if not log:
-        # Validate authoritative lifecycle transition for initial creation
-        is_valid, err_msg, _ = validate_lifecycle_transition(
-            from_state=None,
-            to_state=rec.current_state,
-            payload_fields=incoming_fields,
-            farmer=farmer,
-            db=db,
-            current_log=None
-        )
-        if not is_valid:
-            return WALMutationResult(
-                client_mutation_id=rec.client_mutation_id,
-                transaction_id=rec.transaction_id,
-                status="REJECTED",
-                server_receive_sequence=server_seq,
-                current_state=None,
-                signature_type=sig_classification,
-                message=f"Lifecycle transition rejected: {err_msg}"
+    gross_val = incoming_fields.get("gross_weight_qt")
+    if gross_val is None and log.gross_weight_qt is not None:
+        gross_val = float(log.gross_weight_qt)
+    tare_val = incoming_fields.get("tare_weight_qt")
+    if gross_val is not None and tare_val is not None:
+        if float(tare_val) >= float(gross_val):
+            raise HTTPException(
+                status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Tare weight ({tare_val} qt) cannot be greater than or equal to Gross weight ({gross_val} qt)"
             )
 
-        # Initial creation via WAL record
-        token_sig = rec.hmac_signature or "OFFLINE_WAL_TOKEN"
-        from datetime import date
-        from datetime import datetime, timezone
+    # 7. Validate authoritative lifecycle transition from current log state
+    is_valid, err_msg, _ = validate_lifecycle_transition(
+        from_state=log.current_state,
+        to_state=rec.current_state,
+        payload_fields=incoming_fields,
+        farmer=farmer,
+        db=db,
+        current_log=log
+    )
+    if not is_valid:
+        raise HTTPException(
+            status_code=http_status.HTTP_409_CONFLICT,
+            detail=f"Lifecycle transition rejected: {err_msg}"
+        )
 
-        log = ProcurementLog(
-            transaction_id=rec.transaction_id,
-            farmer_id=rec.farmer_id,
-            mandi_id=rec.mandi_id,
-            scheduled_date=date.today(),
-            current_state=rec.current_state,
-            token_signature=token_sig,
+    # 8. Assign authoritative monotonic server receive sequence
+    server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
+    sync_status = "SYNCED"
+
+    # Check if already processed on the log directly
+    if log.client_mutation_id == rec.client_mutation_id:
+        _processed_mutations[rec.client_mutation_id] = (
+            log.server_receive_sequence or server_seq,
+            log.transaction_id,
+            log.current_state
+        )
+        return WALMutationResult(
             client_mutation_id=rec.client_mutation_id,
-            server_receive_sequence=server_seq,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
-        )
-        # Apply numerical attributes if provided
-        if "gross_weight_qt" in incoming_fields and incoming_fields["gross_weight_qt"] is not None:
-            log.gross_weight_qt = Decimal(str(incoming_fields["gross_weight_qt"]))
-        if "tare_weight_qt" in incoming_fields and incoming_fields["tare_weight_qt"] is not None:
-            log.tare_weight_qt = Decimal(str(incoming_fields["tare_weight_qt"]))
-        if "net_weight_qt" in incoming_fields and incoming_fields["net_weight_qt"] is not None:
-            log.net_weight_qt = Decimal(str(incoming_fields["net_weight_qt"]))
-        elif log.gross_weight_qt is not None and log.tare_weight_qt is not None:
-            log.net_weight_qt = round(log.gross_weight_qt - log.tare_weight_qt, 2)
-        if "crop_moisture_pct" in incoming_fields and incoming_fields["crop_moisture_pct"] is not None:
-            log.crop_moisture_pct = Decimal(str(incoming_fields["crop_moisture_pct"]))
-        if "total_payout_inr" in incoming_fields and incoming_fields["total_payout_inr"] is not None:
-            log.total_payout_inr = Decimal(str(incoming_fields["total_payout_inr"]))
-
-        db.add(log)
-    else:
-        # Check if already processed on the log directly
-        if log.client_mutation_id == rec.client_mutation_id:
-            _processed_mutations[rec.client_mutation_id] = (
-                log.server_receive_sequence or server_seq,
-                log.transaction_id,
-                log.current_state
-            )
-            return WALMutationResult(
-                client_mutation_id=rec.client_mutation_id,
-                transaction_id=rec.transaction_id,
-                status="IGNORED_DUPLICATE",
-                server_receive_sequence=log.server_receive_sequence or server_seq,
-                current_state=log.current_state,
-                signature_type=sig_classification,
-                message="Mutation already applied on ledger (idempotent duplicate)"
-            )
-
-        # Validate authoritative lifecycle transition from current log state
-        is_valid, err_msg, _ = validate_lifecycle_transition(
-            from_state=log.current_state,
-            to_state=rec.current_state,
-            payload_fields=incoming_fields,
-            farmer=farmer,
-            db=db,
-            current_log=log
-        )
-        if not is_valid:
-            return WALMutationResult(
-                client_mutation_id=rec.client_mutation_id,
-                transaction_id=rec.transaction_id,
-                status="REJECTED",
-                server_receive_sequence=server_seq,
-                current_state=log.current_state,
-                signature_type=sig_classification,
-                message=f"Lifecycle transition rejected: {err_msg}"
-            )
-
-        # Existing record dictionary for LWW merge
-        existing_record: Dict[str, Any] = {
-            "transaction_id": log.transaction_id,
-            "current_state": log.current_state,
-            "crop_moisture_pct": float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else None,
-            "gross_weight_qt": float(log.gross_weight_qt) if log.gross_weight_qt is not None else None,
-            "tare_weight_qt": float(log.tare_weight_qt) if log.tare_weight_qt is not None else None,
-            "net_weight_qt": float(log.net_weight_qt) if log.net_weight_qt is not None else None,
-            "total_payout_inr": float(log.total_payout_inr) if log.total_payout_inr is not None else None,
-            "server_receive_sequence": log.server_receive_sequence or 0,
-            "client_mutation_id": log.client_mutation_id or "",
-            "_seq_current_state": log.server_receive_sequence or 0,
-            "_seq_crop_moisture_pct": log.server_receive_sequence or 0,
-            "_seq_gross_weight_qt": log.server_receive_sequence or 0,
-            "_seq_tare_weight_qt": log.server_receive_sequence or 0,
-            "_seq_net_weight_qt": log.server_receive_sequence or 0,
-            "_seq_total_payout_inr": log.server_receive_sequence or 0,
-            "_mutation_current_state": log.client_mutation_id or "",
-            "_mutation_crop_moisture_pct": log.client_mutation_id or "",
-            "_mutation_gross_weight_qt": log.client_mutation_id or "",
-            "_mutation_tare_weight_qt": log.client_mutation_id or "",
-            "_mutation_net_weight_qt": log.client_mutation_id or "",
-            "_mutation_total_payout_inr": log.client_mutation_id or "",
-        }
-
-        # Resolve field-level LWW merge
-        merged = resolve_field_level_lww_merge(
-            existing_record=existing_record,
-            incoming_record=incoming_fields,
-            incoming_mutation_id=rec.client_mutation_id,
-            incoming_server_sequence=server_seq,
-            incoming_client_timestamp=rec.client_timestamp
+            transaction_id=rec.transaction_id,
+            status="IGNORED_DUPLICATE",
+            server_receive_sequence=log.server_receive_sequence or server_seq,
+            current_state=log.current_state,
+            signature_type=sig_classification,
+            message="Mutation already applied on ledger (idempotent duplicate)"
         )
 
-        # Detect if any conflict arose (i.e. incoming was older than existing or partially overwritten)
-        existing_seq = log.server_receive_sequence or 0
-        if server_seq < existing_seq:
-            status = "CONFLICT_RESOLVED"
-        elif server_seq == existing_seq and rec.client_mutation_id <= (log.client_mutation_id or ""):
-            status = "CONFLICT_RESOLVED"
+    # Existing record dictionary for LWW merge
+    existing_record: Dict[str, Any] = {
+        "transaction_id": log.transaction_id,
+        "current_state": log.current_state,
+        "crop_moisture_pct": float(log.crop_moisture_pct) if log.crop_moisture_pct is not None else None,
+        "gross_weight_qt": float(log.gross_weight_qt) if log.gross_weight_qt is not None else None,
+        "tare_weight_qt": float(log.tare_weight_qt) if log.tare_weight_qt is not None else None,
+        "net_weight_qt": float(log.net_weight_qt) if log.net_weight_qt is not None else None,
+        "total_payout_inr": float(log.total_payout_inr) if log.total_payout_inr is not None else None,
+        "server_receive_sequence": log.server_receive_sequence or 0,
+        "client_mutation_id": log.client_mutation_id or "",
+        "_seq_current_state": log.server_receive_sequence or 0,
+        "_seq_crop_moisture_pct": log.server_receive_sequence or 0,
+        "_seq_gross_weight_qt": log.server_receive_sequence or 0,
+        "_seq_tare_weight_qt": log.server_receive_sequence or 0,
+        "_seq_net_weight_qt": log.server_receive_sequence or 0,
+        "_seq_total_payout_inr": log.server_receive_sequence or 0,
+        "_mutation_current_state": log.client_mutation_id or "",
+        "_mutation_crop_moisture_pct": log.client_mutation_id or "",
+        "_mutation_gross_weight_qt": log.client_mutation_id or "",
+        "_mutation_tare_weight_qt": log.client_mutation_id or "",
+        "_mutation_net_weight_qt": log.client_mutation_id or "",
+        "_mutation_total_payout_inr": log.client_mutation_id or "",
+    }
 
-        # Apply merged fields
-        log.current_state = merged.get("current_state", log.current_state)
-        if merged.get("gross_weight_qt") is not None:
-            log.gross_weight_qt = Decimal(str(merged["gross_weight_qt"]))
-        if merged.get("tare_weight_qt") is not None:
-            log.tare_weight_qt = Decimal(str(merged["tare_weight_qt"]))
-        if merged.get("net_weight_qt") is not None:
-            log.net_weight_qt = Decimal(str(merged["net_weight_qt"]))
-        elif log.gross_weight_qt is not None and log.tare_weight_qt is not None:
-            log.net_weight_qt = round(log.gross_weight_qt - log.tare_weight_qt, 2)
-        if merged.get("crop_moisture_pct") is not None:
-            log.crop_moisture_pct = Decimal(str(merged["crop_moisture_pct"]))
-        if merged.get("total_payout_inr") is not None:
-            log.total_payout_inr = Decimal(str(merged["total_payout_inr"]))
+    # Resolve field-level LWW merge
+    merged = resolve_field_level_lww_merge(
+        existing_record=existing_record,
+        incoming_record=incoming_fields,
+        incoming_mutation_id=rec.client_mutation_id,
+        incoming_server_sequence=server_seq,
+        incoming_client_timestamp=rec.client_timestamp
+    )
 
-        log.server_receive_sequence = merged.get("server_receive_sequence", server_seq)
-        log.client_mutation_id = merged.get("client_mutation_id", rec.client_mutation_id)
-        from datetime import datetime, timezone
-        log.updated_at = datetime.now(timezone.utc)
+    # Detect if any conflict arose (i.e. incoming was older than existing or partially overwritten)
+    existing_seq = log.server_receive_sequence or 0
+    if server_seq < existing_seq:
+        sync_status = "CONFLICT_RESOLVED"
+    elif server_seq == existing_seq and rec.client_mutation_id <= (log.client_mutation_id or ""):
+        sync_status = "CONFLICT_RESOLVED"
+
+    # Apply merged fields
+    log.current_state = merged.get("current_state", log.current_state)
+    if merged.get("gross_weight_qt") is not None:
+        log.gross_weight_qt = Decimal(str(merged["gross_weight_qt"]))
+    if merged.get("tare_weight_qt") is not None:
+        log.tare_weight_qt = Decimal(str(merged["tare_weight_qt"]))
+    if merged.get("net_weight_qt") is not None:
+        log.net_weight_qt = Decimal(str(merged["net_weight_qt"]))
+    elif log.gross_weight_qt is not None and log.tare_weight_qt is not None:
+        log.net_weight_qt = round(log.gross_weight_qt - log.tare_weight_qt, 2)
+    if merged.get("crop_moisture_pct") is not None:
+        log.crop_moisture_pct = Decimal(str(merged["crop_moisture_pct"]))
+    if merged.get("total_payout_inr") is not None:
+        log.total_payout_inr = Decimal(str(merged["total_payout_inr"]))
+
+    log.server_receive_sequence = merged.get("server_receive_sequence", server_seq)
+    log.client_mutation_id = merged.get("client_mutation_id", rec.client_mutation_id)
+    from datetime import datetime, timezone
+    log.updated_at = datetime.now(timezone.utc)
 
     db.flush()
 
@@ -447,7 +403,7 @@ def process_single_wal_mutation(
         transaction_id=rec.transaction_id,
         server_receive_sequence=log.server_receive_sequence or server_seq,
         current_state=log.current_state,
-        status=status,
+        status=sync_status,
         signature_type=sig_classification,
         created_at=datetime.now(timezone.utc)
     )
@@ -456,16 +412,17 @@ def process_single_wal_mutation(
     return WALMutationResult(
         client_mutation_id=rec.client_mutation_id,
         transaction_id=rec.transaction_id,
-        status=status,
+        status=sync_status,
         server_receive_sequence=log.server_receive_sequence or server_seq,
         current_state=log.current_state,
         signature_type=sig_classification,
-        message="Mutation successfully synchronized" if status == "SYNCED" else "Conflict resolved via LWW ordering"
+        message="Mutation successfully synchronized" if sync_status == "SYNCED" else "Conflict resolved via LWW ordering"
     )
 
 def process_wal_batch_sync(
     db: Session,
-    request: WALBatchSyncRequest
+    request: WALBatchSyncRequest,
+    current_user: Optional[User] = None
 ) -> WALBatchSyncResponse:
     """
     Processes a batch of offline WAL mutations inside a single database transaction.
@@ -475,7 +432,7 @@ def process_wal_batch_sync(
     synced_count = 0
 
     for rec in request.mutations:
-        result = process_single_wal_mutation(db=db, rec=rec)
+        result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
         results.append(result)
         if result.status in ("SYNCED", "CONFLICT_RESOLVED", "IGNORED_DUPLICATE"):
             synced_count += 1

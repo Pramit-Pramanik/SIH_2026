@@ -179,6 +179,8 @@ def reserve_slot_atomic(
                 current_state="SLOT_BOOKED",
                 net_weight_qt=requested_qty_qt,
                 token_signature=signature,
+                is_showcase=bool(demo_run_id),
+                demo_run_id=demo_run_id,
                 created_at=datetime.now(timezone.utc),
                 updated_at=datetime.now(timezone.utc)
             )

@@ -336,7 +336,7 @@ export function FarmerPortal({
       if (res.ok) {
         setFeedback({
           type: 'success',
-          message: `Appointment #${txnId.slice(-6).toUpperCase()} successfully cancelled. Capacity restored to APMC yard.`,
+          message: t('farmer.appointmentCancelledSuccess', { txnId: txnId.slice(-6).toUpperCase() }),
         });
         setActivePass(null);
         setActiveTxnId(null);
@@ -436,7 +436,7 @@ export function FarmerPortal({
     if (requestedQty <= 0) {
       setFeedback({
         type: 'error',
-        message: `Invalid quantity: Requested: ${requestedQty.toFixed(2)} qt | Available: > 0.00 qt | Rule: Requested delivery quantity must be strictly greater than 0.`,
+        message: t('farmer.invalidQuantityError', { requested: requestedQty.toFixed(2) }),
       });
       return;
     }
@@ -444,7 +444,12 @@ export function FarmerPortal({
     if (profile && requestedQty > profile.remaining_ceiling_qt) {
       setFeedback({
         type: 'error',
-        message: `Farmer production ceiling exceeded: Requested: ${requestedQty.toFixed(2)} qt | Available: ${profile.remaining_ceiling_qt.toFixed(2)} qt | Rule: Farmer cumulative production ceiling is ${profile.production_ceiling_qt.toFixed(2)} qt (already booked ${(profile.production_ceiling_qt - profile.remaining_ceiling_qt).toFixed(2)} qt).`,
+        message: t('farmer.ceilingExceededError', {
+          requested: requestedQty.toFixed(2),
+          available: profile.remaining_ceiling_qt.toFixed(2),
+          ceiling: profile.production_ceiling_qt.toFixed(2),
+          booked: (profile.production_ceiling_qt - profile.remaining_ceiling_qt).toFixed(2),
+        }),
       });
       return;
     }
@@ -452,7 +457,12 @@ export function FarmerPortal({
     if (chosenSlot && requestedQty > chosenSlot.remaining_capacity_qt) {
       setFeedback({
         type: 'error',
-        message: `Slot capacity exhausted: Requested: ${requestedQty.toFixed(2)} qt | Available: ${chosenSlot.remaining_capacity_qt.toFixed(2)} qt | Rule: Hourly slot allocated capacity is ${chosenSlot.allocated_capacity_qt.toFixed(2)} qt (already booked ${chosenSlot.booked_capacity_qt.toFixed(2)} qt).`,
+        message: t('farmer.slotCapacityExhaustedError', {
+          requested: requestedQty.toFixed(2),
+          available: chosenSlot.remaining_capacity_qt.toFixed(2),
+          allocated: chosenSlot.allocated_capacity_qt.toFixed(2),
+          booked: chosenSlot.booked_capacity_qt.toFixed(2),
+        }),
       });
       return;
     }

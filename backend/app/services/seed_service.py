@@ -18,9 +18,12 @@ Maintains canonical definitions and deterministic idempotent construction for:
 
 import sys
 import hashlib
+import time as time_mod
 from datetime import date, time, timedelta, datetime, timezone
 from typing import Dict, Any, List, Optional
+from sqlalchemy import func
 from sqlalchemy.orm import Session
+from fastapi import HTTPException, status
 
 from backend.app.models.mandi import Mandi
 from backend.app.models.farmer import Farmer
@@ -30,6 +33,7 @@ from backend.app.models.user import User
 from backend.app.models.log import ProcurementLog
 from backend.app.core.security import hash_password, generate_booking_signature
 from backend.app.services.queue_manager import queue_manager
+from backend.app.services.dcdq_engine import calculate_dcdq_priority_score
 
 
 def sha256_hex(val: str) -> str:
@@ -355,7 +359,15 @@ def ensure_canonical_slots(db: Session, num_days: int = 8, reset: bool = False) 
                     db.add(slot)
                     slots_created += 1
                 elif reset:
-                    existing.booked_capacity_qt = 0.00
+                    # Preserve real bookings: sum active operational transactions on this slot
+                    real_booked = db.query(
+                        func.coalesce(func.sum(ProcurementLog.net_weight_qt), 0.0)
+                    ).filter(
+                        ProcurementLog.slot_id == existing.slot_id,
+                        ProcurementLog.is_showcase == False,
+                        ProcurementLog.current_state != "CANCELLED"
+                    ).scalar() or 0.0
+                    existing.booked_capacity_qt = round(float(real_booked), 2)
     db.commit()
     return slots_created
 
@@ -369,12 +381,18 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
     ).order_by(ProcurementSlot.start_time.asc()).all()
 
     slot_ids = [s.slot_id for s in mandi_1_today_slots]
-    s1 = slot_ids[0] if len(slot_ids) > 0 else 1
-    s2 = slot_ids[1] if len(slot_ids) > 1 else 2
-    s3 = slot_ids[2] if len(slot_ids) > 2 else 3
-    s4 = slot_ids[3] if len(slot_ids) > 3 else 4
-    s5 = slot_ids[4] if len(slot_ids) > 4 else 5
-    s6 = slot_ids[5] if len(slot_ids) > 5 else 6
+    if len(slot_ids) < 6:
+        ensure_canonical_slots(db, num_days=8, reset=False)
+        mandi_1_today_slots = db.query(ProcurementSlot).filter(
+            ProcurementSlot.mandi_id == 1,
+            ProcurementSlot.scheduled_date == today
+        ).order_by(ProcurementSlot.start_time.asc()).all()
+        slot_ids = [s.slot_id for s in mandi_1_today_slots]
+
+    if len(slot_ids) < 6:
+        raise ValueError("Cannot build canonical showcase transactions: Mandi 1 requires at least 6 hourly slots for today.")
+
+    s1, s2, s3, s4, s5, s6 = slot_ids[:6]
 
     return [
         {
@@ -390,7 +408,9 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": None,
             "current_state": "GATE_ENTRY_VERIFIED",
             "token_signature": generate_booking_signature(1, 1, s1, 35.0),
-            "payout_block_hash": None
+            "payout_block_hash": None,
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         },
         {
             "transaction_id": "TXN-DEMO-1002",
@@ -405,7 +425,9 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": None,
             "current_state": "QUALITY_APPROVED",
             "token_signature": generate_booking_signature(2, 1, s2, 75.0),
-            "payout_block_hash": None
+            "payout_block_hash": None,
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         },
         {
             "transaction_id": "TXN-DEMO-1003",
@@ -420,7 +442,9 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": None,
             "current_state": "WEIGHED_TARE",
             "token_signature": generate_booking_signature(3, 1, s3, 60.0),
-            "payout_block_hash": None
+            "payout_block_hash": None,
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         },
         {
             "transaction_id": "TXN-DEMO-1004",
@@ -435,7 +459,9 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": 91000.00,
             "current_state": "BILL_GENERATED",
             "token_signature": generate_booking_signature(1, 1, s4, 40.0),
-            "payout_block_hash": None
+            "payout_block_hash": None,
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         },
         {
             "transaction_id": "TXN-DEMO-1005",
@@ -450,7 +476,9 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": 147875.00,
             "current_state": "PAYMENT_SETTLED",
             "token_signature": generate_booking_signature(2, 1, s5, 65.0),
-            "payout_block_hash": sha256_hex("PFMS_SETTLED_DEMO_1005")
+            "payout_block_hash": sha256_hex("PFMS_SETTLED_DEMO_1005"),
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         },
         {
             "transaction_id": "TXN-DEMO-1006",
@@ -465,9 +493,25 @@ def build_canonical_showcase_transactions(db: Session) -> List[Dict[str, Any]]:
             "total_payout_inr": None,
             "current_state": "QUALITY_REJECTED",
             "token_signature": generate_booking_signature(1, 1, s6, 55.0),
-            "payout_block_hash": None
+            "payout_block_hash": None,
+            "is_showcase": True,
+            "demo_run_id": "CANONICAL_SHOWCASE"
         }
     ]
+
+
+def recalculate_slot_capacities(db: Session) -> None:
+    """Recalculates booked_capacity_qt for all slots based on active logs (operational + canonical showcase)."""
+    slots = db.query(ProcurementSlot).all()
+    for s in slots:
+        total = db.query(
+            func.coalesce(func.sum(ProcurementLog.net_weight_qt), 0.0)
+        ).filter(
+            ProcurementLog.slot_id == s.slot_id,
+            ProcurementLog.current_state != "CANCELLED"
+        ).scalar() or 0.0
+        s.booked_capacity_qt = round(float(total), 2)
+    db.commit()
 
 
 def ensure_showcase_transactions(db: Session, reset: bool = False) -> List[ProcurementLog]:
@@ -498,13 +542,50 @@ def ensure_showcase_transactions(db: Session, reset: bool = False) -> List[Procu
     return seeded_txns
 
 
-def ensure_showcase_queue_state(mandi_id: int = 1) -> None:
-    """Enqueues TXN-DEMO-1002 in active DCDQ queue so live QueueMonitor renders immediately."""
-    try:
-        queue_manager.clear(mandi_id)
-        queue_manager.push(mandi_id, "TXN-DEMO-1002", 49.00)
-    except Exception:
-        pass
+def ensure_showcase_queue_state(db: Optional[Session] = None, mandi_id: int = 1) -> None:
+    """
+    Resets only showcase queue entries for the given mandi, preserving any real operational vehicles.
+    Authoritatively derives and enqueues TXN-DEMO-1002 in the active DCDQ queue so live QueueMonitor renders immediately.
+    Never swallows exceptions: if queue priming fails, raises RuntimeError so bootstrap reports failure.
+    """
+    current_queue = queue_manager.get_queue(mandi_id)
+    for txn_id, _ in current_queue:
+        is_showcase_item = False
+        if txn_id.startswith("TXN-DEMO-") or txn_id.startswith("TXN-SIM-"):
+            is_showcase_item = True
+        elif db is not None:
+            log = db.query(ProcurementLog).filter(
+                ProcurementLog.transaction_id == txn_id
+            ).first()
+            if log and (log.is_showcase or log.demo_run_id is not None):
+                is_showcase_item = True
+
+        if is_showcase_item:
+            queue_manager.remove(mandi_id, txn_id)
+
+    # Prime queue with canonical TXN-DEMO-1002
+    txn_id = "TXN-DEMO-1002"
+    arr_ts = time_mod.time()
+    if db is not None:
+        log = db.query(ProcurementLog).filter(
+            ProcurementLog.transaction_id == txn_id
+        ).first()
+        if log is not None:
+            if log.crop_moisture_pct is None or log.net_weight_qt is None:
+                raise RuntimeError(f"Cannot prime queue: Showcase transaction '{txn_id}' is missing moisture or quantity.")
+            if log.created_at:
+                arr_ts = (
+                    log.created_at.replace(tzinfo=timezone.utc).timestamp()
+                    if log.created_at.tzinfo is None
+                    else log.created_at.timestamp()
+                )
+
+    queue_manager.enqueue(
+        mandi_id=mandi_id,
+        transaction_id=txn_id,
+        priority_score=25.00,
+        arrival_ts=arr_ts
+    )
 
 
 def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
@@ -513,20 +594,35 @@ def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
     Deterministically and idempotently builds:
     mandis -> crops -> farmers -> users -> slots -> showcase transactions -> queue state.
     """
-    if reset:
-        # Purge temporary simulated and dynamic test transactions
-        db.query(ProcurementLog).filter(
-            ~ProcurementLog.transaction_id.startswith("TXN-DEMO-")
-        ).delete(synchronize_session=False)
-        db.commit()
-
+    # 1. Authoritatively ensure foundational reference entities exist first
     mandis = ensure_canonical_mandis(db)
     crops = ensure_canonical_crops(db)
     farmers = ensure_canonical_farmers(db, reset=reset)
     users = ensure_canonical_users(db)
+
+    # 2. If reset, purge ONLY non-canonical showcase/simulation transactions.
+    # Genuine operational transactions (is_showcase == False, demo_run_id is None) MUST NEVER BE DELETED.
+    if reset:
+        canonical_txn_ids = {
+            "TXN-DEMO-1001", "TXN-DEMO-1002", "TXN-DEMO-1003",
+            "TXN-DEMO-1004", "TXN-DEMO-1005", "TXN-DEMO-1006"
+        }
+        showcase_filter = (
+            (ProcurementLog.is_showcase == True) |
+            (ProcurementLog.demo_run_id.isnot(None)) |
+            (ProcurementLog.transaction_id.startswith("TXN-SIM-"))
+        )
+        db.query(ProcurementLog).filter(
+            showcase_filter,
+            ~ProcurementLog.transaction_id.in_(canonical_txn_ids)
+        ).delete(synchronize_session=False)
+        db.commit()
+
+    # 3. Slots and showcase transactions can now be safely bound
     slots_created = ensure_canonical_slots(db, num_days=8, reset=reset)
     txns = ensure_showcase_transactions(db, reset=reset)
-    ensure_showcase_queue_state(mandi_id=1)
+    recalculate_slot_capacities(db)
+    ensure_showcase_queue_state(db=db, mandi_id=1)
 
     total_slots = db.query(ProcurementSlot).count()
     total_txns = db.query(ProcurementLog).count()
@@ -555,14 +651,24 @@ def reset_showcase_data(
     restores farmer ceilings, hourly slots, and enqueues TXN-DEMO-1002.
     Returns complete backward-compatible dictionary for frontend modals and admin routers.
     """
+    bootstrap_result = bootstrap_database(db, reset=True)
+
     if mandi_id is not None:
         target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
-        effective_mandi = target_mandi.mandi_id if target_mandi else mandi_id
+        if not target_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Mandi with ID {mandi_id} not found."
+            )
+        effective_mandi = target_mandi.mandi_id
     else:
         first_mandi = db.query(Mandi).order_by(Mandi.mandi_id.asc()).first()
-        effective_mandi = first_mandi.mandi_id if first_mandi else 1
-
-    bootstrap_result = bootstrap_database(db, reset=True)
+        if not first_mandi:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No operational Mandi found in the system."
+            )
+        effective_mandi = first_mandi.mandi_id
 
     today = date.today()
     target_slot = db.query(ProcurementSlot).filter(
@@ -570,19 +676,37 @@ def reset_showcase_data(
         ProcurementSlot.scheduled_date == today
     ).order_by(ProcurementSlot.start_time.asc()).first()
 
+    if not target_slot:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No procurement slot available for Mandi {effective_mandi} on {today}."
+        )
+
     if farmer_id is not None:
         farmer = db.query(Farmer).filter(Farmer.farmer_id == farmer_id).first()
+        if not farmer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Farmer with ID {farmer_id} not found."
+            )
     else:
         farmer = db.query(Farmer).order_by(Farmer.farmer_id.asc()).first()
+        if not farmer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No registered farmer found in the system."
+            )
+
+    ensure_showcase_queue_state(db=db, mandi_id=effective_mandi)
 
     return {
         "status": "SUCCESS",
         "mandi_id": effective_mandi,
-        "farmer_id": farmer.farmer_id if farmer else 1,
-        "slot_id": target_slot.slot_id if target_slot else 1,
-        "aadhaar_hash": farmer.aadhaar_hash if farmer else "",
-        "farmer_name": farmer.name if farmer else "Ramesh Kumar",
-        "production_ceiling_qt": float(farmer.production_ceiling_qt) if farmer else 600.0,
+        "farmer_id": farmer.farmer_id,
+        "slot_id": target_slot.slot_id,
+        "aadhaar_hash": farmer.aadhaar_hash,
+        "farmer_name": farmer.name,
+        "production_ceiling_qt": float(farmer.production_ceiling_qt),
         "message": "Showcase prototype database reset successfully to pristine starting states.",
         "transactions_reset": bootstrap_result["canonical_transactions"],
         "scheduled_date": str(today)

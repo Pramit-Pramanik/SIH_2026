@@ -26,6 +26,7 @@ export function GateTerminal({
   onGateCheckedIn,
   onGateEntryVerified,
 }: GateTerminalProps) {
+  const { t } = useLanguage();
   const { refreshTransaction } = useAuthoritativeTransaction();
   const [transactionId, setTransactionId] = useState(activeTxnId || '');
   const [farmerId, setFarmerId] = useState<number>(0);
@@ -53,9 +54,10 @@ export function GateTerminal({
       try {
         const local = await getLocalTransaction(targetId);
         if (local) {
-          setFarmerId(local.farmer_id);
-          if (local.slot_id) setSlotId(local.slot_id);
-          if (local.requested_qty_qt) setQuantityQt(local.requested_qty_qt);
+          if (local.farmer_id) setFarmerId(local.farmer_id);
+          const p = local.payload as Record<string, unknown> | undefined;
+          if (p?.slot_id) setSlotId(Number(p.slot_id));
+          if (p?.quantity_qt) setQuantityQt(Number(p.quantity_qt));
           if (local.token_signature) setTokenSignature(local.token_signature);
         }
       } catch {
@@ -79,7 +81,7 @@ export function GateTerminal({
               setFeedback({
                 type: 'success',
                 mode: 'AUTHORITATIVE_CLOUD',
-                message: `Gate Entry Verified for ${data.farmer_name} (${data.crop_type}). State: ${data.current_state}. Authorized for mandi yard staging entry.`,
+                message: t('gate.entryVerifiedDetails', { name: data.farmer_name, crop: data.crop_type, state: data.current_state }),
                 details: data,
               });
             }
@@ -90,7 +92,7 @@ export function GateTerminal({
       }
     }
     loadTxn();
-  }, [activeTxnId, transactionId, effectiveOnline]);
+  }, [activeTxnId, transactionId, effectiveOnline, t]);
 
   const handleVerifyGatePass = async (e: FormEvent) => {
     e.preventDefault();
@@ -113,9 +115,19 @@ export function GateTerminal({
       );
 
       if (!offlineVerdict.isVerified) {
+        let errDesc = offlineVerdict.error || t('gate.passValidationFailed');
+        if (offlineVerdict.error?.includes('HMAC signature format')) {
+          errDesc = t('gate.hmacFormatInvalid', { length: tokenSignature.length });
+        } else if (offlineVerdict.error?.includes('Missing cryptographic')) {
+          errDesc = t('gate.hmacMissing');
+        } else if (offlineVerdict.error?.includes('Mandi Mismatch')) {
+          errDesc = t('gate.mandiMismatchError', { passMandi: String(mandiId), termMandi: String(mandiId) });
+        } else if (offlineVerdict.error?.includes('Yield Ceiling Exceeded')) {
+          errDesc = t('gate.yieldCeilingExceeded');
+        }
         setFeedback({
           type: 'error',
-          message: offlineVerdict.error || 'Gate pass failed cryptographic signature or structural validation.',
+          message: errDesc,
         });
         setIsVerifying(false);
         return;
@@ -160,9 +172,9 @@ export function GateTerminal({
             await markWALRecordSynced(walResult.wal_id);
             isSyncedOnline = true;
           } else {
-            const errData = await resp.json().catch(() => ({ detail: 'Gate verification failed.' }));
-            await markWALRecordFailed(walResult.wal_id, errData.detail || 'Gate check-in rejected.');
-            throw new Error(errData.detail || 'Gate check-in rejected.');
+            const errData = await resp.json().catch(() => ({ detail: t('gate.verificationFailed') }));
+            await markWALRecordFailed(walResult.wal_id, errData.detail || t('gate.checkinRejected'));
+            throw new Error(errData.detail || t('gate.checkinRejected'));
           }
         } catch (cloudErr) {
           if (!window.navigator.onLine || !effectiveOnline) {
@@ -177,8 +189,8 @@ export function GateTerminal({
         type: 'success',
         mode: isSyncedOnline ? 'AUTHORITATIVE_CLOUD' : 'OFFLINE_LOCAL_PROVISIONAL',
         message: isSyncedOnline
-          ? `Gate Pass Verified! Authoritative cloud check-in synchronized and vehicle admitted.`
-          : `[OFFLINE PROVISIONAL] Gate entry structurally verified and committed to IndexedDB WAL. Vehicle admitted under offline protocol.`,
+          ? t('gate.passVerifiedOnline')
+          : t('gate.passVerifiedOffline'),
       });
       await refreshTransaction();
       window.dispatchEvent(
@@ -189,14 +201,12 @@ export function GateTerminal({
       onGateCheckedIn?.(transactionId);
       onGateEntryVerified?.(transactionId);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Gate verification failed';
+      const msg = err instanceof Error ? err.message : t('gate.verificationFailed');
       setFeedback({ type: 'error', message: msg });
     } finally {
       setIsVerifying(false);
     }
   };
-
-  const { t } = useLanguage();
 
   if (!transactionId) {
     return (
@@ -204,14 +214,14 @@ export function GateTerminal({
         <Truck className="w-16 h-16 text-blue-600 mx-auto" />
         <h2 className="text-xl font-black text-slate-800">{t('gate.title')}</h2>
         <p className="text-sm text-slate-600">
-          No active transaction selected. Please select an active transaction from the queue or recent workflow, or enter a Transaction ID below:
+          {t('gate.noTxnPrompt')}
         </p>
         <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
           <input
             type="text"
             value={manualTxnInput}
             onChange={(e) => setManualTxnInput(e.target.value.trim())}
-            placeholder="e.g. TXN-..."
+            placeholder={t('common.txnPlaceholder')}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-600 focus:outline-none"
           />
           <button
@@ -221,7 +231,7 @@ export function GateTerminal({
             disabled={!manualTxnInput}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
           >
-            Load
+            {t('common.load')}
           </button>
         </div>
       </div>
