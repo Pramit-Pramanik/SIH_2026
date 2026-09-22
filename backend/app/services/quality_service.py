@@ -608,11 +608,27 @@ def get_vehicle_queue_status(
         reconstruct_mandi_queue(db, mandi_id)
         score = queue_manager.get_score(mandi_id, transaction_id)
 
+    log_state = None
+    c_type = None
+    v_num = None
+    if db is not None:
+        log_entry = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == transaction_id).first()
+        if log_entry:
+            log_state = log_entry.current_state
+            c_type = log_entry.crop_type
+            v_num = getattr(log_entry, "vehicle_number", None)
+
+    active_len = queue_manager.queue_length(mandi_id)
+
     if score is None:
         return QueueStatusResponse(
             mandi_id=mandi_id,
             transaction_id=transaction_id,
             in_queue=False,
+            current_state=log_state,
+            queue_depth=active_len,
+            crop_type=c_type,
+            vehicle_number=v_num,
             priority_score=None,
             rank=None,
             total_ahead=None
@@ -629,6 +645,7 @@ def get_vehicle_queue_status(
 
     if db is not None:
         queue_resp = recompute_and_get_mandi_queue(db, mandi_id)
+        active_len = len(queue_resp.items)
         for item in queue_resp.items:
             if item.transaction_id == transaction_id:
                 eta_minutes = item.eta_minutes
@@ -642,6 +659,10 @@ def get_vehicle_queue_status(
         mandi_id=mandi_id,
         transaction_id=transaction_id,
         in_queue=True,
+        current_state=log_state or "QUALITY_APPROVED",
+        queue_depth=active_len,
+        crop_type=c_type,
+        vehicle_number=v_num,
         priority_score=score,
         rank=rank,
         total_ahead=total_ahead,

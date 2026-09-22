@@ -357,6 +357,19 @@ export interface Translations {
     scales: string;
     dcdqFormulationSubtitle: string;
     serviceRateTelemetry: string;
+    farmerLiveQueueTitle: string;
+    farmerLiveQueueSubtitle: string;
+    yourQueuePosition: string;
+    peopleAheadCount: string;
+    youAreNextInLine: string;
+    yardOverviewTitle: string;
+    yardStatusOperational: string;
+    yardStatusDegraded: string;
+    notInDispatchQueue: string;
+    notInQueueHint: string;
+    selectLotToTrack: string;
+    noActiveLots: string;
+    estimatedWaitMins: string;
   };
   weighbridge: {
     title: string;
@@ -1379,6 +1392,19 @@ export const translations: Record<'en' | 'hi', Translations> = {
       scales: 'Scales',
       dcdqFormulationSubtitle: 'DCDQ Multi-Factor Priority Formulation',
       serviceRateTelemetry: 'Service Rate Telemetry',
+      farmerLiveQueueTitle: 'My Live Queue Status',
+      farmerLiveQueueSubtitle: 'Real-time weighbridge queue position, vehicles ahead, and yard status',
+      yourQueuePosition: 'Your Position in Line',
+      peopleAheadCount: '{count} vehicle(s) ahead of you',
+      youAreNextInLine: 'You are next in line! Proceed to weighbridge scale when called',
+      yardOverviewTitle: 'Mandi Yard Live Telemetry',
+      yardStatusOperational: 'Operational (Normal Flow)',
+      yardStatusDegraded: 'Degraded (High Congestion)',
+      notInDispatchQueue: 'Lot Not in Weighbridge Queue Yet',
+      notInQueueHint: 'Your lot will enter this active queue after Gate check-in and Quality approval.',
+      selectLotToTrack: 'Select Vehicle / Lot to Track',
+      noActiveLots: 'No active delivery lots found for this Mandi.',
+      estimatedWaitMins: '~{mins} min wait',
     },
     weighbridge: {
       title: 'Electronic Weighbridge Scale',
@@ -2399,6 +2425,19 @@ export const translations: Record<'en' | 'hi', Translations> = {
       scales: 'कांटे',
       dcdqFormulationSubtitle: 'DCDQ बहु-कारक प्राथमिकता सूत्रीकरण',
       serviceRateTelemetry: 'सेवा दर टेलीमेट्री',
+      farmerLiveQueueTitle: 'मेरी लाइव कतार स्थिति',
+      farmerLiveQueueSubtitle: 'वास्तविक समय धर्मकांटा कतार स्थिति, आगे वाहन, और यार्ड स्थिति',
+      yourQueuePosition: 'कतार में आपकी स्थिति',
+      peopleAheadCount: 'आपसे आगे {count} वाहन',
+      youAreNextInLine: 'आप कतार में अगले हैं! बुलाए जाने पर तौल कांटे पर जाएं',
+      yardOverviewTitle: 'मंडी प्रांगण लाइव टेलीमेट्री',
+      yardStatusOperational: 'परिचालन सामान्य (सुचारू प्रवाह)',
+      yardStatusDegraded: 'धीमा (अत्यधिक भीड़)',
+      notInDispatchQueue: 'लॉट अभी धर्मकांटा कतार में नहीं है',
+      notInQueueHint: 'गेट चेक-इन और गुणवत्ता स्वीकृति के बाद आपका लॉट इस सक्रिय कतार में शामिल होगा।',
+      selectLotToTrack: 'ट्रैक करने के लिए वाहन / लॉट चुनें',
+      noActiveLots: 'इस मंडी के लिए कोई सक्रिय डिलीवरी लॉट नहीं मिला।',
+      estimatedWaitMins: '~{mins} मिनट प्रतीक्षा',
     },
     weighbridge: {
       title: 'इलेक्ट्रॉनिक धर्मकांटा तौल स्टेशन',

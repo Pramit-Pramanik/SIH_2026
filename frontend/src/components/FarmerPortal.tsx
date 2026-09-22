@@ -28,6 +28,7 @@ import {
 } from '../services/api';
 import { AuthUser } from '../services/authService';
 import { DigitalReceipt } from './DigitalReceipt';
+import { FarmerQueueTracker } from './FarmerQueueTracker';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuthoritativeTransaction } from '../context/TransactionContext';
 import { findScopedLocalTransaction, fetchAuthoritativeTransaction } from '../services/transactionService';
@@ -970,6 +971,20 @@ export function FarmerPortal({
             </div>
           </div>
         </section>
+      )}
+
+      {/* 2.5. Live Queue Status Widget for Active Pass */}
+      {activePass && (
+        <FarmerQueueTracker
+          mandiId={selectedMandiId || mandiId || 1}
+          effectiveOnline={effectiveOnline}
+          activeTxnId={activePass.transaction_id}
+          currentUser={currentUser}
+          compact={true}
+          onNavigateToQueue={() => {
+            window.dispatchEvent(new CustomEvent('mandiq:navigate-station', { detail: { tab: 'queue' } }));
+          }}
+        />
       )}
 
       {/* 3. Mandi Process Rail Stepper */}

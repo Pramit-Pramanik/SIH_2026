@@ -66,6 +66,10 @@ class QueueStatusResponse(BaseModel):
     mandi_id: int
     transaction_id: str
     in_queue: bool
+    current_state: Optional[str] = None
+    queue_depth: Optional[int] = None
+    crop_type: Optional[str] = None
+    vehicle_number: Optional[str] = None
     priority_score: Optional[float] = None
     rank: Optional[int] = None
     total_ahead: Optional[int] = None
@@ -74,6 +78,20 @@ class QueueStatusResponse(BaseModel):
     service_rate_qt_per_hour_per_scale: Optional[float] = Field(None, description="Rolling 15-minute weighbridge service rate")
     active_scales: Optional[int] = Field(None, description="Count of online active weighbridge scales")
     eta_status: Optional[str] = Field(None, description="ETA status: 'CALCULATED' or 'INSUFFICIENT_TELEMETRY'")
+
+
+class QueueOverviewResponse(BaseModel):
+    """
+    High-level non-confidential queue telemetry overview accessible to all roles including farmers.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    mandi_id: int
+    queue_depth: int
+    active_scales: int
+    service_rate_qt_per_hour_per_scale: float
+    status: str
+    message: str
 
 
 class ScaleConfigRequest(BaseModel):

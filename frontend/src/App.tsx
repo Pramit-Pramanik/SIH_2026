@@ -394,6 +394,9 @@ function StationManager({
             mandiId={selectedMandiId || 0}
             effectiveOnline={effectiveOnline}
             currentRole={currentUser.role}
+            activeTxnId={activeTxnId}
+            currentUser={currentUser}
+            onSelectTxn={(txnId) => setActiveTxnId(txnId)}
             onDispatchVehicle={(vehicle: { transaction_id: string }) => {
               setActiveTxnId(vehicle.transaction_id);
               if (userAllowedTabs.includes('weighbridge')) {

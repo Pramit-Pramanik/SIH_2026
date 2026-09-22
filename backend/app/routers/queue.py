@@ -11,6 +11,7 @@ from backend.app.schemas.queue import (
     QueueDispatchResponse,
     QueueListResponse,
     QueueStatusResponse,
+    QueueOverviewResponse,
     ScaleConfigRequest,
     ScaleConfigResponse
 )
@@ -194,7 +195,44 @@ def check_vehicle_status(
     # If ADMIN: allowed
     assert_transaction_scope(target=log, current_user=current_user, action_desc="read vehicle queue status")
 
-    return get_vehicle_queue_status(mandi_id=mandi_id, transaction_id=transaction_id, db=db)
+    res = get_vehicle_queue_status(mandi_id=mandi_id, transaction_id=transaction_id, db=db)
+    res.current_state = log.current_state
+    res.crop_type = log.crop_type
+    res.vehicle_number = getattr(log, "vehicle_number", None)
+    return res
+
+
+@router.get(
+    "/{mandi_id}/overview",
+    response_model=QueueOverviewResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get high-level queue overview for farmers and public displays"
+)
+def get_queue_overview(
+    mandi_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["ADMIN", "SUPERVISOR", "OPERATOR", "INSPECTOR", "FARMER"], strict=True))
+) -> QueueOverviewResponse:
+    target_mandi = db.query(Mandi).filter(Mandi.mandi_id == mandi_id).first()
+    if not target_mandi:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Mandi with ID {mandi_id} not found."
+        )
+    from backend.app.services.queue_manager import queue_manager
+    from backend.app.services.eta_service import get_active_scales, calculate_service_rate_mu
+    count = queue_manager.queue_length(mandi_id)
+    scales = get_active_scales(db, mandi_id)
+    mu, _, _, _ = calculate_service_rate_mu(db, mandi_id)
+    rate = mu if mu is not None else 40.0
+    return QueueOverviewResponse(
+        mandi_id=mandi_id,
+        queue_depth=count,
+        active_scales=scales,
+        service_rate_qt_per_hour_per_scale=round(rate, 2),
+        status="OPERATIONAL" if scales > 0 else "DEGRADED",
+        message=f"Mandi {mandi_id} has {count} vehicle(s) waiting in priority dispatch queue across {scales} active scale(s)."
+    )
 
 
 @router.get(

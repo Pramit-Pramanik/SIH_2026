@@ -439,3 +439,28 @@ def test_server_rejection_marks_conflict(client: TestClient, db_session: Session
     db_session.expire_all()
     log = db_session.query(ProcurementLog).filter(ProcurementLog.transaction_id == "TXN-SEC-REJECTED-003").first()
     assert log.current_state == "QUALITY_REJECTED"
+
+
+def test_farmer_can_access_queue_overview_and_own_queue_depth(client: TestClient, queue_sec_env):
+    """
+    Test 9: Farmer can access high-level queue overview telemetry and view queue depth / state on own transaction.
+    """
+    farmer_1_headers = {"Authorization": f"Bearer {queue_sec_env['farmer_1_token']}"}
+
+    # 1. Farmer can read queue overview
+    resp = client.get("/api/v1/queue/1/overview", headers=farmer_1_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["mandi_id"] == 1
+    assert "queue_depth" in data
+    assert "active_scales" in data
+    assert data["status"] in ("OPERATIONAL", "DEGRADED")
+
+    # 2. Farmer reading own status gets enriched fields (current_state, queue_depth, crop_type)
+    resp = client.get("/api/v1/queue/1/status/TXN-SEC-M1-001", headers=farmer_1_headers)
+    assert resp.status_code == 200
+    status_data = resp.json()
+    assert status_data["transaction_id"] == "TXN-SEC-M1-001"
+    assert status_data["current_state"] == "QUALITY_APPROVED"
+    assert status_data["queue_depth"] is not None
+    assert "Wheat" in status_data["crop_type"]

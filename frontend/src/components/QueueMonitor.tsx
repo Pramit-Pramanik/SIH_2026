@@ -17,7 +17,9 @@ import {
 } from 'lucide-react';
 import { getAuthHeaders, parseResponseSafe } from '../services/api';
 import { useLanguage } from '../i18n/LanguageContext';
+import { AuthUser } from '../services/authService';
 import { localDB, executeLocalTransactionMutation, type LocalTransactionState } from '../db/dexie';
+import { FarmerQueueTracker } from './FarmerQueueTracker';
 
 interface QueueItem {
   rank: number;
@@ -48,6 +50,9 @@ interface QueueMonitorProps {
   mandiId: number;
   effectiveOnline: boolean;
   currentRole?: string;
+  activeTxnId?: string | null;
+  currentUser?: AuthUser | null;
+  onSelectTxn?: (txnId: string) => void;
   onVehicleDispatched?: (txnId: string) => void;
   onDispatchVehicle?: (vehicle: { transaction_id: string; priority_score: number }) => void;
 }
@@ -56,6 +61,9 @@ export function QueueMonitor({
   mandiId,
   effectiveOnline,
   currentRole,
+  activeTxnId,
+  currentUser,
+  onSelectTxn,
   onVehicleDispatched,
   onDispatchVehicle,
 }: QueueMonitorProps) {
@@ -103,6 +111,7 @@ export function QueueMonitor({
 
   const fetchQueue = useCallback(
     async (silent = false) => {
+      if (currentRole === 'FARMER') return;
       if (!silent) setIsLoading(true);
       try {
         if (effectiveOnline) {
@@ -140,7 +149,7 @@ export function QueueMonitor({
   );
 
   const fetchScaleStatus = useCallback(async () => {
-    if (!effectiveOnline) return;
+    if (!effectiveOnline || currentRole === 'FARMER') return;
     try {
       const resp = await fetch(`/api/v1/queue/${mandiId}/scales`, {
         headers: getAuthHeaders(),
@@ -180,6 +189,7 @@ export function QueueMonitor({
 
   // Auto-polling effect (every 3 seconds when live feed is active)
   useEffect(() => {
+    if (currentRole === 'FARMER') return;
     fetchQueue();
     fetchScaleStatus();
     if (!effectiveOnline || !isLivePolling) return;
@@ -190,10 +200,11 @@ export function QueueMonitor({
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [fetchQueue, fetchScaleStatus, effectiveOnline, isLivePolling]);
+  }, [fetchQueue, fetchScaleStatus, effectiveOnline, isLivePolling, currentRole]);
 
   // Immediate event-driven queue refresh (Phase 5.2)
   useEffect(() => {
+    if (currentRole === 'FARMER') return;
     const handleImmediateRefresh = (event?: Event) => {
       fetchQueue(false);
       loadDispatchedVehicles();
@@ -531,6 +542,18 @@ export function QueueMonitor({
   };
 
   const isAuthorizedForDemo = currentRole === 'ADMIN' || currentRole === 'SUPERVISOR';
+
+  if (currentRole === 'FARMER') {
+    return (
+      <FarmerQueueTracker
+        mandiId={mandiId}
+        effectiveOnline={effectiveOnline}
+        activeTxnId={activeTxnId}
+        currentUser={currentUser}
+        onSelectTxn={onSelectTxn}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 font-sans">
