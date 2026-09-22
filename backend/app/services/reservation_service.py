@@ -115,6 +115,19 @@ def reserve_slot_atomic(
                     detail=f"Procurement slot {slot_id} not found for mandi {mandi_id}."
                 )
 
+            from datetime import date
+            today_date = date.today()
+            # Auto-expire stale unfulfilled appointments from past dates
+            stale_bookings = db.query(ProcurementLog).filter(
+                ProcurementLog.farmer_id == farmer_id,
+                ProcurementLog.current_state == "SLOT_BOOKED",
+                ProcurementLog.scheduled_date < today_date
+            ).all()
+            if stale_bookings:
+                for sb in stale_bookings:
+                    sb.current_state = "CANCELLED"
+                db.commit()
+
             # Compute current cumulative quantity booked by this farmer across active states
             cumulative_res = db.query(
                 func.coalesce(func.sum(ProcurementLog.net_weight_qt), 0.0)

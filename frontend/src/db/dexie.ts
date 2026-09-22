@@ -282,6 +282,7 @@ export interface ExecuteMutationParams {
   hmac_signature?: string;
   client_mutation_id?: string;
   client_timestamp?: number;
+  sync_status?: 'PENDING' | 'SYNCED' | 'FAILED';
 }
 
 export interface MutationExecutionResult {
@@ -305,6 +306,7 @@ export async function executeLocalTransactionMutation(
   const targetState = params.target_state || params.current_state || 'SLOT_RESERVED';
   const mutationType = params.mutation_type || targetState;
   const signature = params.hmac_signature || `LOCAL_HMAC_SIG_${now}`;
+  const initialSyncStatus = params.sync_status || 'PENDING';
 
   // Read existing materialized state if present
   const existing = await localDB.localTransactions.get(params.transaction_id);
@@ -326,7 +328,7 @@ export async function executeLocalTransactionMutation(
     payload: enrichedPayload,
     hmac_signature: signature,
     client_timestamp: now,
-    sync_status: 'PENDING',
+    sync_status: initialSyncStatus,
     retry_count: 0,
   };
 
@@ -358,7 +360,7 @@ export async function executeLocalTransactionMutation(
     last_client_mutation_id: mutationId,
     last_mutation_id: mutationId,
     last_updated_ts: now,
-    sync_status: 'PENDING',
+    sync_status: initialSyncStatus,
     payload: { ...(existing?.payload || {}), ...enrichedPayload },
   };
 
@@ -376,4 +378,28 @@ export async function executeLocalTransactionMutation(
     transaction: updatedState,
     wal_record: { ...walRecord, id: walId },
   };
+}
+
+/**
+ * Resets all FAILED WAL records back to PENDING with retry count 0 so they
+ * can be re-synchronized and reconciled against the server ledger.
+ */
+export async function retryFailedWALRecords(): Promise<number> {
+  const failed = await localDB.transactionsWAL
+    .where('sync_status')
+    .equals('FAILED')
+    .toArray();
+
+  for (const rec of failed) {
+    if (rec.id !== undefined) {
+      await localDB.transactionsWAL.update(rec.id, {
+        sync_status: 'PENDING',
+        retry_count: 0,
+        last_attempt_at: 0,
+        error_message: undefined,
+      });
+    }
+  }
+
+  return failed.length;
 }

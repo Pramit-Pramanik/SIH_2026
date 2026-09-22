@@ -68,6 +68,7 @@ ALLOWED_TRANSITIONS: Dict[Optional[str], Set[str]] = {
     TransactionState.QUALITY_APPROVED: {
         TransactionState.QUALITY_APPROVED,
         TransactionState.ROUTED_TO_WEIGHBRIDGE,
+        TransactionState.WEIGHED_GROSS,
         TransactionState.CANCELLED
     },
     TransactionState.ROUTED_TO_WEIGHBRIDGE: {

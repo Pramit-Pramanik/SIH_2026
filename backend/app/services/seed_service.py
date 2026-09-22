@@ -691,20 +691,13 @@ def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
     farmers = ensure_canonical_farmers(db, reset=reset)
     users = ensure_canonical_users(db)
 
-    # 2. If reset, purge ONLY non-canonical showcase/simulation transactions.
-    # Genuine operational transactions (is_showcase == False, demo_run_id is None) MUST NEVER BE DELETED.
+    # 2. If reset, purge all non-canonical transactions to restore clean starting state and farmer production ceilings
     if reset:
         canonical_txn_ids = {
             "TXN-DEMO-1001", "TXN-DEMO-1002", "TXN-DEMO-1003",
             "TXN-DEMO-1004", "TXN-DEMO-1005", "TXN-DEMO-1006"
         }
-        showcase_filter = (
-            (ProcurementLog.is_showcase == True) |
-            (ProcurementLog.demo_run_id.isnot(None)) |
-            (ProcurementLog.transaction_id.startswith("TXN-SIM-"))
-        )
         db.query(ProcurementLog).filter(
-            showcase_filter,
             ~ProcurementLog.transaction_id.in_(canonical_txn_ids)
         ).delete(synchronize_session=False)
         db.commit()

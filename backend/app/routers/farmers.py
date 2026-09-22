@@ -16,6 +16,19 @@ router = APIRouter(prefix="/farmers", tags=["Farmer Profile"])
 
 
 def compute_farmer_profile(db: Session, farmer: Farmer) -> FarmerProfileResponse:
+    from datetime import date
+    today = date.today()
+    # Auto-expire stale unfulfilled slot appointments from past dates
+    past_stale_slots = db.query(ProcurementLog).filter(
+        ProcurementLog.farmer_id == farmer.farmer_id,
+        ProcurementLog.current_state == "SLOT_BOOKED",
+        ProcurementLog.scheduled_date < today
+    ).all()
+    if past_stale_slots:
+        for stale in past_stale_slots:
+            stale.current_state = "CANCELLED"
+        db.commit()
+
     cumulative_res = db.query(
         func.coalesce(func.sum(ProcurementLog.net_weight_qt), 0.0)
     ).filter(

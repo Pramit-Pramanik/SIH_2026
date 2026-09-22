@@ -13,7 +13,7 @@ import {
   ChevronRight,
   Layers
 } from 'lucide-react';
-import { LocalTransactionWAL, LocalTransaction, getAllLocalTransactions } from '../db/dexie';
+import { LocalTransactionWAL, LocalTransaction, getAllLocalTransactions, retryFailedWALRecords } from '../db/dexie';
 import { SyncResult } from '../services/syncWorker';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -86,6 +86,24 @@ export function WALSyncMonitor({
             >
               <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
             </button>
+
+            {failedCount > 0 && (
+              <button
+                type="button"
+                id="btn-retry-failed-wal"
+                onClick={async () => {
+                  await retryFailedWALRecords();
+                  await onRefreshWAL();
+                  await onTriggerSync();
+                }}
+                disabled={isSyncing || !effectiveOnline}
+                className="bg-amber-600 hover:bg-amber-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition flex items-center space-x-2 shadow-md shadow-amber-600/20 cursor-pointer"
+                title="Retry and reconcile all failed WAL mutations against server"
+              >
+                <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>Retry Failed ({failedCount})</span>
+              </button>
+            )}
 
             <button
               type="button"

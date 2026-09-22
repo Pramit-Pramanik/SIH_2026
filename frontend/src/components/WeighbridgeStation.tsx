@@ -174,6 +174,7 @@ export function WeighbridgeStation({
           payload,
           hmac_signature: `WB_GROSS_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setFeedback({
@@ -269,6 +270,7 @@ export function WeighbridgeStation({
           payload,
           hmac_signature: `WB_TARE_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setFeedback({

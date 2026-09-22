@@ -22,6 +22,7 @@ import uuid
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, time as dt_time, datetime, timezone
+from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
@@ -573,3 +574,122 @@ def test_admin_demo_endpoints(client: TestClient, db_session: Session, sync_env)
     assert data_gzip["compression_ratio_pct"] > 40.0
     assert data_gzip["decompression_status"] == "SUCCESS_VERIFIED"
     assert data_gzip["verified"] is True
+
+
+# ==============================================================================
+# 11. RECONCILIATION OF UPSTREAM MUTATIONS ON ADVANCED/SETTLED TRANSACTIONS
+# ==============================================================================
+def test_wal_sync_upstream_mutations_reconcile_when_already_downstream(client: TestClient, db_session: Session, sync_env):
+    """
+    Verifies that when a transaction has already progressed to an advanced/terminal
+    state (such as PAYMENT_SETTLED), incoming WAL mutations for prior states
+    (WEIGHED_GROSS, WEIGHED_TARE, BILL_GENERATED) are reconciled as CONFLICT_RESOLVED
+    instead of being rejected with HTTP 409 Conflict.
+    Also verifies that direct transition from QUALITY_APPROVED to WEIGHED_GROSS is permitted.
+    """
+    db = db_session
+    op_token = create_access_jwt({"sub": "10", "role": "OPERATOR", "mandi_id": 1})
+    headers = {"Authorization": f"Bearer {op_token}", "Content-Type": "application/json"}
+
+    # 1. Create a transaction that is already at PAYMENT_SETTLED
+    txn_settled = ProcurementLog(
+        transaction_id="TXN-SETTLED-RECON-01",
+        farmer_id=1,
+        mandi_id=1,
+        current_state="PAYMENT_SETTLED",
+        crop_type="Wheat",
+        crop_moisture_pct=Decimal("12.5"),
+        scheduled_date=date.today(),
+        token_signature="sig_settled_001",
+        server_receive_sequence=50,
+        client_mutation_id="mut-initial-settled"
+    )
+    db.add(txn_settled)
+
+    # 2. Create another transaction at QUALITY_APPROVED
+    txn_qa = ProcurementLog(
+        transaction_id="TXN-QA-DIRECT-WB-01",
+        farmer_id=1,
+        mandi_id=1,
+        current_state="QUALITY_APPROVED",
+        crop_type="Wheat",
+        crop_moisture_pct=Decimal("11.8"),
+        scheduled_date=date.today(),
+        token_signature="sig_qa_001",
+        server_receive_sequence=60,
+        client_mutation_id="mut-initial-qa"
+    )
+    db.add(txn_qa)
+    db.commit()
+
+    # 3. Submit batch with upstream mutations for the settled transaction
+    upstream_batch = {
+        "mutations": [
+            {
+                "client_mutation_id": f"MUT-GROSS-{uuid.uuid4().hex[:6]}",
+                "transaction_id": "TXN-SETTLED-RECON-01",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "current_state": "WEIGHED_GROSS",
+                "client_timestamp": time.time(),
+                "payload": {"gross_weight_qt": 65.0}
+            },
+            {
+                "client_mutation_id": f"MUT-TARE-{uuid.uuid4().hex[:6]}",
+                "transaction_id": "TXN-SETTLED-RECON-01",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "current_state": "WEIGHED_TARE",
+                "client_timestamp": time.time(),
+                "payload": {"gross_weight_qt": 65.0, "tare_weight_qt": 15.0, "net_weight_qt": 50.0}
+            },
+            {
+                "client_mutation_id": f"MUT-BILL-{uuid.uuid4().hex[:6]}",
+                "transaction_id": "TXN-SETTLED-RECON-01",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "current_state": "BILL_GENERATED",
+                "client_timestamp": time.time(),
+                "payload": {"total_payout_inr": 113750.0}
+            },
+            # Also test direct QUALITY_APPROVED -> WEIGHED_GROSS transition
+            {
+                "client_mutation_id": f"MUT-QA-WB-{uuid.uuid4().hex[:6]}",
+                "transaction_id": "TXN-QA-DIRECT-WB-01",
+                "farmer_id": 1,
+                "mandi_id": 1,
+                "current_state": "WEIGHED_GROSS",
+                "client_timestamp": time.time(),
+                "payload": {"gross_weight_qt": 70.0}
+            }
+        ]
+    }
+
+    resp = client.post("/api/v1/sync/wal", json=upstream_batch, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["synced_count"] == 4
+
+    # Verify results for TXN-SETTLED-RECON-01
+    settled_results = [r for r in body["results"] if r["transaction_id"] == "TXN-SETTLED-RECON-01"]
+    assert len(settled_results) == 3
+    for r in settled_results:
+        assert r["status"] == "CONFLICT_RESOLVED"
+        assert r["current_state"] == "PAYMENT_SETTLED"
+        assert "already incorporated into downstream state" in r["message"]
+
+    # Verify result for TXN-QA-DIRECT-WB-01
+    qa_results = [r for r in body["results"] if r["transaction_id"] == "TXN-QA-DIRECT-WB-01"]
+    assert len(qa_results) == 1
+    assert qa_results[0]["status"] == "SYNCED"
+    assert qa_results[0]["current_state"] == "WEIGHED_GROSS"
+
+    # Verify DB state of settled transaction has not regressed, but payload merged
+    db.expire_all()
+    check_settled = db.query(ProcurementLog).filter(ProcurementLog.transaction_id == "TXN-SETTLED-RECON-01").first()
+    assert check_settled.current_state == "PAYMENT_SETTLED"
+    assert float(check_settled.gross_weight_qt) == 65.0
+    assert float(check_settled.tare_weight_qt) == 15.0
+    assert float(check_settled.net_weight_qt) == 50.0
+

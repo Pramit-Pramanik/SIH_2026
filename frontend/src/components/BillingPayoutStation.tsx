@@ -333,6 +333,7 @@ export function BillingPayoutStation({
           payload: data,
           hmac_signature: `BILL_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setInvoice(data);
@@ -491,6 +492,7 @@ export function BillingPayoutStation({
           payload: data as unknown as Record<string, unknown>,
           hmac_signature: `PAYOUT_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setPayoutResult(data);

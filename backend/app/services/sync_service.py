@@ -19,7 +19,7 @@ from backend.app.schemas.sync import (
     WALBatchSyncResponse,
     SignatureClassification,
 )
-from backend.app.services.lifecycle_service import validate_lifecycle_transition
+from backend.app.services.lifecycle_service import validate_lifecycle_transition, STATE_RANK
 
 def classify_signature(
     rec: WALMutationRecord,
@@ -294,20 +294,29 @@ def process_single_wal_mutation(
                 detail=f"Tare weight ({tare_val} qt) cannot be greater than or equal to Gross weight ({gross_val} qt)"
             )
 
+    current_rank = STATE_RANK.get(log.current_state, 0)
+    incoming_rank = STATE_RANK.get(rec.current_state, 0)
+    is_downstream_already = current_rank > incoming_rank
+
     # 7. Validate authoritative lifecycle transition from current log state
-    is_valid, err_msg, _ = validate_lifecycle_transition(
-        from_state=log.current_state,
-        to_state=rec.current_state,
-        payload_fields=incoming_fields,
-        farmer=farmer,
-        db=db,
-        current_log=log
-    )
-    if not is_valid:
-        raise HTTPException(
-            status_code=http_status.HTTP_409_CONFLICT,
-            detail=f"Lifecycle transition rejected: {err_msg}"
+    # In distributed offline-first sync, if the server is already in a more advanced downstream
+    # state (e.g. PAYMENT_SETTLED vs incoming WEIGHED_GROSS), the incoming mutation represents
+    # an upstream historical state that has already been incorporated downstream.
+    # We do NOT reject with 409 regression; we merge payload attributes and mark CONFLICT_RESOLVED.
+    if not is_downstream_already:
+        is_valid, err_msg, _ = validate_lifecycle_transition(
+            from_state=log.current_state,
+            to_state=rec.current_state,
+            payload_fields=incoming_fields,
+            farmer=farmer,
+            db=db,
+            current_log=log
         )
+        if not is_valid:
+            raise HTTPException(
+                status_code=http_status.HTTP_409_CONFLICT,
+                detail=f"Lifecycle transition rejected: {err_msg}"
+            )
 
     # 8. Assign authoritative monotonic server receive sequence
     server_seq = forced_sequence if forced_sequence is not None else get_next_server_sequence(db)
@@ -366,13 +375,16 @@ def process_single_wal_mutation(
 
     # Detect if any conflict arose (i.e. incoming was older than existing or partially overwritten)
     existing_seq = log.server_receive_sequence or 0
-    if server_seq < existing_seq:
+    if is_downstream_already:
+        sync_status = "CONFLICT_RESOLVED"
+    elif server_seq < existing_seq:
         sync_status = "CONFLICT_RESOLVED"
     elif server_seq == existing_seq and rec.client_mutation_id <= (log.client_mutation_id or ""):
         sync_status = "CONFLICT_RESOLVED"
 
-    # Apply merged fields
-    log.current_state = merged.get("current_state", log.current_state)
+    # Apply merged fields (preserve authoritative state if transaction is already in a downstream state)
+    if not is_downstream_already:
+        log.current_state = merged.get("current_state", log.current_state)
     if log.current_state == "ROUTED_TO_WEIGHBRIDGE":
         try:
             from backend.app.services.queue_manager import queue_manager
@@ -436,6 +448,13 @@ def process_single_wal_mutation(
     )
     db.merge(journal_entry)
 
+    if sync_status == "SYNCED":
+        status_msg = "Mutation successfully synchronized"
+    elif is_downstream_already:
+        status_msg = f"Mutation state '{rec.current_state}' already incorporated into downstream state '{log.current_state}'"
+    else:
+        status_msg = "Conflict resolved via LWW ordering"
+
     return WALMutationResult(
         client_mutation_id=rec.client_mutation_id,
         transaction_id=rec.transaction_id,
@@ -443,7 +462,7 @@ def process_single_wal_mutation(
         server_receive_sequence=log.server_receive_sequence or server_seq,
         current_state=log.current_state,
         signature_type=sig_classification,
-        message="Mutation successfully synchronized" if sync_status == "SYNCED" else "Conflict resolved via LWW ordering"
+        message=status_msg
     )
 
 def process_wal_batch_sync(

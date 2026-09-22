@@ -191,6 +191,7 @@ export function QualityStation({
           payload,
           hmac_signature: `QA_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setResult(data);
@@ -283,6 +284,7 @@ export function QualityStation({
           payload,
           hmac_signature: `OVERRIDE_SIG_${Date.now()}`,
           client_timestamp: Date.now(),
+          sync_status: 'SYNCED',
         });
 
         setResult({

@@ -229,6 +229,18 @@ export function FarmerPortal({
     return () => window.removeEventListener('mandiq:crops-changed', loadCrops);
   }, [effectiveOnline, currentUser]);
 
+  // Auto-select registered crop when profile loads or changes
+  useEffect(() => {
+    if (profile?.registered_crop_type && crops.length > 0) {
+      const matched = crops.find(
+        (c) => c.crop_name.toLowerCase() === profile.registered_crop_type.toLowerCase()
+      );
+      if (matched && (!selectedCropId || selectedCropId === crops[0].crop_id)) {
+        setSelectedCropId(matched.crop_id);
+      }
+    }
+  }, [profile?.registered_crop_type, crops, selectedCropId]);
+
   // 4. Fetch Slots for chosen Mandi and Scheduled Date
   useEffect(() => {
     async function loadSlots() {
@@ -1158,7 +1170,7 @@ export function FarmerPortal({
           <div className="space-y-3 bg-slate-50 border-2 border-slate-200 rounded-xl p-4">
             <div className="flex items-center justify-between">
               <label className="text-xs font-extrabold text-slate-800 uppercase tracking-wide">
-                {t('farmer.step2Title')} ({t('common.quintals')})
+                {t('farmer.step2Title')}
               </label>
               <span className="text-[11px] text-slate-500 font-medium">
                 1 Qt = 100 kg
@@ -1248,7 +1260,7 @@ export function FarmerPortal({
                 >
                   <span className="text-[11px] font-black">{`2.5 ${t('common.quintals')}`}</span>
                   <span className={`text-[10px] font-mono ${Math.abs(requestedQty - 2.5) < 0.05 ? 'text-emerald-100' : 'text-slate-500'}`}>
-                    {t('demoTools.tabControls')}
+                    Standard
                   </span>
                 </button>
                 {[0.25, 0.5, 0.75, 1.0].map((pct) => {
@@ -1311,7 +1323,13 @@ export function FarmerPortal({
               <div className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold flex items-center space-x-2">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>
-                  Requested {requestedQty.toFixed(1)} qt exceeds available capacity of {availableCapacity.toFixed(1)} qt by {(requestedQty - availableCapacity).toFixed(1)} qt. Please enter a quantity up to {availableCapacity.toFixed(1)} qt.
+                  {isLoadingProfile
+                    ? 'Loading verified farmer profile...'
+                    : availableCapacity <= 0
+                    ? farmerRemainingCeiling <= 0
+                      ? `Seasonal production ceiling exhausted (${profile?.production_ceiling_qt.toFixed(1) || 0} / ${profile?.production_ceiling_qt.toFixed(1) || 0} Qt booked).`
+                      : 'Selected hourly arrival window is fully booked. Please select another slot or date below.'
+                    : `Requested ${requestedQty.toFixed(1)} qt exceeds available capacity of ${availableCapacity.toFixed(1)} qt by ${(requestedQty - availableCapacity).toFixed(1)} qt. Please enter a quantity up to ${availableCapacity.toFixed(1)} qt.`}
                 </span>
               </div>
             )}
