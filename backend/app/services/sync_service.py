@@ -369,6 +369,13 @@ def process_single_wal_mutation(
 
     # Apply merged fields
     log.current_state = merged.get("current_state", log.current_state)
+    if log.current_state == "ROUTED_TO_WEIGHBRIDGE":
+        try:
+            from backend.app.services.queue_manager import queue_manager
+            queue_manager.remove(log.mandi_id, log.transaction_id)
+        except Exception:
+            pass
+
     if merged.get("gross_weight_qt") is not None:
         log.gross_weight_qt = Decimal(str(merged["gross_weight_qt"]))
     if merged.get("tare_weight_qt") is not None:
@@ -388,6 +395,22 @@ def process_single_wal_mutation(
     log.updated_at = datetime.now(timezone.utc)
 
     db.flush()
+
+    if log.current_state == "WEIGHED_TARE" and log.net_weight_qt is not None:
+        try:
+            from backend.app.services.eta_service import record_weighbridge_completion
+            record_weighbridge_completion(
+                db=db,
+                mandi_id=log.mandi_id,
+                transaction_id=log.transaction_id,
+                gross_weight_qt=float(log.gross_weight_qt or 0.0),
+                tare_weight_qt=float(log.tare_weight_qt or 0.0),
+                net_weight_qt=float(log.net_weight_qt or 0.0),
+                scale_id=incoming_fields.get("scale_id") or "SCALE-01",
+                completed_at=log.updated_at
+            )
+        except Exception:
+            pass
 
     # Track in processed mutations registry (in-memory fast-path)
     _processed_mutations[rec.client_mutation_id] = (
@@ -427,12 +450,27 @@ def process_wal_batch_sync(
     """
     Processes a batch of offline WAL mutations inside a single database transaction.
     Returns per-mutation results with assigned authoritative server sequence.
+    Handles per-mutation domain and lifecycle rejections gracefully.
     """
     results: List[WALMutationResult] = []
     synced_count = 0
 
     for rec in request.mutations:
-        result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
+        try:
+            result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
+        except HTTPException as exc:
+            if exc.status_code in (401, 403, 404):
+                raise exc
+            server_seq = get_next_server_sequence(db)
+            result = WALMutationResult(
+                client_mutation_id=rec.client_mutation_id,
+                transaction_id=rec.transaction_id,
+                status="REJECTED",
+                server_receive_sequence=server_seq,
+                current_state=None,
+                signature_type=SignatureClassification.INTEGRITY_METADATA,
+                message=exc.detail if isinstance(exc.detail, str) else str(exc.detail)
+            )
         results.append(result)
         if result.status in ("SYNCED", "CONFLICT_RESOLVED", "IGNORED_DUPLICATE"):
             synced_count += 1

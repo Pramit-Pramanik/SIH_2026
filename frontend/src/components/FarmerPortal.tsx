@@ -9,7 +9,8 @@ import {
   Building2,
   Check,
   Receipt,
-  Sparkles
+  Sparkles,
+  Clock,
 } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
@@ -17,7 +18,14 @@ import {
   markWALRecordSynced,
   LocalTransactionState
 } from '../db/dexie';
-import { reserveSlot, BookingPayload, OwnershipStatus, getAuthHeaders } from '../services/api';
+import {
+  reserveSlot,
+  BookingPayload,
+  OwnershipStatus,
+  getAuthHeaders,
+  calculateBookingFailureRisk,
+  BookingFailureRiskResponse,
+} from '../services/api';
 import { AuthUser } from '../services/authService';
 import { DigitalReceipt } from './DigitalReceipt';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -104,7 +112,7 @@ export function FarmerPortal({
   const [scheduledDate, setScheduledDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   );
-  const [requestedQty, setRequestedQty] = useState<number>(10.0);
+  const [requestedQty, setRequestedQty] = useState<number>(2.5);
 
   // Tenant / Sharecropper Oral Lease State
   const [ownershipStatus, setOwnershipStatus] = useState<OwnershipStatus>('OWNER');
@@ -124,12 +132,17 @@ export function FarmerPortal({
   const [activePass, setActivePass] = useState<LocalTransactionState | null>(null);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
 
-  // Determine effective farmer ID (FARMER role is strictly bound; Admin/Supervisor can use demoFarmerId, defaulting to 1)
+  // Logistic Booking Failure Risk State (AUD-005)
+  const [planningDeviation, setPlanningDeviation] = useState<number>(0);
+  const [planningRisk, setPlanningRisk] = useState<BookingFailureRiskResponse | null>(null);
+  const [activePassRisk, setActivePassRisk] = useState<BookingFailureRiskResponse | null>(null);
+
+  // Determine effective farmer ID (FARMER role is strictly bound; Admin/Supervisor can use demoFarmerId, without silent magic fallback)
   const isDemoRole = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPERVISOR');
   const isUnlinkedFarmer = !isDemoRole && currentUser?.role === 'FARMER' && !currentUser.farmer_id;
   const effectiveFarmerId = (!isDemoRole && currentUser?.role === 'FARMER')
     ? (currentUser.farmer_id || null)
-    : (demoFarmerId || currentUser?.farmer_id || (isDemoRole ? 1 : null));
+    : (demoFarmerId || currentUser?.farmer_id || null);
 
   // 1. Fetch Farmer Profile
   useEffect(() => {
@@ -164,6 +177,7 @@ export function FarmerPortal({
   // 2. Fetch Mandis
   useEffect(() => {
     async function loadMandis() {
+      if (!effectiveOnline) return;
       try {
         const res = await fetch('/api/v1/mandis', {
           headers: getAuthHeaders(),
@@ -182,11 +196,12 @@ export function FarmerPortal({
     loadMandis();
     window.addEventListener('mandiq:mandis-changed', loadMandis);
     return () => window.removeEventListener('mandiq:mandis-changed', loadMandis);
-  }, []);
+  }, [effectiveOnline, currentUser]);
 
   // 3. Fetch Crops with MSP
   useEffect(() => {
     async function loadCrops() {
+      if (!effectiveOnline) return;
       setIsLoadingCrops(true);
       try {
         const res = await fetch('/api/v1/crops', {
@@ -208,7 +223,7 @@ export function FarmerPortal({
     loadCrops();
     window.addEventListener('mandiq:crops-changed', loadCrops);
     return () => window.removeEventListener('mandiq:crops-changed', loadCrops);
-  }, []);
+  }, [effectiveOnline, currentUser]);
 
   // 4. Fetch Slots for chosen Mandi and Scheduled Date
   useEffect(() => {
@@ -246,6 +261,7 @@ export function FarmerPortal({
 
   // Handle mandi change: reset dependent slot state immediately
   const handleMandiChange = (newMandiId: number) => {
+    if (newMandiId === selectedMandiId && slots.length > 0) return;
     setSelectedMandiId(newMandiId);
     setSelectedSlotId(null);
     setSlots([]);
@@ -258,6 +274,69 @@ export function FarmerPortal({
       handleMandiChange(mandiId);
     }
   }, [mandiId]);
+
+  // Update Arrival Risk for selected appointment slot
+  useEffect(() => {
+    async function updatePlanningRisk() {
+      if (!selectedSlotId) {
+        setPlanningRisk(null);
+        return;
+      }
+      const chosenSlot = slots.find((s) => s.slot_id === selectedSlotId);
+      const startTime = chosenSlot ? chosenSlot.start_time : '09:00';
+      const parts = startTime.split(':');
+      const h = parseInt(parts[0], 10) || 9;
+      const m = parseInt(parts[1], 10) || 0;
+      const actTotalMin = h * 60 + m + planningDeviation;
+      const actH = Math.floor(actTotalMin / 60) % 24;
+      const actM = actTotalMin % 60;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const expectedStr = `${pad(h)}:${pad(m)}`;
+      const actualStr = `${pad(actH)}:${pad(actM)}`;
+
+      try {
+        const res = await calculateBookingFailureRisk({
+          expected_arrival: expectedStr,
+          actual_arrival: actualStr,
+          k: 0.05,
+          unit: 'minutes',
+        });
+        setPlanningRisk(res);
+      } catch {
+        // Fallback
+      }
+    }
+    updatePlanningRisk();
+  }, [selectedSlotId, slots, planningDeviation]);
+
+  // Update Arrival Risk for active pass
+  useEffect(() => {
+    async function updateActivePassRisk() {
+      if (!activePass) {
+        setActivePassRisk(null);
+        return;
+      }
+      const rawTime = activePass.scheduled_time ? activePass.scheduled_time.split('-')[0].trim() : '09:00';
+      const parts = rawTime.split(':');
+      const h = parseInt(parts[0], 10) || 9;
+      const m = parseInt(parts[1], 10) || 0;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const expectedStr = `${pad(h)}:${pad(m)}`;
+
+      try {
+        const res = await calculateBookingFailureRisk({
+          expected_arrival: expectedStr,
+          actual_arrival: expectedStr,
+          k: 0.05,
+          unit: 'minutes',
+        });
+        setActivePassRisk(res);
+      } catch {
+        // Fallback
+      }
+    }
+    updateActivePassRisk();
+  }, [activePass]);
 
   // 5. Hydrate active transaction from Dexie and backend database (Phase 0 & Phase 0.2)
   const loadSavedPass = async () => {
@@ -297,7 +376,7 @@ export function FarmerPortal({
         if (res.ok) {
           const data = await res.json();
           if (data.has_booking && data.booking) {
-            const terminalStates = ['PAYMENT_SETTLED', 'CANCELLED', 'PAYMENT_FAILED'];
+            const terminalStates = ['PAYMENT_SETTLED', 'CANCELLED', 'PAYMENT_FAILED', 'QUALITY_REJECTED'];
             if (!terminalStates.includes(data.booking.current_state) && (!selectedMandiId || data.booking.mandi_id === selectedMandiId)) {
               setActivePass({
                 transaction_id: data.booking.transaction_id,
@@ -734,7 +813,11 @@ export function FarmerPortal({
                 <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 block">
                   {t('farmer.tokenNo')}
                 </span>
-                <div className="text-3xl font-black text-[#004625] my-1 font-mono tracking-tight">
+                <div
+                  id="active-pass-token-id"
+                  data-transaction-id={activePass.transaction_id}
+                  className="text-3xl font-black text-[#004625] my-1 font-mono tracking-tight"
+                >
                   #{activePass.transaction_id.slice(-6).toUpperCase()}
                 </div>
                 <div className="text-xs font-semibold text-slate-700 flex items-center flex-wrap gap-1.5">
@@ -759,6 +842,46 @@ export function FarmerPortal({
               </div>
             </div>
 
+            {/* Scheduled Arrival Window Risk (Active Token) */}
+            <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center space-x-1.5 text-xs font-black text-amber-950">
+                  <Clock className="w-3.5 h-3.5 text-amber-700" />
+                  <span>{t('farmer.arrivalRiskTitle')}</span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-950 text-[10px] font-black tracking-tight">
+                  {t('farmer.modelledRiskBadge')}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                <div className="bg-white p-2 rounded-lg border border-amber-100">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('farmer.expectedTime')}</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {activePassRisk?.expected_arrival || activePass.scheduled_time || '09:00'}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-amber-100">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('farmer.actualTime')}</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {activePassRisk?.actual_arrival || activePass.scheduled_time || '09:00'}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-amber-100">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('farmer.deviationMinutes')}</span>
+                  <span className="font-mono font-bold text-slate-900">
+                    {`+${activePassRisk?.deviation?.toFixed(0) || 0} min`}
+                  </span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-amber-100">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase block">{t('farmer.riskProbability')}</span>
+                  <span className="font-mono font-black text-emerald-700">
+                    {`${((activePassRisk?.failure_probability ?? 0.5) * 100).toFixed(1)}%`}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between pt-2 border-t border-slate-100">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-900 font-bold text-xs border border-emerald-300">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
@@ -780,11 +903,24 @@ export function FarmerPortal({
                 <button
                   type="button"
                   onClick={() => setIsReceiptOpen(true)}
-                  className="px-3.5 py-1.5 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
                 >
                   <Receipt className="w-3.5 h-3.5" />
                   <span>{t('farmer.viewReceipt')}</span>
                 </button>
+
+                {activePass.current_state === 'SLOT_BOOKED' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('mandiq:navigate-station', { detail: { tab: 'gate' } }));
+                    }}
+                    className="px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+                  >
+                    <span>{t('gate.title')}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -873,6 +1009,7 @@ export function FarmerPortal({
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.destinationMandi')}</label>
                 <select
+                  id="select-destination-mandi"
                   value={selectedMandiId || ''}
                   onChange={(e) => handleMandiChange(Number(e.target.value))}
                   className="w-full h-10 px-3 rounded-xl bg-white border border-slate-300 font-bold text-xs text-slate-900 focus:outline-none focus:border-emerald-700 cursor-pointer shadow-xs"
@@ -928,6 +1065,7 @@ export function FarmerPortal({
                   return (
                     <button
                       key={crop.crop_id}
+                      id={`btn-crop-${crop.crop_name.toLowerCase().split(/[^a-z0-9]/)[0]}`}
                       type="button"
                       onClick={() => setSelectedCropId(crop.crop_id)}
                       className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col justify-between active:scale-95 cursor-pointer ${
@@ -1038,7 +1176,21 @@ export function FarmerPortal({
                   {availableCapacity > 0 ? `Max: ${availableCapacity.toFixed(1)} ${t('common.quintals')}` : t('common.noData')}
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRequestedQty(2.5)}
+                  className={`py-2 px-2 rounded-xl text-xs font-extrabold transition border active:scale-95 flex flex-col items-center justify-center cursor-pointer ${
+                    Math.abs(requestedQty - 2.5) < 0.05
+                      ? 'bg-emerald-700 text-white border-emerald-800 shadow-sm ring-1 ring-emerald-600'
+                      : 'bg-white text-slate-800 border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  <span className="text-[11px] font-black">{`2.5 ${t('common.quintals')}`}</span>
+                  <span className={`text-[10px] font-mono ${Math.abs(requestedQty - 2.5) < 0.05 ? 'text-emerald-100' : 'text-slate-500'}`}>
+                    {t('demoTools.tabControls')}
+                  </span>
+                </button>
                 {[0.25, 0.5, 0.75, 1.0].map((pct) => {
                   const label = `${(pct * 100).toFixed(0)}%`;
                   const calcQty = availableCapacity > 0 ? Number((availableCapacity * pct).toFixed(1)) : 0;
@@ -1260,10 +1412,11 @@ export function FarmerPortal({
                   return (
                     <button
                       key={s.slot_id}
+                      id={`btn-slot-${s.slot_id}`}
                       type="button"
                       disabled={isFull}
                       onClick={() => setSelectedSlotId(s.slot_id)}
-                      className={`text-left p-3 rounded-xl border-2 transition-all flex flex-col justify-between cursor-pointer ${
+                      className={`slot-selection-card text-left p-3 rounded-xl border-2 transition-all flex flex-col justify-between cursor-pointer ${
                         isFull
                           ? 'opacity-40 bg-slate-100 border-slate-200 cursor-not-allowed'
                           : isSelected
@@ -1287,9 +1440,69 @@ export function FarmerPortal({
             )}
           </div>
 
+          {/* Scheduled Arrival Window Risk Inspector (Appointment Planning) */}
+          {selectedSlotId && planningRisk && (
+            <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                <div className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>{t('farmer.arrivalRiskTitle')}</span>
+                </div>
+                <span className="px-2.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-950 text-[10px] font-black tracking-tight">
+                  {t('farmer.modelledRiskBadge')}
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700">{t('farmer.deviationMinutes')}:</span>
+                  <span className="font-mono font-black text-slate-900">{`+${planningDeviation} min`}</span>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {[0, 15, 30, 60].map((dev) => (
+                    <button
+                      key={dev}
+                      type="button"
+                      onClick={() => setPlanningDeviation(dev)}
+                      className={`py-1.5 px-2 rounded-lg text-xs font-bold transition border cursor-pointer ${
+                        planningDeviation === dev
+                          ? 'bg-emerald-700 text-white border-emerald-800'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {`+${dev}m`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200 text-xs">
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('farmer.expectedTime')}</span>
+                  <span className="font-mono font-bold text-slate-900">{planningRisk.expected_arrival}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('farmer.actualTime')}</span>
+                  <span className="font-mono font-bold text-slate-900">{planningRisk.actual_arrival}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('farmer.deviationMinutes')}</span>
+                  <span className="font-mono font-bold text-slate-900">{`+${planningRisk.deviation.toFixed(0)} min`}</span>
+                </div>
+                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('farmer.riskProbability')}</span>
+                  <span className={`font-mono font-black ${planningRisk.failure_probability > 0.8 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                    {`${(planningRisk.failure_probability * 100).toFixed(1)}%`}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Submit Button */}
           <button
             type="submit"
+            id="btn-reserve-slot"
             disabled={isSubmitting || !effectiveFarmerId || slots.length === 0 || !selectedSlotId || requestedQty <= 0 || requestedQty > availableCapacity}
             className="w-full h-14 min-h-[56px] rounded-xl bg-gradient-to-r from-[#004625] via-[#1e5e3a] to-[#257347] hover:brightness-105 active:scale-[0.98] transition-all text-white font-extrabold text-base flex items-center justify-between px-5 shadow-lg shadow-emerald-900/20 disabled:opacity-50 cursor-pointer"
           >

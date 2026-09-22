@@ -166,11 +166,20 @@ function StationManager({
       }
     };
 
+    const handleNavigate = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.tab) {
+        setActiveTab(customEvent.detail.tab as StationTab);
+      }
+    };
+
     window.addEventListener('mandiq:transactions-changed', handleTxnChanged);
     window.addEventListener('mandiq:mandis-changed', handleMandiChanged);
+    window.addEventListener('mandiq:navigate-station', handleNavigate);
     return () => {
       window.removeEventListener('mandiq:transactions-changed', handleTxnChanged);
       window.removeEventListener('mandiq:mandis-changed', handleMandiChanged);
+      window.removeEventListener('mandiq:navigate-station', handleNavigate);
     };
   }, [clearActiveTransaction, setActiveTxnId, setSelectedMandiId]);
 
@@ -262,7 +271,6 @@ function StationManager({
         currentUser={currentUser}
         onLogout={() => {
           clearStoredToken();
-          clearActiveTransaction('User logged out');
           setCurrentUser(null);
         }}
         selectedMandiId={selectedMandiId}
@@ -460,7 +468,7 @@ function MainApp() {
   const [authChecking, setAuthChecking] = useState<boolean>(true);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSimulatedOffline, setIsSimulatedOffline] = useState(false);
-  const [selectedMandiId, setSelectedMandiId] = useState<number | null>(null);
+  const [selectedMandiId, setSelectedMandiId] = useState<number | null>(1);
   const [demoFarmerId, setDemoFarmerId] = useState<number | null>(null);
 
   const effectiveOnline = isOnline && !isSimulatedOffline;
@@ -469,6 +477,9 @@ function MainApp() {
     fetchCurrentUser().then((user) => {
       if (user) {
         setCurrentUser(user);
+        if (user.mandi_id) {
+          setSelectedMandiId(user.mandi_id);
+        }
         if (user.farmer_id) {
           setDemoFarmerId(user.farmer_id);
         } else if (user.role === 'ADMIN' || user.role === 'SUPERVISOR') {
@@ -515,6 +526,9 @@ function MainApp() {
         effectiveOnline={effectiveOnline}
         onLoginSuccess={(user) => {
           setCurrentUser(user);
+          if (user.mandi_id) {
+            setSelectedMandiId(user.mandi_id);
+          }
           if (user.farmer_id) {
             setDemoFarmerId(user.farmer_id);
           } else if (user.role === 'ADMIN' || user.role === 'SUPERVISOR') {

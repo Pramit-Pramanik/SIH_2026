@@ -27,8 +27,17 @@ export function GateTerminal({
   onGateEntryVerified,
 }: GateTerminalProps) {
   const { t } = useLanguage();
-  const { refreshTransaction } = useAuthoritativeTransaction();
-  const [transactionId, setTransactionId] = useState(activeTxnId || '');
+  const {
+    activeTxnId: contextTxnId,
+    activeTransaction,
+    resolutionStatus,
+    resolutionError,
+    setActiveTxnId,
+    refreshTransaction,
+  } = useAuthoritativeTransaction();
+
+  const targetTxnId = activeTransaction?.transaction_id || contextTxnId || activeTxnId || '';
+  const [transactionId, setTransactionId] = useState(targetTxnId);
   const [farmerId, setFarmerId] = useState<number>(0);
   const [slotId, setSlotId] = useState<number>(0);
   const [quantityQt, setQuantityQt] = useState<number>(0);
@@ -43,21 +52,74 @@ export function GateTerminal({
     details?: Record<string, unknown>;
   } | null>(null);
 
+  // Sync state from authoritative transaction
+  useEffect(() => {
+    if (activeTransaction) {
+      setTransactionId(activeTransaction.transaction_id);
+      if (activeTransaction.farmer_id) setFarmerId(activeTransaction.farmer_id);
+      if (activeTransaction.slot_id) setSlotId(activeTransaction.slot_id);
+      const qty = activeTransaction.net_weight_qt;
+      if (typeof qty === 'number' && qty > 0) setQuantityQt(qty);
+      if (activeTransaction.token_signature) setTokenSignature(activeTransaction.token_signature);
+    }
+  }, [activeTransaction]);
+
+  // Auto-resolve active transaction from Gate if not already loaded or in advance state
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function autoResolveBookedLot() {
+      if (activeTransaction && (activeTransaction.current_state === 'SLOT_BOOKED' || activeTransaction.current_state === 'GATE_ENTRY_VERIFIED')) {
+        return;
+      }
+      if (!effectiveOnline) return;
+
+      try {
+        const queryParams = new URLSearchParams();
+        if (mandiId) queryParams.set('mandi_id', String(mandiId));
+        queryParams.set('current_state', 'SLOT_BOOKED');
+        queryParams.set('limit', '1');
+
+        const resp = await fetch(`/api/v1/transactions?${queryParams.toString()}`, {
+          headers: getAuthHeaders(),
+        });
+        if (resp.ok) {
+          const list = await resp.json();
+          if (!isCancelled && Array.isArray(list) && list.length > 0) {
+            const bookedLot = list[0];
+            if (bookedLot && bookedLot.transaction_id) {
+              setActiveTxnId(bookedLot.transaction_id);
+              await refreshTransaction();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[GateTerminal] Auto-resolve booked lot error:', err);
+      }
+    }
+
+    autoResolveBookedLot();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTransaction, mandiId, effectiveOnline, setActiveTxnId, refreshTransaction]);
+
   // Hydrate from local transaction boundary and server authoritative state
   useEffect(() => {
     async function loadTxn() {
-      const targetId = activeTxnId || transactionId;
-      if (!targetId) return;
-      if (activeTxnId) setTransactionId(activeTxnId);
+      const currentId = targetTxnId || transactionId;
+      if (!currentId) return;
 
       // 1. Check local Dexie first
       try {
-        const local = await getLocalTransaction(targetId);
+        const local = await getLocalTransaction(currentId);
         if (local) {
           if (local.farmer_id) setFarmerId(local.farmer_id);
           const p = local.payload as Record<string, unknown> | undefined;
           if (p?.slot_id) setSlotId(Number(p.slot_id));
-          if (p?.quantity_qt) setQuantityQt(Number(p.quantity_qt));
+          if (p?.requested_qty_qt) setQuantityQt(Number(p.requested_qty_qt));
+          else if (p?.quantity_qt) setQuantityQt(Number(p.quantity_qt));
           if (local.token_signature) setTokenSignature(local.token_signature);
         }
       } catch {
@@ -67,7 +129,7 @@ export function GateTerminal({
       // 2. Fetch authoritative database state if online
       if (effectiveOnline) {
         try {
-          const resp = await fetch(`/api/v1/gate/verify/${targetId}`, {
+          const resp = await fetch(`/api/v1/gate/verify/${currentId}`, {
             headers: getAuthHeaders(),
           });
           if (resp.ok) {
@@ -77,14 +139,31 @@ export function GateTerminal({
             if (typeof data.quantity_qt === 'number' && data.quantity_qt > 0) {
               setQuantityQt(data.quantity_qt);
             }
-            if (data.status === 'VERIFIED') {
+            if (data.token_signature) {
+              setTokenSignature(data.token_signature);
+            }
+            if (data.status === 'VERIFIED' || data.current_state === 'GATE_ENTRY_VERIFIED') {
               setFeedback({
                 type: 'success',
                 mode: 'AUTHORITATIVE_CLOUD',
-                message: t('gate.entryVerifiedDetails', { name: data.farmer_name, crop: data.crop_type, state: data.current_state }),
+                message: t('gate.entryVerifiedDetails', {
+                  farmerName: data.farmer_name,
+                  crop: data.crop_type,
+                  state: data.current_state,
+                }),
                 details: data,
               });
             }
+          } else if (resp.status === 404) {
+            // Visible error handling: do not show fake values, show useful localized error, prevent next operation
+            setFarmerId(0);
+            setSlotId(0);
+            setQuantityQt(0);
+            setTokenSignature('');
+            setFeedback({
+              type: 'error',
+              message: t('common.txnNotFound', { txnId: currentId }),
+            });
           }
         } catch {
           // Offline fallback
@@ -92,7 +171,7 @@ export function GateTerminal({
       }
     }
     loadTxn();
-  }, [activeTxnId, transactionId, effectiveOnline, t]);
+  }, [targetTxnId, transactionId, effectiveOnline, t]);
 
   const handleVerifyGatePass = async (e: FormEvent) => {
     e.preventDefault();
@@ -208,25 +287,48 @@ export function GateTerminal({
     }
   };
 
-  if (!transactionId) {
+  const isAlreadyCheckedIn = activeTransaction?.current_state === 'GATE_ENTRY_VERIFIED';
+  const isSlotBooked = activeTransaction?.current_state === 'SLOT_BOOKED';
+  const isAdmissible = Boolean(activeTransaction && (isSlotBooked || isAlreadyCheckedIn));
+
+  // Preflight validation rendering when transaction does not exist or has resolution errors
+  if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
     return (
       <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
         <Truck className="w-16 h-16 text-blue-600 mx-auto" />
         <h2 className="text-xl font-black text-slate-800">{t('gate.title')}</h2>
-        <p className="text-sm text-slate-600">
-          {t('gate.noTxnPrompt')}
-        </p>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
+          <div className="flex items-center space-x-1.5 font-bold text-amber-950">
+            <AlertTriangle className="w-4 h-4 text-amber-700" />
+            <span>{t('gate.title')} — {t('common.noData')}</span>
+          </div>
+          <p className="text-slate-600">
+            {resolutionStatus === 'NOT_FOUND'
+              ? t('common.txnNotFound', { txnId: targetTxnId || activeTxnId || '' })
+              : resolutionStatus === 'FARMER_MISMATCH'
+              ? t('common.txnFarmerMismatch')
+              : resolutionStatus === 'MANDI_MISMATCH'
+              ? t('common.txnMandiMismatch')
+              : (resolutionError || t('gate.noTxnPrompt'))}
+          </p>
+        </div>
         <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
           <input
             type="text"
+            id="input-gate-manual-txn"
             value={manualTxnInput}
             onChange={(e) => setManualTxnInput(e.target.value.trim())}
             placeholder={t('common.txnPlaceholder')}
             className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-blue-600 focus:outline-none"
           />
           <button
-            onClick={() => {
-              if (manualTxnInput) setTransactionId(manualTxnInput);
+            id="btn-gate-load-txn"
+            onClick={async () => {
+              if (manualTxnInput) {
+                setActiveTxnId(manualTxnInput);
+                setTransactionId(manualTxnInput);
+                await refreshTransaction();
+              }
             }}
             disabled={!manualTxnInput}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
@@ -240,17 +342,69 @@ export function GateTerminal({
 
   return (
     <div className="space-y-6 font-sans">
-      {/* Banner */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 shadow-xs">
-        <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
-          <Truck className="w-4 h-4" />
-          <span>{t('gate.title')}</span>
+      {/* Banner with Active Transaction Badge */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-blue-700 mb-1">
+            <Truck className="w-4 h-4" />
+            <span>{t('gate.title')}</span>
+          </div>
+          <h2 className="text-xl font-black text-blue-950">{t('gate.subtitle')}</h2>
+          <p className="text-xs text-slate-600 mt-0.5">
+            {t('gate.scanQrSubtitle')}
+          </p>
         </div>
-        <h2 className="text-xl font-black text-blue-950">{t('gate.subtitle')}</h2>
-        <p className="text-xs text-slate-600 mt-0.5">
-          {t('gate.scanQrSubtitle')}
-        </p>
+
+        <div className="text-right">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+            {t('common.activeTransaction')}
+          </span>
+          <span className="font-mono font-black text-blue-900 bg-blue-100 px-2.5 py-1 rounded-md text-xs border border-blue-300">
+            {activeTransaction.transaction_id}
+          </span>
+        </div>
       </div>
+
+      {/* State Warning if not SLOT_BOOKED and not already GATE_ENTRY_VERIFIED */}
+      {!isAdmissible && (
+        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+          <div className="flex items-center space-x-2">
+            <AlertTriangle className="w-4 h-4 text-amber-700" />
+            <div>
+              <span className="font-bold">{t('common.status')}: </span>
+              <span>
+                Transaction is in state &lsquo;{activeTransaction.current_state}&rsquo;. Only &lsquo;SLOT_BOOKED&rsquo; transactions can enter through the gate.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Verified Notice if already GATE_ENTRY_VERIFIED */}
+      {isAlreadyCheckedIn && (
+        <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50 text-emerald-950 text-xs flex flex-wrap items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-700 shrink-0" />
+            <div>
+              <span className="font-bold text-sm block">{t('gate.entryVerified')}</span>
+              <span className="text-slate-600">
+                Vehicle gate pass verified for {activeTransaction.farmer_name || `Farmer #${activeTransaction.farmer_id}`} ({activeTransaction.crop_type || 'Wheat'}). Authorized for mandi yard staging entry.
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onGateEntryVerified?.(activeTransaction.transaction_id);
+              window.dispatchEvent(new CustomEvent('mandiq:navigate-station', { detail: { tab: 'quality' } }));
+            }}
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-xl transition shadow-xs flex items-center space-x-1.5 cursor-pointer"
+          >
+            <span>{t('gate.inspectionReady')}</span>
+            <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Verification Form */}
@@ -267,10 +421,8 @@ export function GateTerminal({
                 <input
                   type="text"
                   value={transactionId}
-                  onChange={(e) => setTransactionId(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
-                  placeholder={t('gate.tokenPlaceholder')}
-                  required
+                  disabled
+                  className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 cursor-not-allowed"
                 />
               </div>
 
@@ -279,9 +431,10 @@ export function GateTerminal({
                 <input
                   type="number"
                   value={farmerId || ''}
+                  disabled={isAlreadyCheckedIn}
                   onChange={(e) => setFarmerId(parseInt(e.target.value) || 0)}
                   placeholder={t('gate.farmerIdPlaceholder')}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
@@ -293,9 +446,10 @@ export function GateTerminal({
                 <input
                   type="number"
                   value={slotId || ''}
+                  disabled={isAlreadyCheckedIn}
                   onChange={(e) => setSlotId(parseInt(e.target.value) || 0)}
                   placeholder={t('gate.slotIdPlaceholder')}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
@@ -306,8 +460,9 @@ export function GateTerminal({
                   type="number"
                   step="0.1"
                   value={quantityQt}
+                  disabled={isAlreadyCheckedIn}
                   onChange={(e) => setQuantityQt(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                   required
                 />
               </div>
@@ -320,8 +475,9 @@ export function GateTerminal({
               <textarea
                 rows={2}
                 value={tokenSignature}
+                disabled={isAlreadyCheckedIn}
                 onChange={(e) => setTokenSignature(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-[11px] font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none"
+                className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-[11px] font-mono text-slate-900 focus:bg-white focus:border-blue-600 focus:outline-none disabled:bg-slate-100 disabled:cursor-not-allowed"
                 placeholder={t('gate.signaturePlaceholder')}
                 required
               />
@@ -361,14 +517,30 @@ export function GateTerminal({
               </div>
             )}
 
-            <button
-              type="submit"
-              disabled={isVerifying}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-blue-600/20 flex items-center justify-center space-x-2 cursor-pointer"
-            >
-              <span>{isVerifying ? t('gate.verifying') : t('gate.checkInButton')}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
+            {isAlreadyCheckedIn ? (
+              <button
+                type="button"
+                id="btn-gate-next-quality"
+                onClick={() => {
+                  onGateEntryVerified?.(activeTransaction.transaction_id);
+                  window.dispatchEvent(new CustomEvent('mandiq:navigate-station', { detail: { tab: 'quality' } }));
+                }}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-emerald-700/20 flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <span>{t('gate.inspectionReady')}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                id="btn-gate-checkin"
+                disabled={isVerifying || !isSlotBooked}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-blue-600/20 flex items-center justify-center space-x-2 cursor-pointer"
+              >
+                <span>{isVerifying ? t('gate.verifying') : t('gate.checkInButton')}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            )}
           </form>
         </div>
 

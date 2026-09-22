@@ -40,6 +40,7 @@ REQUIRED_TABLES = [
     "users",
     "procurement_slots",
     "procurement_logs",
+    "weighbridge_events",
     "wal_mutation_journal"
 ]
 

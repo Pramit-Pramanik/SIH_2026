@@ -214,8 +214,36 @@ export async function resolveAuthoritativeTransaction(params: {
 }
 
 /**
+ * Fetch authoritative transaction list filtered by mandi, state, or farmer.
+ */
+export async function fetchAuthoritativeTransactionsList(params: {
+  mandiId?: number;
+  currentState?: string;
+  farmerId?: number;
+  limit?: number;
+}): Promise<AuthoritativeTransaction[]> {
+  try {
+    const query = new URLSearchParams();
+    if (params.mandiId) query.set('mandi_id', String(params.mandiId));
+    if (params.currentState) query.set('current_state', params.currentState);
+    if (params.farmerId) query.set('farmer_id', String(params.farmerId));
+    if (params.limit) query.set('limit', String(params.limit));
+
+    const res = await fetch(`/api/v1/transactions?${query.toString()}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      return [];
+    }
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Scoped search for a legitimate active transaction matching the current user and mandi.
- * Never blindly returns an arbitrary transaction from another user or completed workflow.
+ * Queries authoritative backend when online, falling back to local storage if offline.
  */
 export async function findScopedLocalTransaction(params: {
   currentUser?: AuthUser | null;
@@ -225,35 +253,35 @@ export async function findScopedLocalTransaction(params: {
   const { currentUser, selectedMandiId, isOnline = true } = params;
   if (!currentUser) return null;
 
-  const all = await getAllLocalTransactions();
-  // Filter out terminal states
-  const terminalStates = ['PAYMENT_SETTLED', 'PAYMENT_FAILED', 'CANCELLED'];
+  const terminalStates = ['PAYMENT_SETTLED', 'PAYMENT_FAILED', 'CANCELLED', 'QUALITY_REJECTED'];
 
+  // 1. Authoritative Cloud Search if Online
+  if (isOnline) {
+    try {
+      const serverTxns = await fetchAuthoritativeTransactionsList({
+        mandiId: selectedMandiId || undefined,
+        farmerId: currentUser.role === 'FARMER' ? (currentUser.farmer_id || undefined) : undefined,
+        limit: 15,
+      });
+
+      for (const st of serverTxns) {
+        if (terminalStates.includes(st.current_state)) continue;
+        if (selectedMandiId && st.mandi_id !== selectedMandiId) continue;
+        if (currentUser.role === 'FARMER' && currentUser.farmer_id && st.farmer_id !== currentUser.farmer_id) continue;
+        return st.transaction_id;
+      }
+    } catch {
+      // Fallback to local Dexie on network error
+    }
+  }
+
+  // 2. Local Dexie Fallback
+  const all = await getAllLocalTransactions();
   for (const tx of all) {
     if (terminalStates.includes(tx.current_state)) continue;
-
-    // Must match mandi
     if (selectedMandiId && tx.mandi_id !== selectedMandiId) continue;
-
-    // If FARMER, must match farmer_id
-    if (currentUser.role === 'FARMER' && currentUser.farmer_id) {
-      if (tx.farmer_id !== currentUser.farmer_id) continue;
-    }
-
-    // Verify online existence if connected
-    if (isOnline) {
-      try {
-        const cloud = await fetchAuthoritativeTransaction(tx.transaction_id);
-        if (cloud && !terminalStates.includes(cloud.current_state)) {
-          return cloud.transaction_id;
-        }
-      } catch {
-        // Skip unverified local records if online
-        continue;
-      }
-    } else {
-      return tx.transaction_id;
-    }
+    if (currentUser.role === 'FARMER' && currentUser.farmer_id && tx.farmer_id !== currentUser.farmer_id) continue;
+    return tx.transaction_id;
   }
 
   return null;

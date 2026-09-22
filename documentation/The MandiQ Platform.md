@@ -150,7 +150,7 @@ Commission Agents (Arhtiyas),"Intermediary trade management, short-term farmer c
 * The system computes a strict **Production Ceiling** (\\\\(Q\_{\\text{max}} \= A\_{\\text{hec}} \\times Y\_{\\text{crop}}\\\\)), blocking fake entries 22, 56, 58\.  
 * **Dynamic Slot Booking & Token Generation**:  
 * The farmer selects an operational mandi and preferred arrival date via PWA, App, or USSD (\*247\#) 22, 28, 29, 37\.  
-* The backend executes an in-memory capacity check in Redis using distributed Redlock primitives (SETNX with a 1500ms TTL) 8, 22\.  
+* The backend executes an in-memory capacity check in Redis using a Redis Atomic Reservation Lock (SET NX PX with a 1500ms TTL and process-local fallback) 8, 22\.  
 * Upon successful allocation, the backend generates an offline-validatable cryptographic token containing an HMAC-SHA256 signature 22\.  
 * **Mandi Gate Check-In & Local WAL Logging**:  
 * Upon physical arrival, the gate operator scans the farmer's token QR code 22, 59\.  
@@ -244,7 +244,7 @@ Informal Tenancy Exclusion,"Sharecroppers lack formal land ownership deeds 9, 12
 5. *Multi-Channel Zero-Data Access*: Must provide USSD (\*247\#) and 2-way SMS interfaces for low-literacy farmers on feature phones 22, 28, 29\.  
 6. *Multi-Signature Payout Authorization*: Must require dual cryptographic hashes (Inspector \+ Operator) before releasing DBT funds 22\.  
 7. **Non-Functional Requirements**:  
-8. *Performance Latency*: Scale sensor-to-app data logging must complete in **\<1.2 seconds** 53; local ML inference on ARM Cortex-A53 hardware must execute in **\<78 milliseconds** 65\.  
+8. *Performance Latency*: Scale sensor-to-app data logging must complete in **\<1.2 seconds** 53; local ML inference on ARM Cortex-A53 reference hardware targets **\<78 milliseconds** 65 (published academic reference benchmark; live prototype deployments dynamically measure actual execution latency via monotonic timer).  
 9. *Data Efficiency*: Sync payloads compressed via Gzip must remain **\<100 KB** per sync session 65\.  
 10. *Availability & Resilience*: Must guarantee **100% operational transaction uptime** at physical mandi gates regardless of central cloud server health 22, 26\.  
 11. *Financial Security*: Financial ledgers must enforce strict ACID compliance, complete auditability, and zero unauthorized bank detail modifications 18, 19, 22, 38\.
@@ -293,7 +293,7 @@ Queue Scheduling,"Static FCFS: Causes 8:00 AM gridlock and grain rot 5, 10.",Dyn
 
 Data Integrity,"Vulnerable: Manual weight logging allows fraud 17, 18.","Tamper-Proof: Direct BLE scale capture & HMAC tokens 22, 59.","MandiQ eliminates transcription error and illegal account edits 18, 19, 22."
 
-Engineering Complexity,Low: Standard REST CRUD web application.,"High: Multi-master sync, Redlock, LWW conflict logic 22, 27.","Higher initial complexity is justified by eliminating multi-crore capital losses 10, 11, 22."
+Engineering Complexity,Low: Standard REST CRUD web application.,"High: Multi-master sync, Redis Atomic Mutex, LWW conflict logic 22, 27.","Higher initial complexity is justified by eliminating multi-crore capital losses 10, 11, 22."
 
 ## 5\. KNOWLEDGE GAPS & CONTRADICTIONS
 

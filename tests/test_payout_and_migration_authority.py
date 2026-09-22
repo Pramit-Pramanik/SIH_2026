@@ -341,6 +341,7 @@ def test_migration_from_empty_sqlite_succeeds(tmp_path):
             "users",
             "crops",
             "wal_mutation_journal",
+            "weighbridge_events",
             "alembic_version"
         }
         assert expected_tables.issubset(tables), f"Missing tables: {expected_tables - tables}"

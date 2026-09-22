@@ -5,6 +5,7 @@ from backend.app.models.slot import ProcurementSlot
 from backend.app.models.log import ProcurementLog, VALID_PROCUREMENT_STATES, WALMutationJournal
 from backend.app.models.user import User, VALID_USER_ROLES
 from backend.app.models.crop import Crop
+from backend.app.models.weighbridge import WeighbridgeEvent
 
 __all__ = [
     "Base",
@@ -16,7 +17,9 @@ __all__ = [
     "VALID_PROCUREMENT_STATES",
     "User",
     "VALID_USER_ROLES",
-    "Crop"
+    "Crop",
+    "WeighbridgeEvent"
 ]
+
 
 

@@ -106,6 +106,7 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
                 return (
                   <button
                     key={acc.username}
+                    id={`btn-preset-${acc.username}`}
                     type="button"
                     onClick={() => handleSelectAccount(acc.username, acc.pass)}
                     className={`py-1.5 px-2 text-xs font-bold rounded-xl text-left transition-all ${
@@ -176,6 +177,7 @@ export function LoginScreen({ onLoginSuccess, effectiveOnline }: LoginScreenProp
 
             <button
               type="submit"
+              id="btn-login-submit"
               disabled={isLoading}
               className="w-full h-12 rounded-xl bg-emerald-800 hover:bg-emerald-900 active:scale-[0.99] transition-all text-white font-extrabold text-sm flex items-center justify-center space-x-2 shadow-md shadow-emerald-900/10 disabled:opacity-60 cursor-pointer"
             >

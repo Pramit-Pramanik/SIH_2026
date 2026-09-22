@@ -143,6 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="hidden sm:flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs text-slate-800 shadow-xs">
             <Building2 className="w-3.5 h-3.5 text-emerald-700" />
             <select
+              id="select-header-mandi"
               value={selectedMandiId || ''}
               onChange={(e) => setSelectedMandiId(Number(e.target.value))}
               className="bg-transparent text-slate-900 font-bold focus:outline-none cursor-pointer"
@@ -175,6 +176,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="text-[10px] text-emerald-700 font-black uppercase leading-tight">{currentUser.role}</span>
               </div>
               <button
+                id="btn-header-logout"
                 onClick={onLogout}
                 title={t('common.logout')}
                 className="ml-1 p-1 rounded hover:bg-emerald-100 text-slate-400 hover:text-rose-600 transition cursor-pointer"
@@ -188,6 +190,7 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="flex items-center space-x-1.5 bg-amber-50 border border-amber-300 rounded-lg px-2.5 py-1 text-xs text-amber-950 font-bold shadow-xs">
             <Globe className="w-3.5 h-3.5 text-amber-700 shrink-0" />
             <select
+              id="select-language-switcher"
               value={language}
               onChange={(e) => setLanguage(e.target.value as 'en' | 'hi')}
               className="bg-transparent text-amber-950 font-bold text-xs focus:outline-none cursor-pointer"
@@ -201,6 +204,7 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Role-Gated Demo Tools Launcher (ADMIN & SUPERVISOR ONLY) */}
           {isDemoAuthorized && (
             <button
+              id="btn-header-demo-tools"
               onClick={onOpenDemoTools}
               className="bg-gradient-to-r from-amber-600 to-amber-700 hover:brightness-105 text-white border border-amber-600 px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center space-x-1.5 shadow-xs cursor-pointer"
               title={t('nav.demoTools')}
@@ -254,6 +258,7 @@ export const Header: React.FC<HeaderProps> = ({
           return (
             <button
               key={tab.id}
+              id={`nav-tab-${tab.id}`}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center space-x-2 px-3.5 py-2 text-xs font-medium rounded-t-lg transition whitespace-nowrap border-b-2 cursor-pointer ${
                 isActive

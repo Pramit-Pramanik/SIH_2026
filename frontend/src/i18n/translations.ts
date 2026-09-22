@@ -187,6 +187,12 @@ export interface Translations {
     invalidQuantityError: string;
     ceilingExceededError: string;
     slotCapacityExhaustedError: string;
+    arrivalRiskTitle: string;
+    modelledRiskBadge: string;
+    expectedTime: string;
+    actualTime: string;
+    deviationMinutes: string;
+    riskProbability: string;
   };
   gate: {
     title: string;
@@ -250,6 +256,8 @@ export interface Translations {
     overriding: string;
 
     supervisorAuthToken: string;
+    supervisorAuthTokenPlaceholder: string;
+    technicalFormulasInDemoTools: string;
     standardsTitle: string;
     gradeATitle: string;
     gradeADesc: string;
@@ -269,6 +277,9 @@ export interface Translations {
     overrideFailed: string;
     supervisorOverrideAuthorized: string;
     preflightNotice: string;
+    unauthorizedRole: string;
+    autoResolvedGate: string;
+    awaitingGateLots: string;
   };
   queue: {
     title: string;
@@ -295,6 +306,57 @@ export interface Translations {
     dispatchFailed: string;
     offlineDispatched: string;
     dispatchError: string;
+    scoreA: string;
+    scoreD: string;
+    scoreM: string;
+    scoreW: string;
+    scoreS: string;
+    scoreBreakdown: string;
+    adherence: string;
+    demurrage: string;
+    moistureRisk: string;
+    waitBonus: string;
+    advanceQueueTime: string;
+    advancingQueueTime: string;
+    rerankQueue: string;
+    rerankingQueue: string;
+    offlineProvisional: string;
+    authoritativeRouted: string;
+    conflictRejected: string;
+    dispatchedVehiclesTitle: string;
+    dispatchedVehiclesDesc: string;
+    noDispatchedVehicles: string;
+    offlineDispatchedProvisional: string;
+    dispatchedAuthoritative: string;
+    estimatedWait: string;
+    estimatedWaitNext: string;
+    calculatingTelemetry: string;
+    vehiclesAhead: string;
+    payloadAhead: string;
+    serviceRate: string;
+    activeScales: string;
+    scaleOffline: string;
+    scaleOnline: string;
+    toggleScale: string;
+    technicalBreakdown: string;
+    crop: string;
+    moisture: string;
+    appointmentAdherence: string;
+    demurrageScore: string;
+    moistureRiskScore: string;
+    antiStarvationWait: string;
+    finalDcdqScore: string;
+    liveQueueHeader: string;
+    operationalTelemetry: string;
+    algorithmSimulationHeader: string;
+    algorithmSimulationDesc: string;
+    simulatedLot: string;
+    scaleCount1: string;
+    scaleCount2: string;
+    scaleCount3: string;
+    scales: string;
+    dcdqFormulationSubtitle: string;
+    serviceRateTelemetry: string;
   };
   weighbridge: {
     title: string;
@@ -338,6 +400,11 @@ export interface Translations {
     offlineUnifiedSaved: string;
     errorWeighment: string;
     preflightNotice: string;
+    activeLaneVehicles: string;
+    selectVehiclePrompt: string;
+    invalidTareRange: string;
+    autoResolvedQueue: string;
+    noVehiclesInLane: string;
   };
   billing: {
     title: string;
@@ -402,6 +469,13 @@ export interface Translations {
     resolvingMsp: string;
     unresolved: string;
     resolvingAuthoritativeMsp: string;
+    authoritativeSettlementSummary: string;
+    grossValue: string;
+    dbtStatus: string;
+    statusPendingStaging: string;
+    statusStaged: string;
+    statusSettled: string;
+    autoResolvedWeighed: string;
   };
   sync: {
     title: string;
@@ -430,6 +504,11 @@ export interface Translations {
     simulateBlackout: string;
     blackoutActive: string;
     launchE2E: string;
+    resetShowcaseDesc: string;
+    simulateTrafficDesc: string;
+    launchE2EDesc: string;
+    showcaseCommandCenter: string;
+    showcaseSubtitle: string;
     openUSSD: string;
     switchFarmerTitle: string;
     switchFarmerDesc: string;
@@ -456,6 +535,201 @@ export interface Translations {
     invCryptoTitle: string;
     invWalTitle: string;
     farmerSwitched: string;
+    advanceTime: string;
+    advancingTime: string;
+    advanceTimeDesc: string;
+    optimizeSlots: string;
+    optimizeSlotsDesc: string;
+    tasTitle: string;
+    tasSubtitle: string;
+    tasRunSolver: string;
+    tasSolving: string;
+    tasBefore: string;
+    tasAfter: string;
+    tasOverload: string;
+    tasObjective: string;
+    tasMaxSlotLoad: string;
+    tasTrucks: string;
+    tasSolverBadge: string;
+    failureModelTitle: string;
+    failureModelDesc: string;
+    failureModelLabel: string;
+    expectedArrival: string;
+    actualArrival: string;
+    arrivalDeviation: string;
+    failureProbability: string;
+    concurrentBookingTitle: string;
+    concurrentBookingDesc: string;
+    runConcurrentTest: string;
+    runningConcurrentTest: string;
+    totalRequests: string;
+    successfulRequests: string;
+    rejectedRequests: string;
+    capacityExceededZero: string;
+    lockAcquisitionTimeline: string;
+    redisMutexBadge: string;
+    lwwConflictTitle: string;
+    lwwConflictDesc: string;
+    runLWWTest: string;
+    runningLWWTest: string;
+    lwwMutationA: string;
+    lwwMutationB: string;
+    authoritativeSequenceWinner: string;
+    governanceNotice: string;
+    clientTimestampDiagnostic: string;
+    field: string;
+    oldValue: string;
+    incomingValue: string;
+    winner: string;
+    reason: string;
+    gzipSyncTitle: string;
+    gzipSyncDesc: string;
+    testGzipSync: string;
+    testingGzipSync: string;
+    rawSize: string;
+    compressedSize: string;
+    compressionRatio: string;
+    recordCount: string;
+    decompressionVerified: string;
+    slotCapacity: string;
+    serverSequence: string;
+    tabAlgorithms: string;
+  };
+  controlCenter: {
+    title: string;
+    subtitle: string;
+    dataIsolationNotice: string;
+    resetDemoBtn: string;
+    resettingDemo: string;
+    resetDemoSuccess: string;
+    statusLive: string;
+    statusSimulation: string;
+    statusAlgoDemo: string;
+    statusDemo: string;
+    statusDocumented: string;
+    statusNotImplemented: string;
+    verifiedStatus: string;
+    executionTrace: string;
+    formulaLabel: string;
+    liveInputsLabel: string;
+    actualOutputLabel: string;
+    summaryCountLive: string;
+    summaryCountDemo: string;
+    summaryCountDocumented: string;
+    summaryCountNotImplemented: string;
+    mandiSelectionRequiredDesc: string;
+    twoModules: string;
+    sixModules: string;
+    liveModulesSummary: string;
+    demoModulesSummary: string;
+
+    // Module 1: DCDQ
+    dcdqModuleTitle: string;
+    dcdqModuleDesc: string;
+    dcdqVehicleCol: string;
+    dcdqScoreACol: string;
+    dcdqScoreDCol: string;
+    dcdqScoreMCol: string;
+    dcdqScoreWCol: string;
+    dcdqScoreSCol: string;
+    dcdqRankCol: string;
+    dcdqWaitSliderLabel: string;
+    dcdqMoistureSliderLabel: string;
+    dcdqTriggerReorderBtn: string;
+    dcdqReordering: string;
+    dcdqReorderResultNotice: string;
+    dcdqLiveQueueEmpty: string;
+    dcdqRerankLiveBtn: string;
+    dcdqRerankingLive: string;
+    dcdqCanonicalFormulaNotice: string;
+
+    // Module 2: ETA
+    etaModuleTitle: string;
+    etaModuleDesc: string;
+    etaQueueAhead: string;
+    etaPayloadAhead: string;
+    etaServiceRate: string;
+    etaActiveScales: string;
+    etaCalculatedEta: string;
+    etaScaleCountStepper: string;
+    etaRecalculating: string;
+
+    // Module 3: TAS BILP
+    tasModuleTitle: string;
+    tasModuleDesc: string;
+    tasInputTrucks: string;
+    tasCandidateSlots: string;
+    tasSlotCapacity: string;
+    tasPenalties: string;
+    tasBeforeCongestion: string;
+    tasOptimizedAssignment: string;
+    tasAfterCongestion: string;
+    tasRunSolverBtn: string;
+    tasOptimizing: string;
+
+    // Module 4: Redis Lock
+    redisModuleTitle: string;
+    redisModuleDesc: string;
+    redisDisclaimer: string;
+    redisConcurrentRequests: string;
+    redisLockAcquisition: string;
+    redisWinner: string;
+    redisRejections: string;
+    redisTtl: string;
+    redisAtomicRelease: string;
+    redisRunTestBtn: string;
+    redisTesting: string;
+
+    // Module 5: LWW
+    lwwModuleTitle: string;
+    lwwModuleDesc: string;
+    lwwMutationA: string;
+    lwwMutationB: string;
+    lwwFieldConflict: string;
+    lwwServerSequence: string;
+    lwwClientTimestamp: string;
+    lwwWinningValue: string;
+    lwwDeduplication: string;
+    lwwSyncStatus: string;
+    lwwRunTestBtn: string;
+    lwwTesting: string;
+
+    // Module 6: HMAC
+    hmacModuleTitle: string;
+    hmacModuleDesc: string;
+    hmacCanonicalPayload: string;
+    hmacSignatureLength: string;
+    hmacVerificationResult: string;
+    hmacTamperedPayload: string;
+    hmacRejectionResult: string;
+    hmacSecretKeyRedacted: string;
+    hmacRunVerifyBtn: string;
+    hmacVerifying: string;
+    hmacTestPayload: string;
+    hmacTestFixtureNotice: string;
+    hmacSyntheticFixtureInputs: string;
+
+    // Module 7: Gzip
+    gzipModuleTitle: string;
+    gzipModuleDesc: string;
+    gzipRawSize: string;
+    gzipCompressedSize: string;
+    gzipCompressionRatio: string;
+    gzipRecordCount: string;
+    gzipSyncResult: string;
+    gzipRunCompressBtn: string;
+    gzipCompressing: string;
+
+    // Module 8: Logistic Booking Risk
+    riskModuleTitle: string;
+    riskModuleDesc: string;
+    riskModelledDisclaimer: string;
+    riskExpectedArrival: string;
+    riskActualArrival: string;
+    riskDeviation: string;
+    riskParameterK: string;
+    riskCalculatedRisk: string;
+    riskDeviationSlider: string;
   };
   receipt: {
     title: string;
@@ -616,6 +890,9 @@ export interface Translations {
     cropCodePlaceholder: string;
     resetFailed: string;
     simulationFailed: string;
+    tasAdminTitle: string;
+    tasAdminSubtitle: string;
+    tasOptimizeNow: string;
   };
   journey: {
     modalTitle: string;
@@ -784,8 +1061,8 @@ export const translations: Record<'en' | 'hi', Translations> = {
       activeTransaction: 'Active Transaction',
       apmcProcurementSystem: 'Agricultural Produce Market Committee Procurement System',
 
-      backendOffline: 'BACKEND OFFLINE',
-      inMemoryQueue: 'IN-MEMORY QUEUE',
+      backendOffline: 'Backend offline',
+      inMemoryQueue: 'In-Memory Queue (Redis Fallback)',
       noActiveTransaction: 'No authoritative transaction selected.',
       tareWeightError: 'Physical Invariant Violation: Tare weight cannot be >= Gross weight.',
       noMandiSelected: 'No operational mandi selected.',
@@ -932,6 +1209,12 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invalidQuantityError: 'Please enter a valid procurement quantity in quintals greater than zero.',
       ceilingExceededError: 'Specified quantity exceeds your remaining verified land ceiling ({remaining} Qtl).',
       slotCapacityExhaustedError: 'The selected arrival slot capacity is exhausted. Please select another slot.',
+      arrivalRiskTitle: 'Scheduled Arrival Window Risk',
+      modelledRiskBadge: 'MODELLED RISK — NOT AN ACTUAL FAILURE PREDICTION',
+      expectedTime: 'Expected Arrival',
+      actualTime: 'Actual / Est. Arrival',
+      deviationMinutes: 'Arrival Deviation',
+      riskProbability: 'Modelled Failure Probability',
     },
     gate: {
       title: 'APMC Inbound Gate Terminal',
@@ -995,6 +1278,8 @@ export const translations: Record<'en' | 'hi', Translations> = {
       overriding: 'Authorizing Override...',
 
       supervisorAuthToken: 'Supervisor Authorization Token',
+      supervisorAuthTokenPlaceholder: '•••••••• (Supervisor Security PIN)',
+      technicalFormulasInDemoTools: 'Technical prioritization formulas and dynamic queue weights are located in Demo Tools → Algorithm Center.',
       standardsTitle: 'APMC Lot Assaying Standards',
       gradeATitle: 'Grade A (FAQ Standard)',
       gradeADesc: 'Lot directly accepted for immediate weighment and electronic MSP settlement.',
@@ -1014,6 +1299,9 @@ export const translations: Record<'en' | 'hi', Translations> = {
       overrideFailed: 'Supervisor override failed',
       supervisorOverrideAuthorized: 'Supervisor Override Authorized: {message}',
       preflightNotice: 'Please book a slot and complete Gate Entry verification before quality assaying.',
+      unauthorizedRole: 'Access restricted: Station requires INSPECTOR, SUPERVISOR, or ADMIN role.',
+      autoResolvedGate: 'Auto-resolved incoming vehicle verified at Gate',
+      awaitingGateLots: 'Awaiting incoming lots verified at Gate...',
     },
     queue: {
       title: 'real time Yard Queue Dispatcher',
@@ -1040,6 +1328,57 @@ export const translations: Record<'en' | 'hi', Translations> = {
       dispatchFailed: 'Dispatch failed',
       offlineDispatched: '[OFFLINE LOCAL] Vehicle {txnId} popped from local queue and routed to weighbridge.',
       dispatchError: 'Dispatch error',
+      scoreA: 'A (Adherence)',
+      scoreD: 'D (Demurrage)',
+      scoreM: 'M (Moisture)',
+      scoreW: 'W (Wait Bonus)',
+      scoreS: 'S (Final Score)',
+      scoreBreakdown: 'DCDQ Component Decomposition',
+      adherence: 'Appointment Adherence',
+      demurrage: 'Demurrage & Weight',
+      moistureRisk: 'Crop Moisture Risk',
+      waitBonus: 'Anti-Starvation Wait Bonus',
+      advanceQueueTime: 'Advance Showcase Time',
+      advancingQueueTime: 'Advancing Time...',
+      rerankQueue: 'Recalculate & Rerank',
+      rerankingQueue: 'Reranking...',
+      offlineProvisional: 'OFFLINE — PROVISIONAL',
+      authoritativeRouted: 'AUTHORITATIVE — ROUTED_TO_WEIGHBRIDGE',
+      conflictRejected: 'CONFLICT — REJECTED',
+      dispatchedVehiclesTitle: 'Dispatched to Weighbridge',
+      dispatchedVehiclesDesc: 'Vehicles routed from active queue to gross weighment',
+      noDispatchedVehicles: 'No vehicles dispatched yet.',
+      offlineDispatchedProvisional: '[OFFLINE WAL] Vehicle {txnId} dispatched offline (Provisional). Stored in IndexedDB WAL.',
+      dispatchedAuthoritative: '[AUTHORITATIVE] Vehicle {txnId} routed to weighbridge scale.',
+      estimatedWait: 'Estimated Wait',
+      estimatedWaitNext: 'Estimated wait: Next in line (0 min)',
+      calculatingTelemetry: 'Estimated wait: Calculating... (Insufficient Telemetry)',
+      vehiclesAhead: 'Vehicles ahead',
+      payloadAhead: 'Payload ahead',
+      serviceRate: 'Service rate',
+      activeScales: 'Active scales',
+      scaleOffline: 'Scale Offline',
+      scaleOnline: 'Scale Online',
+      toggleScale: 'Toggle Scale',
+      technicalBreakdown: 'Technical Decomposition (M(t)/E_k/c(t) Estimator)',
+      crop: 'Crop',
+      moisture: 'Moisture',
+      appointmentAdherence: 'Appointment Adherence',
+      demurrageScore: 'Demurrage',
+      moistureRiskScore: 'Moisture Risk',
+      antiStarvationWait: 'Anti-Starvation Wait',
+      finalDcdqScore: 'Final DCDQ Score',
+      liveQueueHeader: 'LIVE QUEUE',
+      operationalTelemetry: 'OPERATIONAL TELEMETRY',
+      algorithmSimulationHeader: 'ALGORITHM SIMULATION',
+      algorithmSimulationDesc: 'Simulated traffic and scenario controls. Isolated from live operational transactions.',
+      simulatedLot: 'SIMULATED',
+      scaleCount1: '1 Scale',
+      scaleCount2: '2 Scales',
+      scaleCount3: '3 Scales',
+      scales: 'Scales',
+      dcdqFormulationSubtitle: 'DCDQ Multi-Factor Priority Formulation',
+      serviceRateTelemetry: 'Service Rate Telemetry',
     },
     weighbridge: {
       title: 'Electronic Weighbridge Scale',
@@ -1061,7 +1400,7 @@ export const translations: Record<'en' | 'hi', Translations> = {
       physicalDesc: 'Tare weight must strictly be < Gross weight ($Tare \ge Gross$ is rejected with HTTP 422).',
       yieldCeiling: 'Yield Ceiling Enforcement',
       yieldDesc: 'Net delivered weight plus prior delivered batches cannot exceed the farmer\'s registered production ceiling.',
-      distributedLock: 'Distributed Lock Protection',
+      distributedLock: 'Redis Atomic Reservation Lock',
       lockDesc: 'Parallel weighments for the same farmer serialize under',
       lockSuffix: 'to eliminate race conditions.',
       captureUnified: 'Record Certified Net Weight',
@@ -1083,6 +1422,11 @@ export const translations: Record<'en' | 'hi', Translations> = {
       offlineUnifiedSaved: '[OFFLINE WAL] Unified weighment saved to IndexedDB transactionsWAL. Net weight: {net} qt.',
       errorWeighment: 'Error capturing weighment',
       preflightNotice: 'Please dispatch a vehicle from the Live Priority Queue to perform weighbridge scale capture.',
+      activeLaneVehicles: 'Active Vehicles in Lane',
+      selectVehiclePrompt: 'Select vehicle from queue to begin weighment',
+      invalidTareRange: 'Tare weight must be strictly positive and less than gross weight (0 < tare < gross)',
+      autoResolvedQueue: 'Auto-selected vehicle from Live Queue',
+      noVehiclesInLane: 'No vehicles currently queued or awaiting weighment.',
     },
     billing: {
       title: 'Procurement Billing & Direct Benefit Transfer',
@@ -1147,6 +1491,13 @@ export const translations: Record<'en' | 'hi', Translations> = {
       resolvingMsp: 'Resolving MSP...',
       unresolved: 'Unresolved',
       resolvingAuthoritativeMsp: 'Resolving Authoritative MSP...',
+      authoritativeSettlementSummary: 'Authoritative Procurement Settlement',
+      grossValue: 'Gross Value',
+      dbtStatus: 'DBT Status',
+      statusPendingStaging: 'Pending Staging',
+      statusStaged: 'Dual-Signature Staged',
+      statusSettled: 'Payment Settled via PFMS',
+      autoResolvedWeighed: 'Auto-resolved vehicle with completed weighment',
     },
     sync: {
       title: 'Offline Write-Ahead Log (WAL) Sync',
@@ -1170,11 +1521,16 @@ export const translations: Record<'en' | 'hi', Translations> = {
       resetShowcase: 'Reset Demo Database',
       resetting: 'Resetting Database...',
       resetSuccess: 'Demo database cleanly reset to baseline state.',
-      simulateTraffic: 'Simulate Inbound Vehicle Traffic',
+      simulateTraffic: 'Simulate Dynamic Traffic',
       simulatingTraffic: 'Generating vehicles...',
       simulateBlackout: 'Simulate Rural Grid/Internet Blackout',
       blackoutActive: 'Outage simulation active: Offline Mode enforced.',
       launchE2E: 'Run Full End-to-End Automated Journey',
+      resetShowcaseDesc: 'Restores deterministic demo state',
+      simulateTrafficDesc: 'Creates several real showcase queue records',
+      launchE2EDesc: 'Advances one showcase transaction through the real workflow',
+      showcaseCommandCenter: 'Showcase Demo Controls',
+      showcaseSubtitle: 'Deterministic Showcase Suite',
       openUSSD: 'Open Feature Phone USSD Simulator (*247#)',
       switchFarmerTitle: 'Showcase Farmer Selection',
       switchFarmerDesc: 'Select an authorized farmer profile to inspect dynamic ceiling and booking isolation.',
@@ -1201,6 +1557,201 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invCryptoTitle: '4. HMAC-SHA256 Cryptography',
       invWalTitle: '5. Local-First Write-Ahead Log',
       farmerSwitched: 'Active demo farmer switched to: {name} (Farmer ID: {id}).',
+      advanceTime: 'Advance Showcase Time',
+      advancingTime: 'Advancing Showcase Time...',
+      advanceTimeDesc: 'Simulates elapsed waiting time using isolated simulation clock to demonstrate dynamic DCDQ anti-starvation reordering.',
+      optimizeSlots: 'Optimize Appointment Slots',
+      optimizeSlotsDesc: 'Executes HiGHS BILP optimization to balance yard slot distribution and minimize total congestion.',
+      tasTitle: 'TAS BILP Slot Optimizer',
+      tasSubtitle: 'Mixed-Integer Linear Program for Inbound Truck Load Balancing (Algorithm 6)',
+      tasRunSolver: 'Run HiGHS BILP Solver',
+      tasSolving: 'Solving Linear Program...',
+      tasBefore: 'BEFORE',
+      tasAfter: 'AFTER',
+      tasOverload: 'Yard Overload',
+      tasObjective: 'Objective Value',
+      tasMaxSlotLoad: 'Max Slot Load',
+      tasTrucks: 'trucks',
+      tasSolverBadge: 'HiGHS BILP Solver',
+      failureModelTitle: 'Logistic Booking Failure Risk Model',
+      failureModelDesc: 'Evaluates empirical probability of appointment failure based on time arrival deviations.',
+      failureModelLabel: 'MODELLED RISK — NOT AN ACTUAL FAILURE PREDICTION',
+      expectedArrival: 'Expected Arrival',
+      actualArrival: 'Actual Arrival',
+      arrivalDeviation: 'Arrival Deviation',
+      failureProbability: 'Failure Probability',
+      concurrentBookingTitle: 'Concurrent Slot Booking Test',
+      concurrentBookingDesc: 'Simulates 10 concurrent reservations against the same slot using Redis SET NX PX atomic locking.',
+      runConcurrentTest: 'Run Concurrent Booking Test',
+      runningConcurrentTest: 'Testing Concurrent Locks...',
+      totalRequests: 'Total Requests',
+      successfulRequests: 'Successful',
+      rejectedRequests: 'Rejected',
+      capacityExceededZero: 'Capacity Exceeded: 0',
+      lockAcquisitionTimeline: 'Lock Acquisition & Release Timeline',
+      redisMutexBadge: 'Redis SET NX PX Distributed Mutex (Prototype)',
+      lwwConflictTitle: 'LWW Conflict Resolution (Authoritative Server Sequence)',
+      lwwConflictDesc: 'Visualizes field-level Last-Write-Wins merge using authoritative server sequence.',
+      runLWWTest: 'Demonstrate LWW Resolution',
+      runningLWWTest: 'Resolving Conflicts...',
+      lwwMutationA: 'Mutation A',
+      lwwMutationB: 'Mutation B',
+      authoritativeSequenceWinner: 'Higher Authoritative Server Sequence',
+      governanceNotice: 'Governance Notice: Authoritative conflict ordering is governed by server_receive_sequence, not client clocks.',
+      clientTimestampDiagnostic: 'Client Timestamp (Diagnostic Metadata)',
+      field: 'Field',
+      oldValue: 'Old Value',
+      incomingValue: 'Incoming Value',
+      winner: 'Winner',
+      reason: 'Resolution Reason',
+      gzipSyncTitle: 'Offline WAL Gzip Compression Evidence',
+      gzipSyncDesc: 'Demonstrates IndexedDB WAL batch compression before transmission to cloud server.',
+      testGzipSync: 'Test Gzip WAL Sync',
+      testingGzipSync: 'Compressing & Syncing...',
+      rawSize: 'Raw Payload Size',
+      compressedSize: 'Compressed Gzip Size',
+      compressionRatio: 'Compression Savings',
+      recordCount: 'Record Count',
+      decompressionVerified: 'Decompressed & Verified on Server',
+      slotCapacity: 'Slot Capacity (Qt)',
+      serverSequence: 'server_receive_sequence',
+      tabAlgorithms: 'Algorithm Control Center',
+    },
+    controlCenter: {
+      title: 'MandiQ Algorithm Control Center',
+      subtitle: 'Authoritative Live Execution Showcase of Real Operational Algorithms',
+      dataIsolationNotice: 'All algorithms execute with is_showcase=true. Operational procurement records are strictly isolated.',
+      resetDemoBtn: 'Reset Algorithm Demo',
+      resettingDemo: 'Purging Demo Records...',
+      resetDemoSuccess: 'Algorithm demo records cleanly purged. Real procurement logs strictly preserved.',
+      statusLive: 'LIVE SYSTEM',
+      statusSimulation: 'CONTROLLED SIMULATION',
+      statusAlgoDemo: 'ALGORITHM DEMONSTRATION',
+      statusDemo: 'ALGORITHM DEMONSTRATION',
+      statusDocumented: 'DOCUMENTED ONLY',
+      statusNotImplemented: 'NOT IMPLEMENTED IN CURRENT BUILD',
+      verifiedStatus: 'Verification Status',
+      executionTrace: 'Execution Trace',
+      formulaLabel: 'Canonical Formula',
+      liveInputsLabel: 'Live Inputs & Controls',
+      actualOutputLabel: 'Actual Computed Output',
+      summaryCountLive: 'Live Operational',
+      summaryCountDemo: 'Executing Showcase',
+      summaryCountDocumented: 'Documented Reference',
+      summaryCountNotImplemented: 'Not Implemented',
+      mandiSelectionRequiredDesc: 'Algorithm operations, live queue telemetry, and showcase tests require an active selected mandi. Zero magic identity fallbacks permitted per DATA-001.',
+      twoModules: '2 Modules',
+      sixModules: '6 Modules',
+      liveModulesSummary: '1. DCDQ Live APMC Queue & 2. Multi-Server ETA (100% Live Backend Results)',
+      demoModulesSummary: '3. TAS BILP, 4. Redis Atomic Lock, 5. Server-Seq Merge, 6. HMAC, 7. Gzip, 8. Logistic Risk',
+
+      // Module 1: DCDQ
+      dcdqModuleTitle: '1. DCDQ Dynamic Queue Prioritization',
+      dcdqModuleDesc: 'Dynamic Crop-Dehydration and Congestion Queue (DCDQ) sorts vehicles in Redis ZSET descending by composite priority score S_i.',
+      dcdqVehicleCol: 'Vehicle / Lot',
+      dcdqScoreACol: 'A (Adherence)',
+      dcdqScoreDCol: 'D (Demurrage)',
+      dcdqScoreMCol: 'M (Moisture Risk)',
+      dcdqScoreWCol: 'W (Wait Bonus)',
+      dcdqScoreSCol: 'S (Priority)',
+      dcdqRankCol: 'Rank',
+      dcdqWaitSliderLabel: 'Simulate Wait Time Adjustment (+min)',
+      dcdqMoistureSliderLabel: 'Simulate Moisture Adjustment (%)',
+      dcdqTriggerReorderBtn: 'Demonstrate Queue Reorder',
+      dcdqReordering: 'Re-evaluating DCDQ Scores...',
+      dcdqReorderResultNotice: 'Anti-starvation bonus W_i updated. Vehicle rank changed dynamically.',
+      dcdqLiveQueueEmpty: 'Live APMC Queue is currently empty. Check in arrivals at Gate Terminal or click \'Create Demo Traffic\' in Demo Tools.',
+      dcdqRerankLiveBtn: 'Recompute & Re-rank Live Queue',
+      dcdqRerankingLive: 'Executing Canonical DCDQ Re-ranking...',
+      dcdqCanonicalFormulaNotice: 'S_i = 1.0 * A_i + 1.0 * D_i + 1.0 * M_i + 1.0 * W_i (Evaluated exclusively by backend canonical DCDQ engine in Redis ZSET)',
+
+      // Module 2: ETA
+      etaModuleTitle: '2. M(t)/E_k/c(t) Multi-Server Queue ETA Model',
+      etaModuleDesc: 'Estimates vehicle service waiting times based on preceding payload, rolling 15-minute weighbridge throughput, and active scale count.',
+      etaQueueAhead: 'Vehicles Ahead',
+      etaPayloadAhead: 'Payload Ahead',
+      etaServiceRate: '15-Min Service Rate',
+      etaActiveScales: 'Active Scales c(t)',
+      etaCalculatedEta: 'Estimated Time of Service (ETA)',
+      etaScaleCountStepper: 'Configure Active Weighbridge Scales',
+      etaRecalculating: 'Recalculating multi-server ETA...',
+
+      // Module 3: TAS BILP
+      tasModuleTitle: '3. TAS BILP Truck Congestion Optimizer',
+      tasModuleDesc: 'Executes HiGHS Mixed-Integer Linear Program via SciPy to optimally allocate inbound truck arrival slots and eliminate yard congestion.',
+      tasInputTrucks: 'Input Trucks',
+      tasCandidateSlots: 'Candidate Slots',
+      tasSlotCapacity: 'Capacity Limit',
+      tasPenalties: 'Penalty Factors',
+      tasBeforeCongestion: 'Before Congestion (Baseline)',
+      tasOptimizedAssignment: 'Optimized Slot Allocation Matrix',
+      tasAfterCongestion: 'After Congestion (Balanced)',
+      tasRunSolverBtn: 'Execute HiGHS BILP Solver',
+      tasOptimizing: 'Solving Mixed-Integer Linear Program...',
+
+      // Module 4: Redis Lock
+      redisModuleTitle: '4. Redis Atomic Reservation Lock (Capacity Preservation)',
+      redisModuleDesc: 'Simulates concurrent reservation attempts to enforce zero-capacity-overflow invariant under high-concurrency race conditions.',
+      redisDisclaimer: 'Architecture Note: Single-instance Redis SET NX PX distributed lock with atomic Lua release. Not a multi-instance Redlock quorum.',
+      redisConcurrentRequests: 'Concurrent Requests',
+      redisLockAcquisition: 'Lock Acquisition Timeline',
+      redisWinner: 'Winning Worker',
+      redisRejections: 'Rejected Requests',
+      redisTtl: 'Lock TTL',
+      redisAtomicRelease: 'Atomic Release Mechanism',
+      redisRunTestBtn: 'Launch 10-Worker Race Test',
+      redisTesting: 'Executing concurrent lock requests...',
+
+      // Module 5: LWW
+      lwwModuleTitle: '5. Server-Sequence-Authoritative Field-Level Merge',
+      lwwModuleDesc: 'Field-level Last-Write-Wins merge using authoritative server receive sequence. Guarantees deterministic convergence across offline nodes.',
+      lwwMutationA: 'Mutation A (Offline Terminal 01)',
+      lwwMutationB: 'Mutation B (Offline Terminal 02)',
+      lwwFieldConflict: 'Field-by-Field Conflict Analysis',
+      lwwServerSequence: 'Authoritative Server Sequence',
+      lwwClientTimestamp: 'Client Timestamps (Diagnostic Only)',
+      lwwWinningValue: 'Authoritative Winner',
+      lwwDeduplication: 'WAL Replay Deduplication',
+      lwwSyncStatus: 'Convergence Sync Status',
+      lwwRunTestBtn: 'Run LWW Conflict Test',
+      lwwTesting: 'Resolving mutation conflict...',
+
+      // Module 6: HMAC
+      hmacModuleTitle: '6. HMAC-SHA256 Cryptographic Auditing',
+      hmacModuleDesc: 'Evaluates tamper-evident cryptographic signatures over canonical booking payloads using constant-time comparison (FIPS 198-1).',
+      hmacCanonicalPayload: 'Canonical Payload',
+      hmacSignatureLength: 'Signature Length (Hex Chars)',
+      hmacVerificationResult: 'Authentic Verification Result',
+      hmacTamperedPayload: 'Tampered Payload (1-Byte Altered)',
+      hmacRejectionResult: 'Adversarial Rejection Result',
+      hmacSecretKeyRedacted: 'Secret Key Status: [REDACTED — 256-Bit Cryptographic Entropy in Server Vault]',
+      hmacRunVerifyBtn: 'Verify Cryptographic Integrity',
+      hmacVerifying: 'Computing SHA-256 HMAC digest...',
+      hmacTestPayload: 'Cryptographic Test Payload',
+      hmacTestFixtureNotice: 'Test Fixture Notice: The IDs below are deterministic cryptographic test fixtures, not operational farmer identities.',
+      hmacSyntheticFixtureInputs: 'Synthetic Fixture Inputs: Farmer #101, Slot #5',
+
+      // Module 7: Gzip
+      gzipModuleTitle: '7. RFC 1952 Gzip Offline WAL Compression',
+      gzipModuleDesc: 'Measures genuine byte compression and round-trip server decompression for offline IndexedDB Write-Ahead Log batches.',
+      gzipRawSize: 'Raw JSON Payload Size',
+      gzipCompressedSize: 'Compressed Gzip Size',
+      gzipCompressionRatio: 'Compression Savings Ratio',
+      gzipRecordCount: 'WAL Mutation Count',
+      gzipSyncResult: 'Server Decompression Status',
+      gzipRunCompressBtn: 'Execute Gzip Compression Batch',
+      gzipCompressing: 'Compressing WAL batch...',
+
+      // Module 8: Logistic Booking Risk
+      riskModuleTitle: '8. Logistic Booking Failure Risk Predictor',
+      riskModuleDesc: 'Evaluates empirical appointment no-show and transit failure probability based on arrival time deviation.',
+      riskModelledDisclaimer: 'MATHEMATICALLY MODELLED RISK — NOT AN ACTUAL PROCUREMENT FAILURE PREDICTION',
+      riskExpectedArrival: 'Expected Arrival Time',
+      riskActualArrival: 'Actual Arrival Time',
+      riskDeviation: 'Transit Deviation (Delta t)',
+      riskParameterK: 'Sensitivity Parameter (k)',
+      riskCalculatedRisk: 'Calculated Failure Probability',
+      riskDeviationSlider: 'Adjust Arrival Deviation (Minutes)',
     },
     receipt: {
       title: 'Digital J-Form Joint-Sale Certificate',
@@ -1361,6 +1912,9 @@ export const translations: Record<'en' | 'hi', Translations> = {
       cropCodePlaceholder: 'e.g., WHEAT_SHARBATI',
       resetFailed: 'Reset failed',
       simulationFailed: 'Simulation failed',
+      tasAdminTitle: 'TAS Slot Optimization & Arrival Risk',
+      tasAdminSubtitle: 'Run mathematical BILP solver to balance vehicle appointments and audit logistic booking failure risks.',
+      tasOptimizeNow: 'Balance Slot Allocations',
     },
     journey: {
       modalTitle: 'Automated End-to-End Procurement Journey',
@@ -1528,7 +2082,7 @@ export const translations: Record<'en' | 'hi', Translations> = {
       apmcProcurementSystem: 'कृषि उपज मंडी समिति खरीद प्रणाली',
 
       backendOffline: 'बैकएंड ऑफ़लाइन',
-      inMemoryQueue: 'इन-मेमोरी कतार',
+      inMemoryQueue: 'इन-मेमोरी कतार (रेडिस फॉलबैक)',
       noActiveTransaction: 'कोई अधिकृत लेनदेन चयनित नहीं है।',
       tareWeightError: 'भौतिक सीमा उल्लंघन: खाली वजन सकल वजन से अधिक या बराबर नहीं हो सकता।',
       noMandiSelected: 'कोई कार्यशील मंडी चयनित नहीं है।',
@@ -1675,6 +2229,12 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invalidQuantityError: 'कृपया शून्य से अधिक क्विंटल में एक मान्य खरीद मात्रा दर्ज करें।',
       ceilingExceededError: 'निर्दिष्ट मात्रा आपकी शेष सत्यापित भूमि सीमा ({remaining} क्विंटल) से अधिक है।',
       slotCapacityExhaustedError: 'चयनित आगमन स्लॉट की क्षमता समाप्त हो गई है। कृपया दूसरा स्लॉट चुनें।',
+      arrivalRiskTitle: 'निर्धारित आगमन विंडो जोखिम',
+      modelledRiskBadge: 'MODELLED RISK — NOT AN ACTUAL FAILURE PREDICTION',
+      expectedTime: 'अपेक्षित आगमन',
+      actualTime: 'वास्तविक / अनुमानित आगमन',
+      deviationMinutes: 'आगमन विचलन',
+      riskProbability: 'मॉडल विफलता संभावना',
     },
     gate: {
       title: 'एपीएमसी आवक गेट टर्मिनल',
@@ -1738,6 +2298,8 @@ export const translations: Record<'en' | 'hi', Translations> = {
       overriding: 'स्वीकृति जारी हो रही है...',
 
       supervisorAuthToken: 'पर्यवेक्षक प्राधिकरण टोकन',
+      supervisorAuthTokenPlaceholder: '•••••••• (पर्यवेक्षक सुरक्षा पिन)',
+      technicalFormulasInDemoTools: 'तकनीकी प्राथमिकता सूत्र और गतिशील कतार गणना डेमो टूल्स → एल्गोरिथम केंद्र में स्थित हैं।',
       standardsTitle: 'एपीएमसी लॉट परख मानक',
       gradeATitle: 'ग्रेड ए (एफएक्यू मानक)',
       gradeADesc: 'लॉट को सीधे तत्काल तौल एवं इलेक्ट्रॉनिक एमएसपी निपटान के लिए स्वीकार किया जाता है।',
@@ -1757,6 +2319,9 @@ export const translations: Record<'en' | 'hi', Translations> = {
       overrideFailed: 'पर्यवेक्षक अधिरोहण विफल',
       supervisorOverrideAuthorized: 'पर्यवेक्षक अधिरोहण अधिकृत: {message}',
       preflightNotice: 'कृपया गुणवत्ता परीक्षण से पहले स्लॉट बुक करें और गेट प्रवेश सत्यापन पूर्ण करें।',
+      unauthorizedRole: 'पहुंच प्रतिबंधित: इस स्टेशन हेतु निरीक्षक, पर्यवेक्षक या व्यवस्थापक की भूमिका आवश्यक है।',
+      autoResolvedGate: 'गेट पर सत्यापित आने वाले वाहन का स्वतः समाधान हुआ',
+      awaitingGateLots: 'गेट पर सत्यापित आने वाले लॉट की प्रतीक्षा है...',
     },
     queue: {
       title: 'वास्तविक समय मंडी कतार प्रेषण केंद्र',
@@ -1783,6 +2348,57 @@ export const translations: Record<'en' | 'hi', Translations> = {
       dispatchFailed: 'प्रेषण विफल',
       offlineDispatched: '[ऑफलाइन स्थानीय] वाहन {txnId} स्थानीय कतार से निकाला गया और धर्मकांटे पर भेजा गया।',
       dispatchError: 'प्रेषण त्रुटि',
+      scoreA: 'A (समय पालन)',
+      scoreD: 'D (विलंब शुल्क एवं भार)',
+      scoreM: 'M (नमी जोखिम)',
+      scoreW: 'W (प्रतीक्षा बोनस)',
+      scoreS: 'S (कुल स्कोर)',
+      scoreBreakdown: 'DCDQ घटक विश्लेषण',
+      adherence: 'स्लॉट समय पालन',
+      demurrage: 'भार एवं विलंब घटक',
+      moistureRisk: 'अनाज नमी जोखिम',
+      waitBonus: 'एंटी-स्टारवेशन प्रतीक्षा बोनस',
+      advanceQueueTime: 'कतार समय आगे बढ़ाएं (+60 मिनट)',
+      advancingQueueTime: 'समय आगे बढ़ रहा है...',
+      rerankQueue: 'पुनः गणना एवं क्रम निर्धारण',
+      rerankingQueue: 'क्रम पुनः निर्धारित हो रहा है...',
+      offlineProvisional: 'ऑफलाइन — अनंतिम',
+      authoritativeRouted: 'प्राधिकृत — धर्मकांटे पर प्रेषित',
+      conflictRejected: 'संघर्ष — अस्वीकृत',
+      dispatchedVehiclesTitle: 'धर्मकांटे पर प्रेषित वाहन',
+      dispatchedVehiclesDesc: 'सक्रिय कतार से धर्मकांटा तौल हेतु भेजे गए वाहन',
+      noDispatchedVehicles: 'अभी तक कोई वाहन प्रेषित नहीं किया गया।',
+      offlineDispatchedProvisional: '[ऑफलाइन WAL] वाहन {txnId} ऑफलाइन प्रेषित (अनंतिम)। IndexedDB WAL में दर्ज।',
+      dispatchedAuthoritative: '[प्राधिकृत] वाहन {txnId} धर्मकांटा तौल हेतु प्रेषित।',
+      estimatedWait: 'अनुमानित प्रतीक्षा',
+      estimatedWaitNext: 'अनुमानित प्रतीक्षा: कतार में अगला (0 मिनट)',
+      calculatingTelemetry: 'अनुमानित प्रतीक्षा: गणना जारी... (अपर्याप्त टेलीमेट्री)',
+      vehiclesAhead: 'आगे वाहन',
+      payloadAhead: 'आगे कुल वजन',
+      serviceRate: 'सेवा दर',
+      activeScales: 'सक्रिय कांटे',
+      scaleOffline: 'कांटा ऑफलाइन',
+      scaleOnline: 'कांटा ऑनलाइन',
+      toggleScale: 'कांटा बदलें',
+      technicalBreakdown: 'तकनीकी विश्लेषण (M(t)/E_k/c(t) मॉडल)',
+      crop: 'फसल',
+      moisture: 'नमी',
+      appointmentAdherence: 'स्लॉट समय पालन',
+      demurrageScore: 'विलंब एवं भार',
+      moistureRiskScore: 'नमी जोखिम',
+      antiStarvationWait: 'एंटी-स्टारवेशन प्रतीक्षा',
+      finalDcdqScore: 'अंतिम DCDQ स्कोर',
+      liveQueueHeader: 'सक्रिय मंडी कतार',
+      operationalTelemetry: 'परिचालन टेलीमेट्री',
+      algorithmSimulationHeader: 'एल्गोरिदम सिमुलेशन',
+      algorithmSimulationDesc: 'सिमुलेटेड यातायात एवं परिदृश्य नियंत्रण। वास्तविक परिचालनों से पूर्णतः पृथक।',
+      simulatedLot: 'सिमुलेटेड',
+      scaleCount1: '1 कांटा',
+      scaleCount2: '2 कांटे',
+      scaleCount3: '3 कांटे',
+      scales: 'कांटे',
+      dcdqFormulationSubtitle: 'DCDQ बहु-कारक प्राथमिकता सूत्रीकरण',
+      serviceRateTelemetry: 'सेवा दर टेलीमेट्री',
     },
     weighbridge: {
       title: 'इलेक्ट्रॉनिक धर्मकांटा तौल स्टेशन',
@@ -1804,7 +2420,7 @@ export const translations: Record<'en' | 'hi', Translations> = {
       physicalDesc: 'खाली वजन (टेयर) स्पष्ट रूप से कुल वजन (ग्रॉस) से कम होना चाहिए (टेयर >= ग्रॉस अस्वीकार कर दिया जाता है)।',
       yieldCeiling: 'उपज सीमा प्रवर्तन',
       yieldDesc: 'शुद्ध वितरित वजन और पहले वितरित बैच किसान की पंजीकृत उत्पादन सीमा से अधिक नहीं हो सकते।',
-      distributedLock: 'वितरित लॉक सुरक्षा',
+      distributedLock: 'रेडिस एटॉमिक आरक्षण लॉक',
       lockDesc: 'एक ही किसान के लिए समानांतर तौल इस लॉक के तहत क्रमबद्ध होती है:',
       lockSuffix: 'ताकि रेस कंडीशंस समाप्त हो सकें।',
       captureUnified: 'प्रमाणित शुद्ध वजन दर्ज करें',
@@ -1826,6 +2442,11 @@ export const translations: Record<'en' | 'hi', Translations> = {
       offlineUnifiedSaved: '[ऑफलाइन WAL] एकीकृत वजन IndexedDB transactionsWAL में सहेजा गया। शुद्ध वजन: {net} क्विंटल।',
       errorWeighment: 'वजन दर्ज करने में त्रुटि',
       preflightNotice: 'धर्मकांटा माप दर्ज करने के लिए कृपया लाइव प्राथमिकता कतार से एक वाहन प्रेषित करें।',
+      activeLaneVehicles: 'लेन में सक्रिय वाहन',
+      selectVehiclePrompt: 'तौल प्रारंभ करने हेतु कतार से वाहन चुनें',
+      invalidTareRange: 'तौल मान अमान्य: खाली वजन धनात्मक और भरे वजन से कम होना अनिवार्य है (0 < tare < gross)',
+      autoResolvedQueue: 'सक्रिय कतार से वाहन स्वतः चयनित',
+      noVehiclesInLane: 'वर्तमान में कोई वाहन कतार में या तौल हेतु प्रतीक्षारत नहीं है।',
     },
     billing: {
       title: 'खरीद बिलिंग एवं प्रत्यक्ष लाभ अंतरण (DBT)',
@@ -1890,6 +2511,13 @@ export const translations: Record<'en' | 'hi', Translations> = {
       resolvingMsp: 'एमएसपी समाधान हो रहा है...',
       unresolved: 'अनसुलझा',
       resolvingAuthoritativeMsp: 'प्राधिकृत एमएसपी समाधान हो रहा है...',
+      authoritativeSettlementSummary: 'प्राधिकृत उपार्जन निपटान सारांश',
+      grossValue: 'सकल मूल्य',
+      dbtStatus: 'डीबीटी स्थिति',
+      statusPendingStaging: 'स्टेजिंग लंबित',
+      statusStaged: 'दोहरे हस्ताक्षर सत्यापित',
+      statusSettled: 'पीएफएमएस द्वारा भुगतान संपन्न',
+      autoResolvedWeighed: 'तौल पूर्ण हो चुके वाहन का स्वतः समाधान हुआ',
     },
     sync: {
       title: 'ऑफलाइन डब्ल्यूएएल सिंक मॉनिटर',
@@ -1918,6 +2546,11 @@ export const translations: Record<'en' | 'hi', Translations> = {
       simulateBlackout: 'ग्रामीण बिजली/इंटरनेट गुल सिमुलेशन',
       blackoutActive: 'आउटेज सिमुलेशन सक्रिय: ऑफलाइन मोड लागू',
       launchE2E: 'स्वचालित ई2ई परीक्षण यात्रा चलाएं',
+      resetShowcaseDesc: 'नियत डेमो स्थिति को पुनर्स्थापित करता है',
+      simulateTrafficDesc: 'कतार में वास्तविक डेमो रिकॉर्ड दर्ज करता है',
+      launchE2EDesc: 'एक लेन-देन को वास्तविक वर्कफ़्लो में आगे बढ़ाता है',
+      showcaseCommandCenter: 'शोकेस नियंत्रण केंद्र',
+      showcaseSubtitle: 'निर्णायक मंडल हेतु प्रामाणिक डेमो',
       openUSSD: 'मोबाइल यूएसएसडी फोन खोलें (*247#)',
       switchFarmerTitle: 'प्रदर्शन किसान चयन',
       switchFarmerDesc: 'किसान प्रोफाइल, उत्पादन सीमा और बुकिंग व्यवहार प्रदर्शित करने हेतु अधिकृत किसान चुनें।',
@@ -1944,6 +2577,201 @@ export const translations: Record<'en' | 'hi', Translations> = {
       invCryptoTitle: '4. HMAC-SHA256 क्रिप्टोग्राफी',
       invWalTitle: '5. स्थानीय-प्रथम राइट-अहेड लॉग',
       farmerSwitched: 'सक्रिय डेमो किसान बदला गया: {name} (किसान आईडी: {id})।',
+      advanceTime: 'कतार समय आगे बढ़ाएं / पुनः गणना',
+      advancingTime: 'समय आगे बढ़ रहा है...',
+      advanceTimeDesc: 'अलग सिमुलेशन घड़ी का उपयोग कर प्रतीक्षा समय बढ़ाता है ताकि DCDQ एंटी-स्टारवेशन क्रम परिवर्तन प्रदर्शित हो सके।',
+      optimizeSlots: 'अपॉइंटमेंट स्लॉट अनुकूलित करें',
+      optimizeSlotsDesc: 'यार्ड स्लॉट वितरण संतुलित करने और कुल भीड़ को कम करने के लिए HiGHS BILP अनुकूलन चलाएं।',
+      tasTitle: 'टीएएस बीआईएलपी स्लॉट अनुकूलक',
+      tasSubtitle: 'आवक ट्रक भार संतुलन हेतु मिक्स्ड-इंटीजर लीनियर प्रोग्राम (एल्गोरिदम 6)',
+      tasRunSolver: 'HiGHS BILP सॉल्वर चलाएं',
+      tasSolving: 'लीनियर प्रोग्राम हल हो रहा है...',
+      tasBefore: 'पहले',
+      tasAfter: 'बाद में',
+      tasOverload: 'यार्ड अधिभार',
+      tasObjective: 'उद्देश्य मूल्य',
+      tasMaxSlotLoad: 'अधिकतम स्लॉट लोड',
+      tasTrucks: 'ट्रक',
+      tasSolverBadge: 'HiGHS BILP सॉल्वर',
+      failureModelTitle: 'लॉजिस्टिक बुकिंग विफलता जोखिम मॉडल',
+      failureModelDesc: 'आगमन समय विचलन के आधार पर अपॉइंटमेंट विफलता की अनुभवजन्य संभावना का मूल्यांकन।',
+      failureModelLabel: 'MODELLED RISK — NOT AN ACTUAL FAILURE PREDICTION',
+      expectedArrival: 'अपेक्षित आगमन',
+      actualArrival: 'वास्तविक आगमन',
+      arrivalDeviation: 'आगमन विचलन',
+      failureProbability: 'विफलता संभावना',
+      concurrentBookingTitle: 'समवर्ती स्लॉट बुकिंग परीक्षण',
+      concurrentBookingDesc: 'रेडिस SET NX PX एटॉमिक लॉकिंग का उपयोग करके एक ही स्लॉट पर 10 समवर्ती आरक्षण का अनुकरण।',
+      runConcurrentTest: 'समवर्ती बुकिंग परीक्षण चलाएं',
+      runningConcurrentTest: 'समवर्ती लॉक परीक्षण जारी...',
+      totalRequests: 'कुल अनुरोध',
+      successfulRequests: 'सफल',
+      rejectedRequests: 'अस्वीकृत',
+      capacityExceededZero: 'क्षमता उल्लंघन: 0',
+      lockAcquisitionTimeline: 'लॉक अधिग्रहण एवं रिलीज समयरेखा',
+      redisMutexBadge: 'रेडिस SET NX PX वितरित म्यूटेक्स (प्रोटोटाइप)',
+      lwwConflictTitle: 'LWW संघर्ष समाधान (प्राधिकृत सर्वर अनुक्रम)',
+      lwwConflictDesc: 'प्राधिकृत सर्वर अनुक्रम का उपयोग करके फ़ील्ड-स्तरीय LWW विलय का प्रदर्शन।',
+      runLWWTest: 'LWW समाधान प्रदर्शित करें',
+      runningLWWTest: 'संघर्ष समाधान जारी...',
+      lwwMutationA: 'उत्परिवर्तन A',
+      lwwMutationB: 'उत्परिवर्तन B',
+      authoritativeSequenceWinner: 'उच्च प्राधिकृत सर्वर अनुक्रम',
+      governanceNotice: 'शासन सूचना: प्राधिकृत क्रम सर्वर अनुक्रम द्वारा संचालित है, क्लाइंट घड़ियों द्वारा नहीं।',
+      clientTimestampDiagnostic: 'क्लाइंट समय टिकट (नैदानिक मेटाडेटा)',
+      field: 'फ़ील्ड',
+      oldValue: 'पुराना मान',
+      incomingValue: 'आवक मान',
+      winner: 'विजेता',
+      reason: 'समाधान का कारण',
+      gzipSyncTitle: 'ऑफलाइन WAL Gzip संपीड़न साक्ष्य',
+      gzipSyncDesc: 'क्लाउड सर्वर पर प्रेषण से पूर्व IndexedDB WAL बैच संपीड़न का प्रदर्शन।',
+      testGzipSync: 'Gzip WAL सिंक परीक्षण करें',
+      testingGzipSync: 'संपीड़न एवं सिंक जारी...',
+      rawSize: 'मूल पेलोड आकार',
+      compressedSize: 'संपीड़ित Gzip आकार',
+      compressionRatio: 'संपीड़न बचत',
+      recordCount: 'रिकॉर्ड संख्या',
+      decompressionVerified: 'सर्वर पर विकीर्ण एवं सत्यापित',
+      slotCapacity: 'स्लॉट क्षमता (क्विंटल)',
+      serverSequence: 'सर्वर अनुक्रम (server_receive_sequence)',
+      tabAlgorithms: 'एल्गोरिदम कंट्रोल सेंटर',
+    },
+    controlCenter: {
+      title: 'मंडीक्यू एल्गोरिदम कंट्रोल सेंटर',
+      subtitle: 'वास्तविक परिचालन एल्गोरिदम का प्रामाणिक लाइव निष्पादन प्रदर्शन',
+      dataIsolationNotice: 'सभी एल्गोरिदम is_showcase=true के साथ निष्पादित होते हैं। वास्तविक खरीद रिकॉर्ड पूर्णतः सुरक्षित हैं।',
+      resetDemoBtn: 'एल्गोरिदम डेमो रीसेट करें',
+      resettingDemo: 'डेमो रिकॉर्ड हटाए जा रहे हैं...',
+      resetDemoSuccess: 'एल्गोरिदम डेमो रिकॉर्ड सफलतापूर्वक हटा दिए गए। वास्तविक खरीद लॉग पूरी तरह सुरक्षित हैं।',
+      statusLive: 'लाइव सिस्टम',
+      statusSimulation: 'नियंत्रित सिमुलेशन',
+      statusAlgoDemo: 'एल्गोरिद्म प्रदर्शन',
+      statusDemo: 'एल्गोरिद्म प्रदर्शन',
+      statusDocumented: 'केवल प्रलेखित',
+      statusNotImplemented: 'वर्तमान संस्करण में लागू नहीं',
+      verifiedStatus: 'सत्यापन स्थिति',
+      executionTrace: 'निष्पादन ट्रेस',
+      formulaLabel: 'प्रामाणिक सूत्र',
+      liveInputsLabel: 'लाइव इनपुट एवं नियंत्रण',
+      actualOutputLabel: 'वास्तविक परिकलित परिणाम',
+      summaryCountLive: 'लाइव परिचालन',
+      summaryCountDemo: 'निष्पादन डेमो',
+      summaryCountDocumented: 'प्रलेखित संदर्भ',
+      summaryCountNotImplemented: 'लागू नहीं',
+      mandiSelectionRequiredDesc: 'एल्गोरिदम संचालन, लाइव कतार टेलीमेट्री और प्रदर्शन परीक्षणों के लिए एक सक्रिय चयनित मंडी आवश्यक है। DATA-001 के अनुसार कोई जादुई डिफ़ॉल्ट की अनुमति नहीं है।',
+      twoModules: '2 मॉड्यूल',
+      sixModules: '6 मॉड्यूल',
+      liveModulesSummary: '1. DCDQ लाइव कतार एवं 2. बहु-सर्वर ईटीए (100% लाइव बैकएंड डेटा)',
+      demoModulesSummary: '3. TAS BILP, 4. रेडिस लॉक, 5. सर्वर-अनुक्रम विलय, 6. HMAC, 7. Gzip, 8. लॉजिस्टिक जोखिम',
+
+      // Module 1: DCDQ
+      dcdqModuleTitle: '1. DCDQ गतिशील कतार प्राथमिकता',
+      dcdqModuleDesc: 'डायनामिक क्रॉप-डिहाइड्रेशन एवं कंजेशन कतार (DCDQ) वाहनों को समग्र स्कोर S_i के अनुसार रेडिस ZSET में व्यवस्थित करता है।',
+      dcdqVehicleCol: 'वाहन / लॉट',
+      dcdqScoreACol: 'A (अपॉइंटमेंट पालन)',
+      dcdqScoreDCol: 'D (डेमरेज एवं भार)',
+      dcdqScoreMCol: 'M (नमी जोखिम सूचकांक)',
+      dcdqScoreWCol: 'W (प्रतीक्षा बोनस)',
+      dcdqScoreSCol: 'S (समग्र प्राथमिकता)',
+      dcdqRankCol: 'रैंक',
+      dcdqWaitSliderLabel: 'प्रतीक्षा समय बदलाव सिमुलेट करें (+मिनट)',
+      dcdqMoistureSliderLabel: 'नमी बदलाव सिमुलेट करें (%)',
+      dcdqTriggerReorderBtn: 'कतार पुनर्व्यवस्था प्रदर्शित करें',
+      dcdqReordering: 'DCDQ स्कोर पुनः परिकलित हो रहे हैं...',
+      dcdqReorderResultNotice: 'एंटी-स्टारवेशन बोनस W_i अद्यतन हुआ। वाहन रैंक गतिशील रूप से बदल गई।',
+      dcdqLiveQueueEmpty: 'लाइव एपीएमसी कतार वर्तमान में खाली है। गेट टर्मिनल पर आवक दर्ज करें या डेमो टूल्स में \'डेमो ट्रैफिक बनाएं\' पर क्लिक करें।',
+      dcdqRerankLiveBtn: 'लाइव कतार पुनः परिकलित एवं व्यवस्थित करें',
+      dcdqRerankingLive: 'प्रामाणिक DCDQ री-रैंकिंग जारी...',
+      dcdqCanonicalFormulaNotice: 'S_i = 1.0 * A_i + 1.0 * D_i + 1.0 * M_i + 1.0 * W_i (रेडिस ZSET में बैकएंड प्रामाणिक DCDQ इंजन द्वारा मूल्यांकित)',
+
+      // Module 2: ETA
+      etaModuleTitle: '2. M(t)/E_k/c(t) बहु-सर्वर कतार ईटीए मॉडल',
+      etaModuleDesc: 'आगे उपस्थित पेलोड, पिछले 15 मिनट के धर्मकांटा थ्रूपुट और सक्रिय स्केल्स की संख्या के आधार पर सेवा प्रतीक्षा समय का सटीक अनुमान।',
+      etaQueueAhead: 'आगे वाहन',
+      etaPayloadAhead: 'आगे पेलोड',
+      etaServiceRate: '15-मिनट सेवा दर',
+      etaActiveScales: 'सक्रिय स्केल्स c(t)',
+      etaCalculatedEta: 'अनुमानित सेवा समय (ईटीए)',
+      etaScaleCountStepper: 'सक्रिय धर्मकांटा स्केल्स की संख्या सेट करें',
+      etaRecalculating: 'बहु-सर्वर ईटीए की पुनः गणना जारी...',
+
+      // Module 3: TAS BILP
+      tasModuleTitle: '3. TAS BILP ट्रक भीड़ अनुकूलक',
+      tasModuleDesc: 'SciPy के माध्यम से HiGHS मिक्स्ड-इंटीजर लीनियर प्रोग्राम चलाकर आवक ट्रक स्लॉट आवंटन को अनुकूलित करता है एवं यार्ड भीड़ समाप्त करता है।',
+      tasInputTrucks: 'इनपुट ट्रक',
+      tasCandidateSlots: 'प्रस्तावित स्लॉट',
+      tasSlotCapacity: 'क्षमता सीमा',
+      tasPenalties: 'दंड कारक',
+      tasBeforeCongestion: 'भीड़ से पहले (प्रारंभिक)',
+      tasOptimizedAssignment: 'अनुकूलित स्लॉट आवंटन आव्यूह',
+      tasAfterCongestion: 'भीड़ के बाद (संतुलित)',
+      tasRunSolverBtn: 'HiGHS BILP सॉल्वर चलाएं',
+      tasOptimizing: 'मिक्स्ड-इंटीजर लीनियर प्रोग्राम हल हो रहा है...',
+
+      // Module 4: Redis Lock
+      redisModuleTitle: '4. रेडिस एटॉमिक आरक्षण लॉक (क्षमता संरक्षण)',
+      redisModuleDesc: 'अति-समवर्ती स्थिति में शून्य-क्षमता-उल्लंघन सिद्धांत को लागू करने हेतु समवर्ती आरक्षण प्रयासों का अनुकरण करता है।',
+      redisDisclaimer: 'वास्तुशिल्प नोट: एकल-इंस्टेंस रेडिस SET NX PX वितरित लॉक एवं एटॉमिक लुआ रिलीज। यह मल्टी-इंस्टेंस रेडलॉक कोरम नहीं है।',
+      redisConcurrentRequests: 'समवर्ती अनुरोध',
+      redisLockAcquisition: 'लॉक अधिग्रहण समयरेखा',
+      redisWinner: 'विजेता वर्कर',
+      redisRejections: 'अस्वीकृत अनुरोध',
+      redisTtl: 'लॉक टीटीएल',
+      redisAtomicRelease: 'एटॉमिक रिलीज तंत्र',
+      redisRunTestBtn: '10-वर्कर रेस टेस्ट शुरू करें',
+      redisTesting: 'समवर्ती लॉक अनुरोध निष्पादित हो रहे हैं...',
+
+      // Module 5: LWW
+      lwwModuleTitle: '5. सर्वर-अनुक्रम-प्राधिकृत फ़ील्ड-स्तरीय विलय',
+      lwwModuleDesc: 'प्राधिकृत सर्वर अनुक्रम का उपयोग करके फ़ील्ड-स्तरीय लास्ट-राइट-विन्स विलय। ऑफलाइन नोड्स में सटीक एकरूपता सुनिश्चित करता है।',
+      lwwMutationA: 'उत्परिवर्तन A (ऑफलाइन टर्मिनल 01)',
+      lwwMutationB: 'उत्परिवर्तन B (ऑफलाइन टर्मिनल 02)',
+      lwwFieldConflict: 'फ़ील्ड-दर-फ़ील्ड संघर्ष विश्लेषण',
+      lwwServerSequence: 'प्राधिकृत सर्वर अनुक्रम',
+      lwwClientTimestamp: 'क्लाइंट समय टिकट (केवल नैदानिक)',
+      lwwWinningValue: 'प्राधिकृत विजेता मान',
+      lwwDeduplication: 'WAL रिप्ले दोहराव जांच',
+      lwwSyncStatus: 'सिंक स्थिति',
+      lwwRunTestBtn: 'LWW संघर्ष परीक्षण चलाएं',
+      lwwTesting: 'उत्परिवर्तन संघर्ष हल हो रहा है...',
+
+      // Module 6: HMAC
+      hmacModuleTitle: '6. HMAC-SHA256 क्रिप्टोग्राफिक ऑडिटिंग',
+      hmacModuleDesc: 'कानस्टेंट-टाइम तुलना (FIPS 198-1) का उपयोग करके प्रामाणिक बुकिंग पेलोड पर डिजिटल हस्ताक्षरों का सत्यापन करता है।',
+      hmacCanonicalPayload: 'प्रामाणिक पेलोड',
+      hmacSignatureLength: 'हस्ताक्षर लंबाई (हेक्स वर्ण)',
+      hmacVerificationResult: 'प्रामाणिक सत्यापन परिणाम',
+      hmacTamperedPayload: 'छेड़छाड़ किया गया पेलोड (1 बाइट बदला)',
+      hmacRejectionResult: 'अस्वीकृति परिणाम',
+      hmacSecretKeyRedacted: 'सीक्रेट की स्थिति: [संरक्षित — सर्वर वॉल्ट में 256-बिट क्रिप्टोग्राफिक एन्ट्रॉपी]',
+      hmacRunVerifyBtn: 'क्रिप्टोग्राफिक सत्यनिष्ठा जांचें',
+      hmacVerifying: 'SHA-256 HMAC डाइजेस्ट परिकलित हो रहा है...',
+      hmacTestPayload: 'क्रिप्टोग्राफिक टेस्ट पेलोड',
+      hmacTestFixtureNotice: 'परीक्षण सूचना: नीचे दिए गए पहचानकर्ता सिंथेटिक परीक्षण फिक्स्चर हैं, वास्तविक किसान पहचान नहीं।',
+      hmacSyntheticFixtureInputs: 'सिंथेटिक फिक्सचर इनपुट: किसान #101, स्लॉट #5',
+
+      // Module 7: Gzip
+      gzipModuleTitle: '7. RFC 1952 Gzip ऑफलाइन WAL संपीड़न',
+      gzipModuleDesc: 'ऑफलाइन IndexedDB राइट-अहेड लॉग बैचों के लिए वास्तविक बाइट संपीड़न और सर्वर डीकंप्रेशन का मापन करता है।',
+      gzipRawSize: 'मूल JSON पेलोड आकार',
+      gzipCompressedSize: 'संपीड़ित Gzip आकार',
+      gzipCompressionRatio: 'संपीड़न बचत अनुपात',
+      gzipRecordCount: 'WAL उत्परिवर्तन संख्या',
+      gzipSyncResult: 'सर्वर डीकंप्रेशन स्थिति',
+      gzipRunCompressBtn: 'Gzip संपीड़न बैच चलाएं',
+      gzipCompressing: 'WAL बैच संपीड़ित हो रहा है...',
+
+      // Module 8: Logistic Booking Risk
+      riskModuleTitle: '8. लॉजिस्टिक बुकिंग विफलता जोखिम भविष्यवक्ता',
+      riskModuleDesc: 'आगमन समय विचलन के आधार पर अपॉइंटमेंट अनुपस्थिति और परिवहन विफलता की अनुभवजन्य संभावना का मूल्यांकन।',
+      riskModelledDisclaimer: 'गणितीय रूप से मॉडल किया गया जोखिम — वास्तविक खरीद विफलता भविष्यवाणी नहीं',
+      riskExpectedArrival: 'अपेक्षित आगमन समय',
+      riskActualArrival: 'वास्तविक आगमन समय',
+      riskDeviation: 'परिवहन विचलन (Delta t)',
+      riskParameterK: 'संवेदनशीलता पैरामीटर (k)',
+      riskCalculatedRisk: 'परिकलित विफलता संभावना',
+      riskDeviationSlider: 'आगमन विचलन समायोजित करें (मिनट)',
     },
     receipt: {
       title: 'डिजिटल जे-फॉर्म खरीद रसीद',
@@ -2104,6 +2932,9 @@ export const translations: Record<'en' | 'hi', Translations> = {
       cropCodePlaceholder: 'उदा. WHEAT_SHARBATI',
       resetFailed: 'रीसेट विफल',
       simulationFailed: 'सिमुलेशन विफल',
+      tasAdminTitle: 'टीएएस स्लॉट अनुकूलन एवं आगमन जोखिम',
+      tasAdminSubtitle: 'वाहन नियुक्तियों को संतुलित करने और लॉजिस्टिक विफलता जोखिमों का ऑडिट करने हेतु BILP सॉल्वर चलाएं।',
+      tasOptimizeNow: 'स्लॉट आवंटन संतुलित करें',
     },
     journey: {
       modalTitle: 'स्वचालित एंड-टू-एंड खरीद यात्रा',

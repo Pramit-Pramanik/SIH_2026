@@ -98,6 +98,7 @@ def verify_and_check_in_gate(
             slot_id=log.slot_id,
             scheduled_date=str(log.scheduled_date),
             quantity_qt=float(log.net_weight_qt or request.quantity_qt),
+            token_signature=log.token_signature,
             verified_at=verified_timestamp,
             message=f"Gate entry was previously verified for transaction {log.transaction_id}. Entry confirmed without state change."
         )
@@ -142,6 +143,7 @@ def verify_and_check_in_gate(
         slot_id=log.slot_id,
         scheduled_date=str(log.scheduled_date),
         quantity_qt=float(log.net_weight_qt or request.quantity_qt),
+        token_signature=log.token_signature,
         verified_at=now.isoformat(),
         message=f"Gate entry successfully verified for {farmer_name}. Authorized for mandi yard staging entry."
     )
@@ -181,6 +183,7 @@ def inspect_gate_transaction(
         slot_id=log.slot_id,
         scheduled_date=str(log.scheduled_date),
         quantity_qt=float(log.net_weight_qt or 0.0),
+        token_signature=log.token_signature,
         verified_at=log.updated_at.isoformat() if log.updated_at else datetime.now(timezone.utc).isoformat(),
         message=f"Transaction is currently in state '{log.current_state}'."
     )

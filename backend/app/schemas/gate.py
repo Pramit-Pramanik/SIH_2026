@@ -27,5 +27,6 @@ class GateCheckInResponse(BaseModel):
     slot_id: int = Field(..., description="Assigned hourly slot identifier")
     scheduled_date: str = Field(..., description="Scheduled delivery date (YYYY-MM-DD)")
     quantity_qt: float = Field(..., description="Verified delivery quantity in quintals")
+    token_signature: Optional[str] = Field(None, description="HMAC-SHA256 signature from booking token")
     verified_at: str = Field(..., description="ISO 8601 gate entry timestamp")
     message: str = Field(..., description="Human-readable gate operator confirmation")

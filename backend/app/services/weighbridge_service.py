@@ -123,10 +123,10 @@ def record_tare_weight(
     enforces farmer yield ceiling invariance, and transitions state to WEIGHED_TARE.
     """
     tare_weight = float(request.tare_weight_qt)
-    if tare_weight < 0.0:
+    if tare_weight <= 0.0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tare weight cannot be negative."
+            detail="Tare weight must be strictly greater than zero (0 < tare < gross)."
         )
 
     log = db.query(ProcurementLog).filter(
@@ -226,6 +226,22 @@ def record_tare_weight(
             db.rollback()
             raise
 
+        try:
+            from backend.app.services.eta_service import record_weighbridge_completion
+            record_weighbridge_completion(
+                db=db,
+                mandi_id=log.mandi_id,
+                transaction_id=log.transaction_id,
+                gross_weight_qt=gross_weight,
+                tare_weight_qt=tare_weight,
+                net_weight_qt=net_weight,
+                scale_id=getattr(request, "scale_id", None) or "SCALE-01",
+                completed_at=now
+            )
+        except Exception:
+            pass
+
+
     return WeighmentResponse(
         transaction_id=log.transaction_id,
         mandi_id=log.mandi_id,
@@ -258,10 +274,10 @@ def record_unified_weighment(
             detail="Gross weight must be strictly greater than zero quintals."
         )
 
-    if tare_weight < 0.0:
+    if tare_weight <= 0.0:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Tare weight cannot be negative."
+            detail="Tare weight must be strictly greater than zero (0 < tare < gross)."
         )
 
     if tare_weight >= gross_weight:
@@ -384,6 +400,22 @@ def record_unified_weighment(
         except Exception:
             db.rollback()
             raise
+
+        try:
+            from backend.app.services.eta_service import record_weighbridge_completion
+            record_weighbridge_completion(
+                db=db,
+                mandi_id=log.mandi_id,
+                transaction_id=log.transaction_id,
+                gross_weight_qt=gross_weight,
+                tare_weight_qt=tare_weight,
+                net_weight_qt=net_weight,
+                scale_id=getattr(request, "scale_id", None) or "SCALE-01",
+                completed_at=now
+            )
+        except Exception:
+            pass
+
 
     return WeighmentResponse(
         transaction_id=log.transaction_id,

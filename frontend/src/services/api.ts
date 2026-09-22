@@ -168,7 +168,10 @@ export async function checkBackendHealth(): Promise<boolean> {
   }
 }
 
-export async function fetchFarmerProfile(farmerId: number = 1): Promise<FarmerProfile> {
+export async function fetchFarmerProfile(farmerId: number): Promise<FarmerProfile> {
+  if (!farmerId || typeof farmerId !== 'number' || farmerId <= 0) {
+    throw new Error('Explicit farmerId is required to fetch farmer profile. Zero magic identity fallbacks permitted per DATA-001.');
+  }
   const res = await fetch(`/api/v1/farmers/profile?farmer_id=${farmerId}`, {
     headers: getAuthHeaders(),
   });
@@ -243,3 +246,382 @@ export async function reserveSlot(payload: BookingPayload): Promise<BookingRespo
     token_signature: data.token?.signature || data.token_signature || '',
   };
 }
+
+export interface SlotAssignmentItem {
+  truck_id: string;
+  slot_id: string;
+  preferred_slot?: string;
+  is_preferred: boolean;
+}
+
+export interface CongestionBreakdown {
+  slot_distribution: Record<string, number>;
+  total_overload: number;
+  max_slot_trucks: number;
+}
+
+export interface SlotUtilizationItem {
+  slot_id: string;
+  truck_count: number;
+  nominal_capacity: number;
+  max_capacity: number;
+  overload: number;
+  penalty_cost: number;
+  utilization_pct: number;
+}
+
+export interface TASOptimizeResponse {
+  status: string;
+  solver: string;
+  objective_value: number;
+  baseline_congestion: CongestionBreakdown;
+  optimized_congestion: CongestionBreakdown;
+  assignments: SlotAssignmentItem[];
+  slot_assignments: Record<string, string[]>;
+  slot_utilization: SlotUtilizationItem[];
+  summary: string;
+}
+
+export interface BookingFailureRiskRequest {
+  expected_arrival: number | string;
+  actual_arrival: number | string;
+  k?: number;
+  unit?: string;
+}
+
+export interface BookingFailureRiskResponse {
+  expected_arrival: string;
+  actual_arrival: string;
+  deviation: number;
+  unit: string;
+  k: number;
+  failure_probability: number;
+  risk_label: string;
+  formula: string;
+  calibrated: boolean;
+}
+
+export async function optimizeAppointmentSlots(payload?: Record<string, any>): Promise<TASOptimizeResponse> {
+  const res = await fetch('/api/v1/admin/tas/optimize', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to execute TAS BILP optimization');
+  }
+  return res.json();
+}
+
+export async function calculateBookingFailureRisk(payload: BookingFailureRiskRequest): Promise<BookingFailureRiskResponse> {
+  const res = await fetch('/api/v1/admin/tas/failure-risk', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error('Failed to calculate booking failure risk');
+  }
+  return res.json();
+}
+
+export interface LockTimelineEvent {
+  worker_id: number;
+  request_id: string;
+  acquired_at_ms: number;
+  released_at_ms: number;
+  duration_ms: number;
+  status: string;
+  token: string;
+}
+
+export interface ConcurrentBookingTestRequest {
+  mandi_id?: number;
+  slot_id?: number | null;
+  concurrent_requests?: number;
+  request_qty_qt?: number;
+}
+
+export interface ConcurrentBookingTestResponse {
+  mandi_id: number;
+  slot_id: number;
+  total_requests: number;
+  successful_requests: number;
+  rejected_requests: number;
+  capacity_exceeded: number;
+  allocated_capacity_qt: number;
+  booked_capacity_qt: number;
+  remaining_capacity_qt: number;
+  lock_mechanism: string;
+  timeline: LockTimelineEvent[];
+  summary: string;
+}
+
+export interface LWWFieldComparison {
+  field: string;
+  old_value: any;
+  incoming_value: any;
+  winner: any;
+  winning_mutation_id: string;
+  authoritative_sequence: number;
+  reason: string;
+  client_timestamp_a: string;
+  client_timestamp_b: string;
+}
+
+export interface LWWConflictTestRequest {
+  mutation_a?: Record<string, any>;
+  mutation_b?: Record<string, any>;
+}
+
+export interface LWWConflictTestResponse {
+  transaction_id: string;
+  mutation_a_id: string;
+  mutation_a_sequence: number;
+  mutation_b_id: string;
+  mutation_b_sequence: number;
+  fields: LWWFieldComparison[];
+  governance_model: string;
+  governance_notice: string;
+}
+
+export interface GzipSyncEvidenceRequest {
+  record_count?: number;
+}
+
+export interface GzipSyncEvidenceResponse {
+  record_count: number;
+  raw_size_bytes: number;
+  compressed_size_bytes: number;
+  compression_ratio_pct: number;
+  decompression_status: string;
+  verified: boolean;
+  pipeline: string;
+}
+
+export async function runConcurrentBookingTest(payload?: ConcurrentBookingTestRequest): Promise<ConcurrentBookingTestResponse> {
+  const res = await fetch('/api/v1/admin/demo/concurrent-booking', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to run concurrent booking test' }));
+    throw new Error(err.detail || 'Failed to run concurrent booking test');
+  }
+  return res.json();
+}
+
+export async function runLWWConflictTest(payload?: LWWConflictTestRequest): Promise<LWWConflictTestResponse> {
+  const res = await fetch('/api/v1/admin/demo/lww-conflict', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to run LWW conflict test' }));
+    throw new Error(err.detail || 'Failed to run LWW conflict test');
+  }
+  return res.json();
+}
+
+export async function runGzipSyncEvidence(payload?: GzipSyncEvidenceRequest): Promise<GzipSyncEvidenceResponse> {
+  const res = await fetch('/api/v1/admin/demo/gzip-evidence', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to run Gzip sync evidence' }));
+    throw new Error(err.detail || 'Failed to run Gzip sync evidence');
+  }
+  return res.json();
+}
+
+
+export interface HMACVerificationRequest {
+  farmer_id?: number;
+  mandi_id?: number;
+  slot_id?: number;
+  quantity_qt?: number;
+  tamper_quantity_qt?: number;
+}
+
+export interface HMACVerificationResponse {
+  canonical_payload: string;
+  signature_length_chars: number;
+  signature_preview: string;
+  secret_key_status: string;
+  verification_result: string;
+  is_valid: boolean;
+  tampered_payload: string;
+  tampered_result: string;
+  tamper_rejected: boolean;
+  algorithm: string;
+  execution_trace: string[];
+  verification_status: string;
+}
+
+export interface DCDQVehicleDemoItem {
+  transaction_id: string;
+  farmer_name: string;
+  crop_type: string;
+  payload_qt: number;
+  moisture_pct: number;
+  wait_minutes: number;
+  planned_arrival_offset_min: number;
+  actual_arrival_offset_min: number;
+  score_a: number;
+  score_d: number;
+  score_m: number;
+  score_w: number;
+  composite_score_s: number;
+  rank: number;
+}
+
+export interface DCDQReorderDemoRequest {
+  mandi_id?: number;
+  tweak_transaction_id?: string;
+  delta_wait_minutes?: number;
+  new_moisture_pct?: number;
+}
+
+export interface DCDQReorderDemoResponse {
+  mandi_id: number;
+  tweak_target: string;
+  before_queue: DCDQVehicleDemoItem[];
+  after_queue: DCDQVehicleDemoItem[];
+  rank_changed: boolean;
+  previous_rank: number;
+  new_rank: number;
+  reorder_explanation: string;
+  execution_trace: string[];
+  verification_status: string;
+}
+
+export interface AlgorithmShowcaseResetResponse {
+  status: string;
+  demo_records_purged: number;
+  demo_slots_reset: number;
+  scale_overrides_cleared: boolean;
+  operational_data_protected: boolean;
+  new_demo_run_id: string;
+  message: string;
+}
+
+export async function runHMACVerificationDemo(payload?: HMACVerificationRequest): Promise<HMACVerificationResponse> {
+  const res = await fetch('/api/v1/admin/demo/hmac-verification', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to run HMAC verification demo' }));
+    throw new Error(err.detail || 'Failed to run HMAC verification demo');
+  }
+  return res.json();
+}
+
+export async function runDCDQReorderDemo(payload?: DCDQReorderDemoRequest): Promise<DCDQReorderDemoResponse> {
+  const res = await fetch('/api/v1/admin/demo/dcdq-reorder', {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(payload || {}),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to run DCDQ reorder demo' }));
+    throw new Error(err.detail || 'Failed to run DCDQ reorder demo');
+  }
+  return res.json();
+}
+
+export async function resetAlgorithmShowcase(demoRunId?: string): Promise<AlgorithmShowcaseResetResponse> {
+  const url = demoRunId ? `/api/v1/admin/demo/reset-algorithm-showcase?demo_run_id=${encodeURIComponent(demoRunId)}` : '/api/v1/admin/demo/reset-algorithm-showcase';
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to reset algorithm showcase' }));
+    throw new Error(err.detail || 'Failed to reset algorithm showcase');
+  }
+  return res.json();
+}
+
+export async function getWeighbridgeScales(mandiId: number): Promise<{ mandi_id: number; active_scales: number; message: string }> {
+  const res = await fetch(`/api/v1/queue/${mandiId}/scales`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to get weighbridge scale config' }));
+    throw new Error(err.detail || 'Failed to get weighbridge scale config');
+  }
+  return res.json();
+}
+
+export async function updateWeighbridgeScales(mandiId: number, activeScales: number): Promise<{ mandi_id: number; active_scales: number; message: string }> {
+  const res = await fetch(`/api/v1/queue/${mandiId}/scales`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ active_scales: activeScales }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to update weighbridge scales' }));
+    throw new Error(err.detail || 'Failed to update weighbridge scales');
+  }
+  return res.json();
+}
+export interface QueueItem {
+  rank: number;
+  transaction_id: string;
+  priority_score: number;
+  arrival_timestamp?: number;
+  farmer_id?: number;
+  quantity_qt?: number;
+  score_a?: number;
+  score_d?: number;
+  score_m?: number;
+  score_w?: number;
+  wait_minutes?: number;
+  moisture_pct?: number;
+  planned_arrival_ts?: number;
+  actual_arrival_ts?: number;
+  eta_minutes?: number | null;
+  payload_ahead_qt?: number | null;
+  service_rate_qt_per_hour_per_scale?: number | null;
+  active_scales?: number | null;
+  eta_status?: 'CALCULATED' | 'INSUFFICIENT_TELEMETRY';
+  crop_type?: string;
+  status?: string;
+  is_showcase?: boolean;
+}
+
+export interface QueueListResponse {
+  mandi_id: number;
+  total_vehicles: number;
+  items: QueueItem[];
+}
+
+export async function fetchLiveQueue(mandiId: number): Promise<QueueListResponse> {
+  const res = await fetch(`/api/v1/queue/${mandiId}`, {
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to fetch live queue' }));
+    throw new Error(err.detail || 'Failed to fetch live queue');
+  }
+  return res.json();
+}
+
+export async function rerankLiveQueue(mandiId: number): Promise<QueueListResponse> {
+  const res = await fetch(`/api/v1/queue/${mandiId}/rerank`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Failed to rerank live queue' }));
+    throw new Error(err.detail || 'Failed to rerank live queue');
+  }
+  return res.json();
+}
+

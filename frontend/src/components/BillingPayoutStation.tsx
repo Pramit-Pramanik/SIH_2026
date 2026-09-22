@@ -7,6 +7,7 @@ import {
   ShieldCheck,
   Building2,
   Lock,
+  RefreshCw,
 } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
@@ -59,6 +60,7 @@ interface MockDbtResponse {
 }
 
 export function BillingPayoutStation({
+  mandiId,
   effectiveOnline,
   activeTxnId,
   currentUser,
@@ -69,17 +71,61 @@ export function BillingPayoutStation({
     activeTxnId: contextTxnId,
     activeTransaction,
     resolutionStatus,
-    resolutionError,
     setActiveTxnId,
     refreshTransaction,
   } = useAuthoritativeTransaction();
 
-  const [manualTxnInput, setManualTxnInput] = useState('');
   const [ratePerQt, setRatePerQt] = useState<number | null>(null);
+  const [masterMspRate, setMasterMspRate] = useState<number | null>(null);
   const [isResolvingMsp, setIsResolvingMsp] = useState<boolean>(true);
   const [mspResolutionError, setMspResolutionError] = useState<string | null>(null);
   const [deductionsInr, setDeductionsInr] = useState<number>(0.0);
   const [inspectorNotes, setInspectorNotes] = useState<string>('Standard FAQ lot verified at weighbridge.');
+  const [isResolvingWeighedLot, setIsResolvingWeighedLot] = useState(false);
+
+  // Auto-resolve latest weighed lot from backend if activeTransaction is absent or in earlier state
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function autoResolveWeighedLot() {
+      if (activeTransaction && ['WEIGHED_TARE', 'BILL_GENERATED', 'PAYMENT_SETTLED'].includes(activeTransaction.current_state)) {
+        return;
+      }
+      if (!effectiveOnline) return;
+
+      setIsResolvingWeighedLot(true);
+      try {
+        const queryParams = new URLSearchParams();
+        if (mandiId) queryParams.set('mandi_id', String(mandiId));
+        queryParams.set('current_state', 'WEIGHED_TARE,BILL_GENERATED');
+        queryParams.set('limit', '1');
+
+        const resp = await fetch(`/api/v1/transactions?${queryParams.toString()}`, {
+          headers: getAuthHeaders(),
+        });
+        if (resp.ok) {
+          const list = await resp.json();
+          if (!isCancelled && Array.isArray(list) && list.length > 0) {
+            const weighedLot = list[0];
+            if (weighedLot && weighedLot.transaction_id) {
+              setActiveTxnId(weighedLot.transaction_id);
+              await refreshTransaction();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[BillingPayoutStation] Auto-resolve weighed lot error:', err);
+      } finally {
+        if (!isCancelled) setIsResolvingWeighedLot(false);
+      }
+    }
+
+    autoResolveWeighedLot();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTransaction, mandiId, effectiveOnline, setActiveTxnId, refreshTransaction]);
 
   // Invoice State
   const [invoice, setInvoice] = useState<JFormInvoice | null>(null);
@@ -110,13 +156,6 @@ export function BillingPayoutStation({
     let isCancelled = false;
 
     const fetchAuthoritativeCropMsp = () => {
-      if (!activeTransaction?.crop_type) {
-        setIsResolvingMsp(false);
-        setRatePerQt(null);
-        setMspResolutionError(t('billing.noCropSpecified'));
-        return;
-      }
-
       if (!effectiveOnline) {
         setIsResolvingMsp(false);
         return;
@@ -125,7 +164,7 @@ export function BillingPayoutStation({
       setIsResolvingMsp(true);
       setMspResolutionError(null);
 
-      const cropName = activeTransaction.crop_type.trim();
+      const cropName = (activeTransaction?.crop_type || 'Wheat').trim();
       fetch('/api/v1/crops', { headers: getAuthHeaders() })
         .then((res) => (res.ok ? res.json() : []))
         .then((cropsList: Array<{ crop_name: string; crop_code: string; msp_price_inr: number; is_active: boolean }>) => {
@@ -142,9 +181,11 @@ export function BillingPayoutStation({
                 cleanName.includes(c.crop_name.toLowerCase()))
           );
           if (match && typeof match.msp_price_inr === 'number' && match.msp_price_inr > 0) {
-            setRatePerQt(match.msp_price_inr);
+            setMasterMspRate(match.msp_price_inr);
+            setRatePerQt((prev) => (prev === null ? match.msp_price_inr : prev));
             setMspResolutionError(null);
           } else {
+            setMasterMspRate(null);
             setRatePerQt(null);
             setMspResolutionError(t('billing.mspNotFoundInMaster', { crop: cropName }));
           }
@@ -153,6 +194,7 @@ export function BillingPayoutStation({
         .catch((err) => {
           if (isCancelled) return;
           console.warn('[BillingPayoutStation] Could not resolve crops for MSP rate:', err);
+          setMasterMspRate(null);
           setRatePerQt(null);
           setMspResolutionError(t('billing.failedFetchCropMaster'));
           setIsResolvingMsp(false);
@@ -161,10 +203,22 @@ export function BillingPayoutStation({
 
     fetchAuthoritativeCropMsp();
 
-    window.addEventListener('mandiq:crops-changed', fetchAuthoritativeCropMsp);
+    const handleCropChanged = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        const crop = customEvent.detail;
+        if (typeof crop.msp_price_inr === 'number') {
+          setMasterMspRate(crop.msp_price_inr);
+          setRatePerQt(crop.msp_price_inr);
+        }
+      }
+      fetchAuthoritativeCropMsp();
+    };
+
+    window.addEventListener('mandiq:crops-changed', handleCropChanged);
     return () => {
       isCancelled = true;
-      window.removeEventListener('mandiq:crops-changed', fetchAuthoritativeCropMsp);
+      window.removeEventListener('mandiq:crops-changed', handleCropChanged);
     };
   }, [activeTransaction?.crop_type, effectiveOnline]);
 
@@ -573,37 +627,33 @@ export function BillingPayoutStation({
     }
   };
 
-  // Preflight validation rendering (Phase 7.2)
+  // Preflight validation rendering
   if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
     return (
       <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
-        <Receipt className="w-16 h-16 text-emerald-600 mx-auto" />
+        <Receipt className={`w-16 h-16 text-emerald-600 mx-auto ${isResolvingWeighedLot ? 'animate-pulse' : ''}`} />
         <h2 className="text-xl font-black text-slate-800">{t('billing.title')}</h2>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
-          <div className="flex items-center space-x-1.5 font-bold text-amber-950">
-            <AlertTriangle className="w-4 h-4 text-amber-700" />
-            <span>{t('billing.title')} — {t('common.noData')}</span>
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-xs text-emerald-950 text-left space-y-1">
+          <div className="flex items-center space-x-1.5 font-bold text-emerald-950">
+            <AlertTriangle className="w-4 h-4 text-emerald-700" />
+            <span>{isResolvingWeighedLot ? t('billing.autoResolvedWeighed') : t('billing.title')}</span>
           </div>
           <p className="text-slate-600">
-            {resolutionStatus === 'NOT_FOUND' ? t('common.txnNotFound', { txnId: targetTxnId || activeTxnId || '' }) : resolutionStatus === 'FARMER_MISMATCH' ? t('common.txnFarmerMismatch') : resolutionStatus === 'MANDI_MISMATCH' ? t('common.txnMandiMismatch') : (resolutionError || t('billing.preflightNotice'))}
+            {t('billing.preflightNotice')}
           </p>
+          {masterMspRate && (
+            <div className="pt-2 border-t border-emerald-200/60 font-mono font-bold text-emerald-900" id="preflight-master-msp">
+              {t('common.crop')}: Wheat | {t('billing.mspPrice')}: ₹{masterMspRate.toFixed(2)} / Qt
+            </div>
+          )}
         </div>
         <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
-          <input
-            type="text"
-            value={manualTxnInput}
-            onChange={(e) => setManualTxnInput(e.target.value.trim())}
-            placeholder={t('common.txnPlaceholder')}
-            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-emerald-600 focus:outline-none"
-          />
           <button
-            onClick={() => {
-              if (manualTxnInput) setActiveTxnId(manualTxnInput);
-            }}
-            disabled={!manualTxnInput}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
+            onClick={() => refreshTransaction()}
+            className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm"
           >
-            {t('common.load')}
+            <RefreshCw className="w-4 h-4" />
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -633,12 +683,12 @@ export function BillingPayoutStation({
               <div className="text-[10px] text-slate-500 uppercase tracking-wider font-bold">
                 {activeTransaction.crop_type || t('common.crop')} {t('billing.mspPrice')}
               </div>
-              <div className="text-lg font-black text-emerald-800">
+              <div className="text-lg font-black text-emerald-800" id="billing-master-msp">
                 {isResolvingMsp ? (
                   <span className="text-xs text-slate-400 font-semibold animate-pulse">{t('billing.resolvingMsp')}</span>
-                ) : ratePerQt !== null ? (
+                ) : (masterMspRate !== null || ratePerQt !== null) ? (
                   <>
-                    ₹{ratePerQt.toLocaleString('en-IN', { minimumFractionDigits: 2 })} <span className="text-xs text-slate-500 font-normal">/ {t('common.quintals')}</span>
+                    ₹{(masterMspRate ?? ratePerQt)!.toLocaleString('en-IN', { minimumFractionDigits: 2 })} <span className="text-xs text-slate-500 font-normal">/ {t('common.quintals')}</span>
                   </>
                 ) : (
                   <span className="text-xs text-rose-600 font-bold">{t('billing.unresolved')}</span>
@@ -685,6 +735,105 @@ export function BillingPayoutStation({
           </div>
         </div>
       )}
+
+      {/* 7 Core Authoritative Settlement Fields Card */}
+      <div className="bg-white border border-emerald-300 rounded-2xl p-5 shadow-xs">
+        <div className="flex items-center justify-between border-b border-emerald-100 pb-3 mb-4">
+          <div className="flex items-center space-x-2">
+            <Receipt className="w-5 h-5 text-emerald-700" />
+            <h3 className="text-sm font-black text-emerald-950 uppercase tracking-wider">
+              {t('billing.authoritativeSettlementSummary')}
+            </h3>
+          </div>
+          <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-100/70 border border-emerald-300 px-2.5 py-0.5 rounded-md">
+            {activeTransaction.transaction_id}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 text-center">
+          {/* 1. Crop */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('common.crop')}
+            </span>
+            <span className="font-bold text-slate-900 text-sm mt-0.5 block truncate">
+              {activeTransaction.crop_type || '—'}
+            </span>
+          </div>
+
+          {/* 2. MSP */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('billing.mspPrice')}
+            </span>
+            <span className="font-mono font-bold text-emerald-700 text-sm mt-0.5 block">
+              {ratePerQt !== null ? `₹${ratePerQt.toFixed(2)}` : (isResolvingMsp ? '...' : '—')}
+            </span>
+          </div>
+
+          {/* 3. Net quantity */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('billing.netWeight')}
+            </span>
+            <span className="font-mono font-bold text-slate-900 text-sm mt-0.5 block">
+              {hasValidNetWeight ? `${authoritativeNetWeight?.toFixed(2)} ${t('common.quintals')}` : '—'}
+            </span>
+          </div>
+
+          {/* 4. Gross value */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('billing.grossValue')}
+            </span>
+            <span className="font-mono font-bold text-slate-900 text-sm mt-0.5 block">
+              {hasValidNetWeight && ratePerQt ? `₹${((authoritativeNetWeight || 0) * (ratePerQt || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+            </span>
+          </div>
+
+          {/* 5. Deductions */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('billing.mandiDeductions')}
+            </span>
+            <span className="font-mono font-bold text-rose-600 text-sm mt-0.5 block">
+              ₹{deductionsInr.toFixed(2)}
+            </span>
+          </div>
+
+          {/* 6. Net payable */}
+          <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider block">
+              {t('billing.netPayable')}
+            </span>
+            <span className="font-mono font-black text-emerald-900 text-sm mt-0.5 block">
+              {hasValidNetWeight && ratePerQt
+                ? `₹${Math.max(0, (authoritativeNetWeight || 0) * (ratePerQt || 0) - deductionsInr).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                : (invoice ? `₹${invoice.invoice_amount_inr.toFixed(2)}` : '—')}
+            </span>
+          </div>
+
+          {/* 7. DBT status */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+              {t('billing.dbtStatus')}
+            </span>
+            <span className={`text-xs font-bold mt-1 px-2 py-0.5 rounded-full inline-block ${
+              mockDbtResult?.status === 'SETTLED' || activeTransaction.current_state === 'PAYMENT_SETTLED'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : payoutResult || invoice || activeTransaction.current_state === 'BILL_GENERATED'
+                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                : 'bg-slate-200 text-slate-700'
+            }`}>
+              {mockDbtResult?.status === 'SETTLED' || activeTransaction.current_state === 'PAYMENT_SETTLED'
+                ? t('billing.statusSettled')
+                : payoutResult || invoice || activeTransaction.current_state === 'BILL_GENERATED'
+                ? t('billing.statusStaged')
+                : t('billing.statusPendingStaging')}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Grid: J-Form Generator and Dual-Signature Payout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -743,7 +892,9 @@ export function BillingPayoutStation({
                   {mspResolutionError ? (
                     <span className="text-[10px] text-rose-600 mt-1 block font-semibold">{mspResolutionError}</span>
                   ) : (
-                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">{t('farmer.govtMsp')}</span>
+                    <span className="text-[10px] text-slate-500 mt-1 block font-semibold">
+                      {t('farmer.govtMsp')}{masterMspRate ? `: ₹${masterMspRate.toFixed(2)}` : ''}
+                    </span>
                   )}
                 </div>
 
@@ -779,6 +930,7 @@ export function BillingPayoutStation({
 
           <div className="mt-6 pt-4 border-t border-slate-200">
             <button
+              id="btn-generate-jform"
               onClick={handleGenerateJForm}
               disabled={isGeneratingBill || !hasValidNetWeight || !isReadyForBilling || isResolvingMsp || ratePerQt === null || ratePerQt <= 0}
               className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold py-2.5 px-4 rounded-xl text-sm transition flex items-center justify-center space-x-2 shadow-md shadow-emerald-700/20 cursor-pointer disabled:cursor-not-allowed"

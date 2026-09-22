@@ -1,9 +1,20 @@
 import { useState, useEffect, FormEvent } from 'react';
-import { Layers, CheckCircle2, ShieldAlert, Sparkles, ArrowRight, AlertTriangle } from 'lucide-react';
+import {
+  Layers,
+  CheckCircle2,
+  ShieldAlert,
+  Sparkles,
+  ArrowRight,
+  AlertTriangle,
+  Activity,
+  RefreshCw,
+} from 'lucide-react';
 import {
   executeLocalTransactionMutation,
 } from '../db/dexie';
-import { getAuthHeaders } from '../services/api';
+import {
+  getAuthHeaders,
+} from '../services/api';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuthoritativeTransaction } from '../context/TransactionContext';
 
@@ -17,8 +28,10 @@ interface QualityStationProps {
 }
 
 export function QualityStation({
+  mandiId,
   effectiveOnline,
   activeTxnId,
+  currentRole,
   onQualityAssessed,
   onQualityApproved,
 }: QualityStationProps) {
@@ -27,14 +40,13 @@ export function QualityStation({
     activeTxnId: contextTxnId,
     activeTransaction,
     resolutionStatus,
-    resolutionError,
     setActiveTxnId,
     refreshTransaction,
   } = useAuthoritativeTransaction();
 
-  const [manualTxnInput, setManualTxnInput] = useState('');
   const [moisturePct, setMoisturePct] = useState<number>(12.5);
   const [elapsedWaitMin, setElapsedWaitMin] = useState<number>(15.0);
+  const [isResolvingGateLot, setIsResolvingGateLot] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<{
@@ -47,10 +59,12 @@ export function QualityStation({
 
   // Supervisor Override State
   const [showOverride, setShowOverride] = useState(false);
-  const [supervisorToken, setSupervisorToken] = useState('SUPERVISOR_SECRET_OVERRIDE_TOKEN');
+  const [supervisorToken, setSupervisorToken] = useState('');
   const [overrideReason, setOverrideReason] = useState('Drying apron aeration completed; lot verified suitable for immediate milling.');
   const [calibratedMoisture, setCalibratedMoisture] = useState<number>(14.5);
   const [isOverriding, setIsOverriding] = useState(false);
+
+
 
   // Moisture color evaluation
   const isRejected = moisturePct > 17.0;
@@ -68,12 +82,61 @@ export function QualityStation({
     }
   }, [activeTransaction]);
 
+  // Auto-resolve active transaction from Gate if not already loaded or in advance state
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function autoResolveFromGate() {
+      if (activeTransaction && (activeTransaction.current_state === 'GATE_ENTRY_VERIFIED' || ['QUALITY_APPROVED', 'ROUTED_TO_WEIGHBRIDGE', 'WEIGHED_GROSS', 'WEIGHED_TARE', 'BILL_GENERATED', 'PAYMENT_SETTLED'].includes(activeTransaction.current_state))) {
+        return;
+      }
+      if (!effectiveOnline) return;
+
+      setIsResolvingGateLot(true);
+      try {
+        const queryParams = new URLSearchParams();
+        if (mandiId) queryParams.set('mandi_id', String(mandiId));
+        queryParams.set('current_state', 'GATE_ENTRY_VERIFIED');
+        queryParams.set('limit', '1');
+
+        const resp = await fetch(`/api/v1/transactions?${queryParams.toString()}`, {
+          headers: getAuthHeaders(),
+        });
+        if (resp.ok) {
+          const list = await resp.json();
+          if (!isCancelled && Array.isArray(list) && list.length > 0) {
+            const gateLot = list[0];
+            if (gateLot && gateLot.transaction_id) {
+              setActiveTxnId(gateLot.transaction_id);
+              await refreshTransaction();
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[QualityStation] Auto-resolve gate lot error:', err);
+      } finally {
+        if (!isCancelled) setIsResolvingGateLot(false);
+      }
+    }
+
+    autoResolveFromGate();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTransaction, mandiId, effectiveOnline, setActiveTxnId, refreshTransaction]);
+
   const targetTxnId = activeTransaction?.transaction_id || contextTxnId || activeTxnId;
   const isReadyForAssessment = activeTransaction && activeTransaction.current_state === 'GATE_ENTRY_VERIFIED';
   const isAlreadyApproved = activeTransaction && ['QUALITY_APPROVED', 'ROUTED_TO_WEIGHBRIDGE', 'WEIGHED_GROSS', 'WEIGHED_TARE', 'BILL_GENERATED', 'PAYMENT_SETTLED'].includes(activeTransaction.current_state);
+  const isAuthorizedRole = !currentRole || ['INSPECTOR', 'SUPERVISOR', 'ADMIN'].includes(currentRole.toUpperCase());
 
   const handleAssessQuality = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthorizedRole) {
+      setResult({ status: 'ERROR', message: t('quality.unauthorizedRole') });
+      return;
+    }
     if (!activeTransaction || !targetTxnId) {
       setResult({ status: 'ERROR', message: t('common.noActiveTransaction') });
       return;
@@ -268,42 +331,7 @@ export function QualityStation({
     }
   };
 
-  // Preflight validation rendering (Phase 4.3)
-  if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
-    return (
-      <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
-        <Layers className="w-16 h-16 text-purple-600 mx-auto" />
-        <h2 className="text-xl font-black text-slate-800">{t('quality.title')}</h2>
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
-          <div className="flex items-center space-x-1.5 font-bold text-amber-950">
-            <AlertTriangle className="w-4 h-4 text-amber-700" />
-            <span>{t('quality.title')} — {t('common.noData')}</span>
-          </div>
-          <p className="text-slate-600">
-            {resolutionStatus === 'NOT_FOUND' ? t('common.txnNotFound', { txnId: targetTxnId || activeTxnId || '' }) : resolutionStatus === 'FARMER_MISMATCH' ? t('common.txnFarmerMismatch') : resolutionStatus === 'MANDI_MISMATCH' ? t('common.txnMandiMismatch') : (resolutionError || t('quality.preflightNotice'))}
-          </p>
-        </div>
-        <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
-          <input
-            type="text"
-            value={manualTxnInput}
-            onChange={(e) => setManualTxnInput(e.target.value.trim())}
-            placeholder={t('common.txnPlaceholder')}
-            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-purple-600 focus:outline-none"
-          />
-          <button
-            onClick={() => {
-              if (manualTxnInput) setActiveTxnId(manualTxnInput);
-            }}
-            disabled={!manualTxnInput}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
-          >
-            {t('common.load')}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const hasNoActiveTxn = !activeTransaction || resolutionStatus === 'NOT_FOUND';
 
   return (
     <div className="space-y-6 font-sans">
@@ -323,241 +351,312 @@ export function QualityStation({
         <div className="text-right">
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{t('common.activeTransaction')}</span>
           <span className="font-mono font-black text-purple-900 bg-purple-100 px-2.5 py-1 rounded-md text-xs border border-purple-300">
-            {activeTransaction.transaction_id}
+            {activeTransaction?.transaction_id || targetTxnId || '—'}
           </span>
         </div>
       </div>
 
-      {/* State validation alert if not in GATE_ENTRY_VERIFIED */}
-      {!isReadyForAssessment && (
-        <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+      {/* Role authorization alert banner if not permitted */}
+      {!isAuthorizedRole && (
+        <div className="p-4 rounded-xl border border-rose-300 bg-rose-50 text-rose-950 text-xs flex items-center justify-between shadow-xs">
           <div className="flex items-center space-x-2">
-            <AlertTriangle className="w-4 h-4 text-amber-700" />
-            <div>
-              <span className="font-bold">{t('common.status')}: </span>
-              <span>
-                {t('quality.cannotAssessState', { state: activeTransaction.current_state })}
-              </span>
-            </div>
+            <ShieldAlert className="w-4 h-4 text-rose-700 shrink-0" />
+            <span className="font-bold">{t('quality.unauthorizedRole')}</span>
           </div>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Assaying Form */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-          <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
-            <Layers className="w-4 h-4 text-purple-600" />
-            <span>{t('quality.sensorReading')}</span>
-          </h3>
-
-          <form onSubmit={handleAssessQuality} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">{t('farmer.activeToken')}:</label>
-              <input
-                type="text"
-                value={activeTransaction.transaction_id}
-                disabled
-                className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 cursor-not-allowed"
-              />
+      {/* Preflight validation rendering if no active transaction */}
+      {hasNoActiveTxn ? (
+        <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 my-2 space-y-4 font-sans">
+          <Layers className={`w-16 h-16 text-purple-600 mx-auto ${isResolvingGateLot ? 'animate-pulse' : ''}`} />
+          <h2 className="text-xl font-black text-slate-800">{t('quality.title')}</h2>
+          <div className="bg-purple-50 border border-purple-200 rounded-xl p-4 text-xs text-purple-950 text-left space-y-1">
+            <div className="flex items-center space-x-1.5 font-bold text-purple-950">
+              <Activity className={`w-4 h-4 text-purple-700 ${isResolvingGateLot ? 'animate-spin' : ''}`} />
+              <span>{isResolvingGateLot ? t('quality.autoResolvedGate') : t('quality.awaitingGateLots')}</span>
             </div>
-
-            {/* Moisture Slider & Value */}
-            <div>
-              <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-bold text-slate-700">{t('quality.cropMoisture')}:</label>
-                <span
-                  className={`font-mono font-bold text-sm px-2.5 py-0.5 rounded-full ${
-                    isRejected
-                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                      : isHighMoistureBonus
-                      ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  }`}
-                >
-                  {moisturePct.toFixed(1)}%
-                </span>
-              </div>
-              <input
-                type="range"
-                min="9.0"
-                max="24.0"
-                step="0.1"
-                value={moisturePct}
-                onChange={(e) => setMoisturePct(parseFloat(e.target.value))}
-                className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
-              />
-              <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-semibold">
-                <span>9.0%</span>
-                <span className="text-emerald-700">12.0% - 14.0%</span>
-                <span className="text-amber-700">15.0% - 17.0%</span>
-                <span className="text-rose-700 font-black">&gt; 17.0%</span>
-                <span>24.0%</span>
-              </div>
-            </div>
-
-            {/* Elapsed Wait Minutes */}
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {t('quality.elapsedWaitMinutes')}:
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  step="1"
-                  min="0"
-                  value={elapsedWaitMin}
-                  onChange={(e) => setElapsedWaitMin(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-purple-600 focus:outline-none"
-                />
-                <span className="absolute right-3 top-2 text-xs text-slate-500 font-medium">min</span>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting || (!isReadyForAssessment && !isAlreadyApproved)}
-              className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-amber-500/20 flex items-center justify-center space-x-2 cursor-pointer"
-            >
-              <span>{isSubmitting ? t('quality.assessing') : t('quality.assessButton')}</span>
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </form>
-
-          {/* Assessment Result Card */}
-          {result && (
-            <div
-              className={`p-4 rounded-xl border text-xs space-y-2 mt-4 ${
-                result.status === 'QUALITY_APPROVED'
-                  ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
-                  : result.status === 'QUALITY_REJECTED'
-                  ? 'bg-rose-50 border-rose-300 text-rose-950'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
-              }`}
-            >
-              <div className="flex items-center justify-between font-bold text-sm">
-                <div className="flex items-center space-x-2">
-                  {result.status === 'QUALITY_APPROVED' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-700" />
-                  ) : (
-                    <ShieldAlert className="w-4 h-4 text-rose-700" />
-                  )}
-                  <span className="font-extrabold">
-                    {result.status === 'QUALITY_APPROVED' ? t('quality.resultApproved') : t('quality.resultRejected')}
-                  </span>
-                </div>
-                {result.priority_score !== undefined && (
-                  <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
-                    {t('quality.priorityScore')}: {result.priority_score.toFixed(2)}
-                  </span>
-                )}
-              </div>
-
-              {result.advisory_notice && <p className="text-slate-700 font-medium">{result.advisory_notice}</p>}
-              {result.message && <p className="text-slate-700 font-medium">{result.message}</p>}
-
-              {result.status === 'QUALITY_REJECTED' && (
-                <div className="pt-2 border-t border-rose-200 flex items-center justify-between">
-                  <span className="text-[11px] text-rose-800 font-medium">{t('quality.routeToDrying')}</span>
-                  <button
-                    onClick={() => setShowOverride(!showOverride)}
-                    className="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
-                  >
-                    {t('quality.supervisorOverrideTitle')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Supervisor Override Panel */}
-          {showOverride && (
-            <form onSubmit={handleSupervisorOverride} className="bg-amber-50/70 border border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
-              <div className="flex items-center space-x-2 text-xs font-extrabold text-amber-950">
-                <ShieldAlert className="w-4 h-4 text-amber-700" />
-                <span>{t('quality.supervisorOverrideTitle')}</span>
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">{t('quality.supervisorAuthToken')}:</label>
-                <input
-                  type="text"
-                  value={supervisorToken}
-                  onChange={(e) => setSupervisorToken(e.target.value)}
-                  className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-mono"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">{t('quality.calibratedMoisture')}:</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  max="17.0"
-                  value={calibratedMoisture}
-                  onChange={(e) => setCalibratedMoisture(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-mono"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-bold text-slate-700 mb-1">{t('quality.overrideReason')}:</label>
-                <textarea
-                  value={overrideReason}
-                  onChange={(e) => setOverrideReason(e.target.value)}
-                  className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs"
-                  rows={2}
-                  required
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={isOverriding}
-                className="w-full bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs uppercase py-2 rounded-lg transition cursor-pointer"
-              >
-                {isOverriding ? t('quality.overriding') : t('quality.confirmOverride')}
-              </button>
-            </form>
-          )}
-        </div>
-
-        {/* Dynamic Queue Priority Matrix Info */}
-        <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-sm space-y-4">
-          <h3 className="text-sm font-extrabold text-amber-400 flex items-center space-x-2">
-            <Sparkles className="w-4 h-4" />
-            <span>{t('quality.dcdqFormula')}</span>
-          </h3>
-
-          <div className="bg-slate-950/60 p-4 rounded-xl font-mono text-[11px] space-y-1.5 border border-slate-700/60 text-slate-300">
-            <p className="text-amber-300 font-bold">{t('quality.dcdqFormula')}</p>
-            <p className="text-slate-400 text-[10px] pt-1">
-              • Moisture bonus: lots between 15%–17% received prioritized weighbridge dispatch.
+            <p className="text-slate-600">
+              {t('quality.preflightNotice')}
             </p>
           </div>
-
-          <div className="space-y-2 text-xs">
-            <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
-              <span className="text-slate-400">{t('quality.title')}:</span>
-              <span className="font-semibold text-slate-200">QA-01</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
-              <span className="text-slate-400">{t('queue.farmer')}:</span>
-              <span className="font-semibold text-slate-200">{activeTransaction.farmer_name || `Farmer #${activeTransaction.farmer_id}`}</span>
-            </div>
-            <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
-              <span className="text-slate-400">{t('billing.mandiName')}:</span>
-              <span className="font-semibold text-slate-200">{activeTransaction.mandi_name || `Mandi #${activeTransaction.mandi_id}`}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">{t('common.status')}:</span>
-              <span className="font-mono font-bold text-amber-300">{activeTransaction.current_state}</span>
-            </div>
+          <div className="flex items-center justify-center space-x-3 pt-2">
+            <button
+              onClick={() => refreshTransaction()}
+              className="px-5 py-2.5 bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm shadow-purple-600/20"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>{t('common.refresh')}</span>
+            </button>
           </div>
         </div>
-      </div>
+      ) : (
+        <>
+          {/* State validation alert if not in GATE_ENTRY_VERIFIED */}
+          {!isReadyForAssessment && !isAlreadyApproved && (
+            <div className="p-4 rounded-xl border border-amber-300 bg-amber-50 text-amber-950 text-xs flex items-center justify-between shadow-xs">
+              <div className="flex items-center space-x-2">
+                <AlertTriangle className="w-4 h-4 text-amber-700" />
+                <div>
+                  <span className="font-bold">{`${t('common.status')}: `}</span>
+                  <span>
+                    {t('quality.cannotAssessState', { state: activeTransaction.current_state })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Assaying Form */}
+            <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+              <h3 className="text-sm font-extrabold text-slate-900 flex items-center space-x-2">
+                <Layers className="w-4 h-4 text-purple-600" />
+                <span>{t('quality.sensorReading')}</span>
+              </h3>
+
+              <form onSubmit={handleAssessQuality} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">{`${t('farmer.activeToken')}:`}</label>
+                  <input
+                    type="text"
+                    value={activeTransaction.transaction_id}
+                    disabled
+                    className="w-full bg-slate-100 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-700 cursor-not-allowed"
+                  />
+                </div>
+
+                {/* Moisture Slider & Value */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs font-bold text-slate-700">{`${t('quality.cropMoisture')}:`}</label>
+                    <span
+                      className={`font-mono font-bold text-sm px-2.5 py-0.5 rounded-full ${
+                        isRejected
+                          ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                          : isHighMoistureBonus
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                      }`}
+                    >
+                      {`${moisturePct.toFixed(1)}%`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="9.0"
+                    max="24.0"
+                    step="0.1"
+                    value={moisturePct}
+                    onChange={(e) => setMoisturePct(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-amber-600"
+                  />
+                  <div className="flex justify-between text-[10px] text-slate-500 mt-1 font-semibold">
+                    <span>9.0%</span>
+                    <span className="text-emerald-700">12.0% - 14.0%</span>
+                    <span className="text-amber-700">15.0% - 17.0%</span>
+                    <span className="text-rose-700 font-black">&gt; 17.0%</span>
+                    <span>24.0%</span>
+                  </div>
+                </div>
+
+                {/* Elapsed Wait Minutes */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {`${t('quality.elapsedWaitMinutes')}:`}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="1"
+                      min="0"
+                      value={elapsedWaitMin}
+                      onChange={(e) => setElapsedWaitMin(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-900 focus:bg-white focus:border-purple-600 focus:outline-none"
+                    />
+                    <span className="absolute right-3 top-2 text-xs text-slate-500 font-medium">min</span>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  id="btn-quality-assess"
+                  disabled={isSubmitting || (!isReadyForAssessment && !isAlreadyApproved)}
+                  className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2.5 rounded-xl transition shadow-md shadow-amber-500/20 flex items-center justify-center space-x-2 cursor-pointer"
+                >
+                  <span>{isSubmitting ? t('quality.assessing') : t('quality.assessButton')}</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              </form>
+
+              {/* Assessment Result Card */}
+              {result && (
+                <div
+                  className={`p-4 rounded-xl border text-xs space-y-2 mt-4 ${
+                    result.status === 'QUALITY_APPROVED'
+                      ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                      : result.status === 'QUALITY_REJECTED'
+                      ? 'bg-rose-50 border-rose-300 text-rose-950'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-bold text-sm">
+                    <div className="flex items-center space-x-2">
+                      {result.status === 'QUALITY_APPROVED' ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                      ) : (
+                        <ShieldAlert className="w-4 h-4 text-rose-700" />
+                      )}
+                      <span className="font-extrabold">
+                        {result.status === 'QUALITY_APPROVED' ? t('quality.resultApproved') : t('quality.resultRejected')}
+                      </span>
+                    </div>
+                    {result.priority_score !== undefined && (
+                      <span className="font-mono text-xs px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 font-bold">
+                        {`${t('quality.priorityScore')}: ${result.priority_score.toFixed(2)}`}
+                      </span>
+                    )}
+                  </div>
+
+                  {result.advisory_notice && <p className="text-slate-700 font-medium">{result.advisory_notice}</p>}
+                  {result.message && <p className="text-slate-700 font-medium">{result.message}</p>}
+
+                  {result.status === 'QUALITY_REJECTED' && (
+                    <div className="pt-2 border-t border-rose-200 flex items-center justify-between">
+                      <span className="text-[11px] text-rose-800 font-medium">{t('quality.routeToDrying')}</span>
+                      <button
+                        onClick={() => setShowOverride(!showOverride)}
+                        className="px-2.5 py-1 rounded-lg bg-rose-700 hover:bg-rose-800 text-white font-bold text-[11px] transition shadow-xs cursor-pointer"
+                      >
+                        {t('quality.supervisorOverrideTitle')}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Supervisor Override Panel */}
+              {showOverride && (
+                <form onSubmit={handleSupervisorOverride} className="bg-amber-50/70 border border-amber-300 rounded-xl p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center space-x-2 text-xs font-extrabold text-amber-950">
+                    <ShieldAlert className="w-4 h-4 text-amber-700" />
+                    <span>{t('quality.supervisorOverrideTitle')}</span>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">{`${t('quality.supervisorAuthToken')}:`}</label>
+                    <input
+                      type="password"
+                      value={supervisorToken}
+                      onChange={(e) => setSupervisorToken(e.target.value)}
+                      className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-mono"
+                      placeholder={t('quality.supervisorAuthTokenPlaceholder')}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">{`${t('quality.calibratedMoisture')}:`}</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      max="17.0"
+                      value={calibratedMoisture}
+                      onChange={(e) => setCalibratedMoisture(parseFloat(e.target.value) || 0)}
+                      className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs font-mono"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">{`${t('quality.overrideReason')}:`}</label>
+                    <textarea
+                      value={overrideReason}
+                      onChange={(e) => setOverrideReason(e.target.value)}
+                      className="w-full bg-white border border-amber-300 rounded-lg px-3 py-1.5 text-xs"
+                      rows={2}
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isOverriding}
+                    className="w-full bg-rose-700 hover:bg-rose-800 text-white font-bold text-xs uppercase py-2 rounded-lg transition cursor-pointer"
+                  >
+                    {isOverriding ? t('quality.overriding') : t('quality.confirmOverride')}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Operational Quality Standards & Inspection Guidance */}
+            <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-slate-800 text-white rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-extrabold text-amber-400 flex items-center space-x-2">
+                  <Sparkles className="w-4 h-4" />
+                  <span>{t('quality.standardsTitle')}</span>
+                </h3>
+                <span className="text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30 px-2 py-0.5 rounded-full">
+                  BIS 14863:2000
+                </span>
+              </div>
+
+              <div className="bg-slate-950/60 p-3.5 rounded-xl text-xs space-y-2 border border-slate-700/60 text-slate-300">
+                <div className="border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400">
+                    <span>{t('quality.gradeATitle')}</span>
+                    <span className="font-mono text-[10px] text-emerald-300 bg-emerald-950 px-1.5 py-0.5 rounded border border-emerald-800">{"\u2264 14.0%"}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{t('quality.gradeADesc')}</p>
+                </div>
+                <div className="border-b border-slate-800/80 pb-2">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-amber-400">
+                    <span>{t('quality.gradeBTitle')}</span>
+                    <span className="font-mono text-[10px] text-amber-300 bg-amber-950 px-1.5 py-0.5 rounded border border-amber-800">{"14.1% - 17.0%"}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{t('quality.gradeBDesc')}</p>
+                </div>
+                <div>
+                  <div className="flex items-center justify-between text-[11px] font-bold text-rose-400">
+                    <span>{t('quality.rejectionTitle')}</span>
+                    <span className="font-mono text-[10px] text-rose-300 bg-rose-950 px-1.5 py-0.5 rounded border border-rose-800">{"> 17.0%"}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">{t('quality.rejectionDesc')}</p>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700/80 text-[11px] text-slate-300 leading-relaxed">
+                <span className="text-amber-300 font-bold block mb-0.5">{t('demoTools.tabAlgorithms')}:</span>
+                <p className="text-slate-400 text-[10px]">
+                  {t('quality.technicalFormulasInDemoTools')}
+                </p>
+              </div>
+
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                  <span className="text-slate-400">{`${t('quality.title')}:`}</span>
+                  <span className="font-semibold text-slate-200">QA-01</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                  <span className="text-slate-400">{`${t('queue.farmer')}:`}</span>
+                  <span className="font-semibold text-slate-200">{activeTransaction.farmer_name || `Farmer #${activeTransaction.farmer_id}`}</span>
+                </div>
+                <div className="flex justify-between border-b border-slate-700/60 pb-1.5">
+                  <span className="text-slate-400">{`${t('billing.mandiName')}:`}</span>
+                  <span className="font-semibold text-slate-200">{activeTransaction.mandi_name || `Mandi #${activeTransaction.mandi_id}`}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">{`${t('common.status')}:`}</span>
+                  <span className="font-mono font-bold text-amber-300">{activeTransaction.current_state}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+
     </div>
   );
 }

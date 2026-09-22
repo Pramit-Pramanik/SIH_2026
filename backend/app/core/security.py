@@ -186,3 +186,8 @@ def decode_access_jwt(token: str) -> dict:
     import jwt
     secret = get_hmac_secret_key()
     return jwt.decode(token, secret, algorithms=["HS256"])
+
+
+# Common alias
+create_access_token = create_access_jwt
+

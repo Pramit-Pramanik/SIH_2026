@@ -31,6 +31,7 @@ from backend.app.models.slot import ProcurementSlot
 from backend.app.models.crop import Crop
 from backend.app.models.user import User
 from backend.app.models.log import ProcurementLog
+from backend.app.db.base import Base
 from backend.app.core.security import hash_password, generate_booking_signature
 from backend.app.services.queue_manager import queue_manager
 from backend.app.services.dcdq_engine import calculate_dcdq_priority_score
@@ -545,9 +546,13 @@ def ensure_showcase_transactions(db: Session, reset: bool = False) -> List[Procu
 def ensure_showcase_queue_state(db: Optional[Session] = None, mandi_id: int = 1) -> None:
     """
     Resets only showcase queue entries for the given mandi, preserving any real operational vehicles.
-    Authoritatively derives and enqueues TXN-DEMO-1002 in the active DCDQ queue so live QueueMonitor renders immediately.
-    Never swallows exceptions: if queue priming fails, raises RuntimeError so bootstrap reports failure.
+    Authoritatively primes the active priority queue (mandi:queue:{mandi_id})
+    with the canonical showcase quality-approved transaction (TXN-DEMO-1002).
+    Calculates priority score dynamically using canonical calculate_dcdq_priority_score.
     """
+    # Reset any showcase simulation time offset for this mandi
+    queue_manager.reset_showcase_time_offset(mandi_id)
+
     current_queue = queue_manager.get_queue(mandi_id)
     for txn_id, _ in current_queue:
         is_showcase_item = False
@@ -565,7 +570,12 @@ def ensure_showcase_queue_state(db: Optional[Session] = None, mandi_id: int = 1)
 
     # Prime queue with canonical TXN-DEMO-1002
     txn_id = "TXN-DEMO-1002"
-    arr_ts = time_mod.time()
+    now_ts = time_mod.time()
+    arr_ts = now_ts
+    planned_ts = arr_ts
+    moisture = 13.20
+    payload_qt = 45.00
+
     if db is not None:
         log = db.query(ProcurementLog).filter(
             ProcurementLog.transaction_id == txn_id
@@ -573,19 +583,79 @@ def ensure_showcase_queue_state(db: Optional[Session] = None, mandi_id: int = 1)
         if log is not None:
             if log.crop_moisture_pct is None or log.net_weight_qt is None:
                 raise RuntimeError(f"Cannot prime queue: Showcase transaction '{txn_id}' is missing moisture or quantity.")
+            moisture = float(log.crop_moisture_pct)
+            payload_qt = float(log.net_weight_qt)
             if log.created_at:
                 arr_ts = (
                     log.created_at.replace(tzinfo=timezone.utc).timestamp()
                     if log.created_at.tzinfo is None
                     else log.created_at.timestamp()
                 )
+            planned_ts = arr_ts
+            if log.slot and log.scheduled_date:
+                try:
+                    planned_dt = datetime.combine(log.scheduled_date, log.slot.start_time).replace(tzinfo=timezone.utc)
+                    planned_ts = planned_dt.timestamp()
+                except Exception:
+                    planned_ts = arr_ts
+
+    elapsed_wait_minutes = max(0.0, (now_ts - arr_ts) / 60.0)
+
+    calculated_score = calculate_dcdq_priority_score(
+        planned_arrival_ts=planned_ts,
+        actual_arrival_ts=arr_ts,
+        moisture_pct=moisture,
+        elapsed_wait_minutes=elapsed_wait_minutes,
+        demurrage_score=payload_qt / 10.0
+    )
 
     queue_manager.enqueue(
         mandi_id=mandi_id,
         transaction_id=txn_id,
-        priority_score=25.00,
+        priority_score=calculated_score,
         arrival_ts=arr_ts
     )
+
+
+def ensure_showcase_weighbridge_telemetry(db: Session, mandi_id: int = 1) -> None:
+    """
+    Seeds authoritative showcase weighbridge completion telemetry within the 15-minute window
+    so that M(t)/E_k/c(t) ETA calculations reflect real historical throughput.
+    """
+    from backend.app.models.weighbridge import WeighbridgeEvent
+    from datetime import datetime, timezone, timedelta
+
+    # Purge existing events for this mandi to maintain clean idempotency
+    db.query(WeighbridgeEvent).filter(WeighbridgeEvent.mandi_id == mandi_id).delete()
+    db.commit()
+
+    now = datetime.now(timezone.utc)
+    # Event 1: 5 minutes ago, 35.0 qt on SCALE-01
+    # Event 2: 10 minutes ago, 25.0 qt on SCALE-02
+    # Total = 60.0 qt across 2 scales in 15 min (0.25h) -> mu = 60 / (0.25 * 2) = 120 qt/hr/scale
+    ev1 = WeighbridgeEvent(
+        mandi_id=mandi_id,
+        transaction_id="TXN-DEMO-1003",
+        scale_id="SCALE-01",
+        gross_weight_qt=95.0,
+        tare_weight_qt=60.0,
+        net_weight_qt=35.0,
+        completed_at=now - timedelta(minutes=5),
+        created_at=now - timedelta(minutes=5)
+    )
+    ev2 = WeighbridgeEvent(
+        mandi_id=mandi_id,
+        transaction_id="TXN-DEMO-1004",
+        scale_id="SCALE-02",
+        gross_weight_qt=75.0,
+        tare_weight_qt=50.0,
+        net_weight_qt=25.0,
+        completed_at=now - timedelta(minutes=10),
+        created_at=now - timedelta(minutes=10)
+    )
+    db.add(ev1)
+    db.add(ev2)
+    db.commit()
 
 
 def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
@@ -594,6 +664,27 @@ def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
     Deterministically and idempotently builds:
     mandis -> crops -> farmers -> users -> slots -> showcase transactions -> queue state.
     """
+    # 0. Enforce Alembic migration authority - verify tables exist without auto-creating schema
+    from sqlalchemy import inspect
+    inspector = inspect(db.get_bind())
+    existing_tables = set(inspector.get_table_names())
+    required_tables = {
+        "mandis",
+        "crops",
+        "farmers",
+        "users",
+        "procurement_slots",
+        "procurement_logs",
+        "weighbridge_events",
+        "wal_mutation_journal"
+    }
+    missing = required_tables - existing_tables
+    if missing:
+        raise RuntimeError(
+            f"Database schema is incomplete. Missing required tables: {sorted(list(missing))}. "
+            "Please run 'alembic upgrade head' before bootstrapping."
+        )
+
     # 1. Authoritatively ensure foundational reference entities exist first
     mandis = ensure_canonical_mandis(db)
     crops = ensure_canonical_crops(db)
@@ -623,6 +714,8 @@ def bootstrap_database(db: Session, reset: bool = False) -> Dict[str, Any]:
     txns = ensure_showcase_transactions(db, reset=reset)
     recalculate_slot_capacities(db)
     ensure_showcase_queue_state(db=db, mandi_id=1)
+    ensure_showcase_weighbridge_telemetry(db=db, mandi_id=1)
+
 
     total_slots = db.query(ProcurementSlot).count()
     total_txns = db.query(ProcurementLog).count()

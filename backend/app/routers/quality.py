@@ -9,12 +9,12 @@ from backend.app.schemas.quality import (
     QualityAssessmentRequest,
     QualityAssessmentResponse,
     QualityOverrideRequest,
-    QualityOverrideResponse
+    QualityOverrideResponse,
 )
 from backend.app.services.quality_service import (
     assess_quality_and_enqueue,
     override_quality_and_admit,
-    get_quality_assessment
+    get_quality_assessment,
 )
 
 router = APIRouter(prefix="/quality", tags=["Quality Assessment & Assaying"])
@@ -70,5 +70,3 @@ def get_transaction_quality(
     current_user: Optional[User] = Depends(require_roles(["INSPECTOR", "SUPERVISOR", "ADMIN", "OPERATOR", "FARMER"]))
 ) -> QualityAssessmentResponse:
     return get_quality_assessment(db=db, transaction_id=transaction_id, current_user=current_user)
-
-

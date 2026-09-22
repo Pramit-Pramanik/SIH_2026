@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Scale, ArrowRight, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Scale, ArrowRight, CheckCircle2, AlertTriangle, RefreshCw, Truck } from 'lucide-react';
 import {
   executeLocalTransactionMutation,
 } from '../db/dexie';
@@ -15,6 +15,7 @@ interface WeighbridgeStationProps {
 }
 
 export function WeighbridgeStation({
+  mandiId,
   effectiveOnline,
   activeTxnId,
   onWeighmentComplete,
@@ -24,16 +25,24 @@ export function WeighbridgeStation({
     activeTxnId: contextTxnId,
     activeTransaction,
     resolutionStatus,
-    resolutionError,
     setActiveTxnId,
     refreshTransaction,
   } = useAuthoritativeTransaction();
 
-  const [manualTxnInput, setManualTxnInput] = useState('');
   const [mode, setMode] = useState<'two_step' | 'unified'>('two_step');
   const [grossWeight, setGrossWeight] = useState<number>(85.0);
   const [tareWeight, setTareWeight] = useState<number>(35.0);
   const [scaleId] = useState<string>('WB-SCALE-01');
+
+  const [laneVehicles, setLaneVehicles] = useState<Array<{
+    transaction_id: string;
+    crop_type?: string;
+    quantity_qt?: number;
+    current_state: string;
+    priority_score?: number;
+    farmer_name?: string;
+  }>>([]);
+  const [isResolvingLane, setIsResolvingLane] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{
@@ -55,6 +64,59 @@ export function WeighbridgeStation({
       }
     }
   }, [activeTransaction]);
+
+  // Auto-resolve active vehicles in weighbridge lane from backend queue/transactions
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function fetchLaneVehicles() {
+      if (!effectiveOnline) return;
+      setIsResolvingLane(true);
+      try {
+        const queryParams = new URLSearchParams();
+        if (mandiId) queryParams.set('mandi_id', String(mandiId));
+        queryParams.set('limit', '20');
+
+        const resp = await fetch(`/api/v1/transactions?${queryParams.toString()}`, {
+          headers: getAuthHeaders(),
+        });
+        if (resp.ok) {
+          const list = await resp.json();
+          if (!isCancelled && Array.isArray(list)) {
+            const eligible = list.filter((t: { current_state: string }) =>
+              ['ROUTED_TO_WEIGHBRIDGE', 'QUALITY_APPROVED', 'WEIGHED_GROSS'].includes(t.current_state)
+            );
+            setLaneVehicles(eligible);
+
+            // Auto-select if activeTransaction is absent or in non-weighbridge state
+            if (
+              (!activeTransaction ||
+                !['ROUTED_TO_WEIGHBRIDGE', 'QUALITY_APPROVED', 'WEIGHED_GROSS', 'WEIGHED_TARE'].includes(
+                  activeTransaction.current_state
+                )) &&
+              eligible.length > 0
+            ) {
+              const target = eligible[0];
+              if (target && target.transaction_id) {
+                setActiveTxnId(target.transaction_id);
+                await refreshTransaction();
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[WeighbridgeStation] Auto-resolve lane error:', err);
+      } finally {
+        if (!isCancelled) setIsResolvingLane(false);
+      }
+    }
+
+    fetchLaneVehicles();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [activeTransaction, mandiId, effectiveOnline, setActiveTxnId, refreshTransaction]);
 
   const targetTxnId = activeTransaction?.transaction_id || contextTxnId || activeTxnId;
   const canCaptureGross = activeTransaction && ['ROUTED_TO_WEIGHBRIDGE', 'QUALITY_APPROVED'].includes(activeTransaction.current_state);
@@ -155,8 +217,8 @@ export function WeighbridgeStation({
       return;
     }
 
-    if (tareWeight >= grossWeight) {
-      setFeedback({ type: 'error', message: t('common.tareWeightError') });
+    if (tareWeight <= 0 || tareWeight >= grossWeight) {
+      setFeedback({ type: 'error', message: t('weighbridge.invalidTareRange') });
       return;
     }
 
@@ -253,8 +315,8 @@ export function WeighbridgeStation({
       return;
     }
 
-    if (tareWeight >= grossWeight) {
-      setFeedback({ type: 'error', message: t('common.tareWeightError') });
+    if (tareWeight <= 0 || tareWeight >= grossWeight) {
+      setFeedback({ type: 'error', message: t('weighbridge.invalidTareRange') });
       return;
     }
 
@@ -335,37 +397,49 @@ export function WeighbridgeStation({
     }
   };
 
-  // Preflight validation rendering (Phase 6.1)
+  // Preflight validation rendering
   if (!activeTransaction || resolutionStatus === 'NOT_FOUND') {
     return (
       <div className="max-w-2xl mx-auto p-8 text-center bg-white rounded-2xl shadow-sm border border-slate-200 mt-6 space-y-4 font-sans">
-        <Scale className="w-16 h-16 text-amber-500 mx-auto" />
+        <Scale className={`w-16 h-16 text-amber-500 mx-auto ${isResolvingLane ? 'animate-pulse' : ''}`} />
         <h2 className="text-xl font-black text-slate-800">{t('weighbridge.title')}</h2>
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-900 text-left space-y-1">
           <div className="flex items-center space-x-1.5 font-bold text-amber-950">
             <AlertTriangle className="w-4 h-4 text-amber-700" />
-            <span>{t('weighbridge.title')} — {t('common.noData')}</span>
+            <span>{isResolvingLane ? t('weighbridge.autoResolvedQueue') : t('weighbridge.noVehiclesInLane')}</span>
           </div>
           <p className="text-slate-600">
-            {resolutionStatus === 'NOT_FOUND' ? t('common.txnNotFound', { txnId: targetTxnId || activeTxnId || '' }) : resolutionStatus === 'FARMER_MISMATCH' ? t('common.txnFarmerMismatch') : resolutionStatus === 'MANDI_MISMATCH' ? t('common.txnMandiMismatch') : (resolutionError || t('weighbridge.preflightNotice'))}
+            {t('weighbridge.preflightNotice')}
           </p>
         </div>
+        {laneVehicles.length > 0 && (
+          <div className="text-left space-y-2 pt-2">
+            <span className="text-xs font-bold text-slate-700 block">{t('weighbridge.selectVehiclePrompt')}</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {laneVehicles.map((v) => (
+                <button
+                  key={v.transaction_id}
+                  onClick={() => {
+                    setActiveTxnId(v.transaction_id);
+                    refreshTransaction();
+                  }}
+                  className="p-3 border border-amber-300 bg-amber-50 hover:bg-amber-100 rounded-xl text-left transition cursor-pointer flex flex-col"
+                >
+                  <span className="font-mono font-bold text-xs text-amber-950">{v.transaction_id}</span>
+                  <span className="text-[11px] text-slate-600">{v.farmer_name || 'Farmer'} • {v.crop_type || 'Wheat'}</span>
+                  <span className="text-[10px] font-bold text-amber-800 mt-1 uppercase">{v.current_state}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex items-center justify-center space-x-2 max-w-sm mx-auto pt-2">
-          <input
-            type="text"
-            value={manualTxnInput}
-            onChange={(e) => setManualTxnInput(e.target.value.trim())}
-            placeholder={t('common.txnPlaceholder')}
-            className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-amber-500 focus:outline-none"
-          />
           <button
-            onClick={() => {
-              if (manualTxnInput) setActiveTxnId(manualTxnInput);
-            }}
-            disabled={!manualTxnInput}
-            className="px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-300 text-white font-bold text-sm rounded-lg transition cursor-pointer"
+            onClick={() => refreshTransaction()}
+            className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-sm rounded-xl transition cursor-pointer flex items-center space-x-2 shadow-sm"
           >
-            {t('common.load')}
+            <RefreshCw className="w-4 h-4" />
+            <span>{t('common.refresh')}</span>
           </button>
         </div>
       </div>
@@ -394,6 +468,35 @@ export function WeighbridgeStation({
           </span>
         </div>
       </div>
+
+      {/* Active Vehicles in Lane Selector */}
+      {laneVehicles.length > 1 && (
+        <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div className="flex items-center space-x-2">
+            <Truck className="w-4 h-4 text-amber-700" />
+            <span className="font-bold text-amber-950">{t('weighbridge.activeLaneVehicles')}:</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {laneVehicles.map((v) => (
+              <button
+                key={v.transaction_id}
+                onClick={() => {
+                  setActiveTxnId(v.transaction_id);
+                  refreshTransaction();
+                }}
+                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition cursor-pointer ${
+                  v.transaction_id === activeTransaction.transaction_id
+                    ? 'bg-amber-600 text-white shadow-xs'
+                    : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                {v.transaction_id}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
 
       {/* State Notice if not in expected weighbridge states */}
       {!canCaptureGross && !canCaptureTare && !isAlreadyWeighed && (
@@ -477,6 +580,7 @@ export function WeighbridgeStation({
                   <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.grossWeight')} ({t('common.quintals')}):</label>
                   <input
                     type="number"
+                    id="input-gross-weight"
                     step="0.01"
                     min="1.0"
                     value={grossWeight}
@@ -486,6 +590,7 @@ export function WeighbridgeStation({
                   />
                 </div>
                 <button
+                  id="btn-capture-gross"
                   onClick={handleCaptureGross}
                   disabled={isSubmitting || !canCaptureGross}
                   className="w-full bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-slate-950 font-black text-xs uppercase tracking-wider py-2 rounded-xl transition shadow-xs flex items-center justify-center space-x-2 cursor-pointer"
@@ -507,6 +612,7 @@ export function WeighbridgeStation({
                   <label className="block text-xs text-slate-600 mb-1">{t('weighbridge.tareWeight')} ({t('common.quintals')}):</label>
                   <input
                     type="number"
+                    id="input-tare-weight"
                     step="0.01"
                     min="0.0"
                     max={grossWeight - 0.1}
@@ -517,6 +623,7 @@ export function WeighbridgeStation({
                   />
                 </div>
                 <button
+                  id="btn-capture-tare"
                   onClick={handleCaptureTare}
                   disabled={isSubmitting || !canCaptureTare}
                   className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-black text-xs uppercase tracking-wider py-2 rounded-xl transition shadow-xs flex items-center justify-center space-x-2 cursor-pointer"

@@ -42,7 +42,13 @@ export function TransactionProvider({
   effectiveFarmerId,
   isOnline,
 }: TransactionProviderProps) {
-  const [activeTxnId, setActiveTxnIdState] = useState<string | null>(null);
+  const [activeTxnId, setActiveTxnIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem('mandiq_active_txn_id') || null;
+    } catch {
+      return null;
+    }
+  });
   const [activeTransaction, setActiveTransaction] = useState<AuthoritativeTransaction | null>(null);
   const [resolutionStatus, setResolutionStatus] = useState<TransactionResolutionStatus>('NOT_FOUND');
   const [resolutionError, setResolutionError] = useState<string | null>(null);
@@ -51,6 +57,11 @@ export function TransactionProvider({
   const clearActiveTransaction = useCallback((reason?: string) => {
     if (reason) {
       console.log(`[TransactionContext] Cleared active transaction: ${reason}`);
+    }
+    try {
+      localStorage.removeItem('mandiq_active_txn_id');
+    } catch {
+      // Ignore storage errors in restricted contexts
     }
     setActiveTxnIdState(null);
     setActiveTransaction(null);
@@ -69,6 +80,11 @@ export function TransactionProvider({
       console.warn(`[TransactionContext] Blocked fabricated random transaction ID: ${clean}`);
       clearActiveTransaction('Fabricated random transaction ID blocked');
       return;
+    }
+    try {
+      localStorage.setItem('mandiq_active_txn_id', clean);
+    } catch {
+      // Ignore storage errors in restricted contexts
     }
     setActiveTxnIdState(clean);
   }, [clearActiveTransaction]);
@@ -129,21 +145,20 @@ export function TransactionProvider({
     };
   }, [refreshTransaction, clearActiveTransaction]);
 
-  // Clear active transaction on identity changes (Phase 0.3 & Phase 6)
+  // Preserve active transaction across operational role transitions while strictly enforcing mandi scope
   useEffect(() => {
-    // When user or mandi changes, re-evaluate or clear activeTxnId
     if (!currentUser) {
-      clearActiveTransaction('User logged out');
-    } else {
-      // If we have an active transaction, verify it matches the newly selected mandi
-      if (activeTransaction && selectedMandiId && activeTransaction.mandi_id !== selectedMandiId) {
-        clearActiveTransaction('Mandi switched');
-      }
-      // If effective farmer changes, verify transaction belongs to the effective farmer
-      const targetFarmerId = currentUser.role === 'FARMER' ? currentUser.farmer_id : effectiveFarmerId;
-      if (targetFarmerId && activeTransaction && activeTransaction.farmer_id !== targetFarmerId) {
-        clearActiveTransaction('Farmer profile switched');
-      }
+      return;
+    }
+    // If we have an active transaction, verify it matches the newly selected mandi
+    if (activeTransaction && selectedMandiId && activeTransaction.mandi_id !== selectedMandiId) {
+      clearActiveTransaction('Mandi switched');
+      return;
+    }
+    // If a farmer is logged in, verify transaction belongs to that farmer
+    if (currentUser.role === 'FARMER' && currentUser.farmer_id && activeTransaction && activeTransaction.farmer_id !== currentUser.farmer_id) {
+      clearActiveTransaction('Farmer profile switched');
+      return;
     }
   }, [currentUser?.user_id, currentUser?.role, currentUser?.farmer_id, effectiveFarmerId, selectedMandiId, activeTransaction, clearActiveTransaction]);
 

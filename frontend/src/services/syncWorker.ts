@@ -167,10 +167,38 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
       if (res && (res.status === 'SYNCED' || res.status === 'CONFLICT_RESOLVED' || res.status === 'IGNORED_DUPLICATE')) {
         await markWALRecordSynced(rec.id, undefined, res.server_receive_sequence);
         syncedCount++;
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mandiq:wal-synced', {
+            detail: {
+              client_mutation_id: rec.client_mutation_id,
+              transaction_id: rec.transaction_id,
+              current_state: rec.current_state,
+              server_sequence: res.server_receive_sequence,
+              sync_status: 'SYNCED'
+            }
+          }));
+          window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', {
+            detail: {
+              transaction_id: rec.transaction_id,
+              current_state: rec.current_state,
+              sync_status: 'SYNCED'
+            }
+          }));
+        }
       } else {
         const errMsg = res?.message || 'Sync rejected by server';
         // Domain rejections from backend are permanent
         await markWALRecordFailed(rec.id, errMsg, false);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', {
+            detail: {
+              transaction_id: rec.transaction_id,
+              current_state: rec.current_state,
+              sync_status: 'FAILED',
+              error: errMsg
+            }
+          }));
+        }
       }
     }
 

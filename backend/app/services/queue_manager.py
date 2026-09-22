@@ -116,6 +116,7 @@ class QueueManager:
         self._redis_client: Optional[redis.Redis] = None
         self._redis_checked = False
         self._redis_available = False
+        self._showcase_time_offsets: Dict[int, float] = {}
 
     def _get_redis(self) -> Optional[redis.Redis]:
         if not self._redis_checked:
@@ -408,6 +409,61 @@ class QueueManager:
                 return idx
         return None
 
+    def get_showcase_time_offset(self, mandi_id: int) -> float:
+        """
+        Retrieves current isolated simulation time offset (in minutes) for showcase vehicles in mandi.
+        """
+        r = self._get_redis()
+        if r is not None:
+            try:
+                val = r.get(f"mandi:showcase:offset:{mandi_id}")
+                if val is not None:
+                    return float(val)
+            except Exception:
+                pass
+        return self._showcase_time_offsets.get(mandi_id, 0.0)
+
+    def advance_showcase_time_offset(self, mandi_id: int, minutes: float) -> float:
+        """
+        Advances the isolated simulation clock for showcase vehicles in this mandi by `minutes`.
+        Guarantees that production clock and production transactions are NEVER altered.
+        """
+        new_val = self.get_showcase_time_offset(mandi_id) + float(minutes)
+        r = self._get_redis()
+        if r is not None:
+            try:
+                r.set(f"mandi:showcase:offset:{mandi_id}", str(new_val))
+            except Exception:
+                pass
+        self._showcase_time_offsets[mandi_id] = new_val
+        return new_val
+
+    def reset_showcase_time_offset(self, mandi_id: int) -> None:
+        """
+        Resets the isolated simulation clock offset to 0.0 minutes for the given mandi.
+        """
+        r = self._get_redis()
+        if r is not None:
+            try:
+                r.delete(f"mandi:showcase:offset:{mandi_id}")
+            except Exception:
+                pass
+        self._showcase_time_offsets.pop(mandi_id, None)
+
+    def set_showcase_time_offset(self, mandi_id: int, minutes: float) -> float:
+        """
+        Sets the isolated simulation clock offset to a specific number of minutes.
+        """
+        val = float(minutes)
+        r = self._get_redis()
+        if r is not None:
+            try:
+                r.set(f"mandi:showcase:offset:{mandi_id}", str(val))
+            except Exception:
+                pass
+        self._showcase_time_offsets[mandi_id] = val
+        return val
+
     def clear(self, mandi_id: Optional[int] = None) -> None:
         """
         Clears queue state (used for test isolation).
@@ -422,8 +478,10 @@ class QueueManager:
                 except Exception:
                     pass
             _in_memory_queue.clear(q_key)
+            self.reset_showcase_time_offset(mandi_id)
         else:
             _in_memory_queue.clear()
+            self._showcase_time_offsets.clear()
 
 
 queue_manager = QueueManager()

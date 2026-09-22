@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, ConfigDict
 
 
@@ -36,7 +36,6 @@ class QualityAssessmentRequest(BaseModel):
     )
 
 
-
 class QualityAssessmentResponse(BaseModel):
     """
     Response schema returning quality inspection outcome and DCDQ queue placement.
@@ -51,7 +50,6 @@ class QualityAssessmentResponse(BaseModel):
     advisory_notice: Optional[str] = None
     priority_score: Optional[float] = None
     queue_position: Optional[int] = None
-
 
 
 class QualityOverrideRequest(BaseModel):

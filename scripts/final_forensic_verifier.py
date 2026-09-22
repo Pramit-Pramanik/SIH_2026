@@ -106,12 +106,19 @@ def auth_headers(token: str) -> Dict[str, str]:
 def test_canonical_authentication_and_roles():
     log_step("1. CANONICAL AUTHENTICATION & SINGLE FARMER INVARIANT")
 
-    # Ensure baseline database is populated
+    # Ensure baseline database is populated with clean state
     db = SessionLocal()
     try:
-        if db.query(User).count() == 0:
-            from backend.app.services.seed_service import bootstrap_database
-            bootstrap_database(db, reset=False)
+        from backend.app.services.seed_service import bootstrap_database
+        canonical_txn_ids = {
+            "TXN-DEMO-1001", "TXN-DEMO-1002", "TXN-DEMO-1003",
+            "TXN-DEMO-1004", "TXN-DEMO-1005", "TXN-DEMO-1006"
+        }
+        db.query(ProcurementLog).filter(
+            ~ProcurementLog.transaction_id.in_(canonical_txn_ids)
+        ).delete(synchronize_session=False)
+        db.commit()
+        bootstrap_database(db, reset=True)
     finally:
         db.close()
 
@@ -412,6 +419,10 @@ def test_station_dynamicity():
     insp_id = insp_user.user_id if insp_user else 3
     op_id = op_user.user_id if op_user else 4
     db.close()
+
+    from backend.app.services.queue_manager import queue_manager
+    for q_item in queue_manager.get_queue(1):
+        queue_manager.remove(1, q_item[0])
 
     # Step 1: Real Farmer reserves slot
     res_resp = client.post(

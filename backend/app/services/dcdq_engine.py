@@ -1,11 +1,12 @@
 import math
 import os
-from typing import Dict, Optional
+from typing import Optional
 from backend.app.core.config import get_settings
 
 MOISTURE_ACCEPTANCE_THRESHOLD = 17.0
 MOISTURE_BASELINE_PCT = 14.0
 MOISTURE_LINEAR_CEILING_PCT = 15.0
+MAX_WAIT_BONUS = 20.0
 
 
 def is_quality_rejected(moisture_pct: float) -> bool:
@@ -103,7 +104,8 @@ def calculate_dcdq_priority_score(
     actual_arrival_ts: float,
     moisture_pct: float,
     elapsed_wait_minutes: float,
-    demurrage_score: float = 0.0,
+    demurrage_score: Optional[float] = None,
+    payload_quintals: Optional[float] = None,
     alpha: float = 1.0,
     beta: float = 1.0,
     gamma: float = 1.0,
@@ -126,13 +128,57 @@ def calculate_dcdq_priority_score(
       are disqualified from standard queue admission.
     - Redis Ordering: Vehicles in Redis ZSET (mandi:queue:{mandi_id}) are ranked descending by S_i.
     """
+    components = calculate_dcdq_components(
+        planned_arrival_ts=planned_arrival_ts,
+        actual_arrival_ts=actual_arrival_ts,
+        moisture_pct=moisture_pct,
+        elapsed_wait_minutes=elapsed_wait_minutes,
+        demurrage_score=demurrage_score,
+        payload_quintals=payload_quintals,
+        alpha=alpha,
+        beta=beta,
+        gamma=gamma,
+        lambda_param=lambda_param,
+        continuous=continuous
+    )
+    return components["S"]
+
+
+def calculate_dcdq_components(
+    planned_arrival_ts: float,
+    actual_arrival_ts: float,
+    moisture_pct: float,
+    elapsed_wait_minutes: float,
+    demurrage_score: Optional[float] = None,
+    payload_quintals: Optional[float] = None,
+    alpha: float = 1.0,
+    beta: float = 1.0,
+    gamma: float = 1.0,
+    lambda_param: float = 1.0,
+    continuous: bool = False
+) -> dict:
+    """
+    CANONICAL DCDQ COMPONENT DECOMPOSITION.
+    Returns individual components and composite score:
+    - A: Appointment Adherence, bounded [0.0, 40.0]
+    - D: Demurrage & Payload Weight, bounded [0.0, 20.0]
+    - M: Moisture Risk, bounded [0.0, 20.0]
+    - W: Anti-Starvation Wait Bonus, bounded [0.0, 20.0]
+    - S: Composite Priority Score (alpha*A + beta*D + gamma*M + lambda*W)
+    """
     a_i = calculate_appointment_adherence(planned_arrival_ts, actual_arrival_ts)
-    d_i = calculate_demurrage_score(demurrage_score=demurrage_score)
+    d_i = calculate_demurrage_score(demurrage_score=demurrage_score, payload_quintals=payload_quintals)
     m_i = calculate_moisture_risk(moisture_pct, continuous=continuous)
     w_i = calculate_wait_bonus(elapsed_wait_minutes)
 
     total_score = (alpha * a_i) + (beta * d_i) + (gamma * m_i) + (lambda_param * w_i)
-    return round(float(total_score), 4)
+    return {
+        "A": round(float(a_i), 4),
+        "D": round(float(d_i), 4),
+        "M": round(float(m_i), 4),
+        "W": round(float(w_i), 4),
+        "S": round(float(total_score), 4)
+    }
 
 
 def calculate_priority_score(

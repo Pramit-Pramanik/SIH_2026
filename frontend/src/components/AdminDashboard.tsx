@@ -18,8 +18,16 @@ import {
   DollarSign,
   Activity,
   TrendingUp,
+  Layers,
 } from 'lucide-react';
-import { parseResponseSafe, checkBackendHealth } from '../services/api';
+import {
+  parseResponseSafe,
+  checkBackendHealth,
+  optimizeAppointmentSlots,
+  calculateBookingFailureRisk,
+  TASOptimizeResponse,
+  BookingFailureRiskResponse,
+} from '../services/api';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface Mandi {
@@ -103,6 +111,12 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isBackendHealthy, setIsBackendHealthy] = useState<boolean | null>(null);
   const refreshInFlight = useRef(false);
+
+  // TAS BILP Optimization State (Algorithm 6 & AUD-005)
+  const [isOptimizingTAS, setIsOptimizingTAS] = useState(false);
+  const [tasResult, setTasResult] = useState<TASOptimizeResponse | null>(null);
+  const [adminDeviation, setAdminDeviation] = useState<number>(30);
+  const [adminRiskResult, setAdminRiskResult] = useState<BookingFailureRiskResponse | null>(null);
 
   // Modal / Form States
   const [isMandiModalOpen, setIsMandiModalOpen] = useState(false);
@@ -480,6 +494,54 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
     setIsCropModalOpen(true);
   };
 
+  const handleOptimizeTAS = async () => {
+    setIsOptimizingTAS(true);
+    try {
+      const res = await optimizeAppointmentSlots();
+      setTasResult(res);
+      setFeedback({
+        type: 'success',
+        message: `TAS BILP optimization completed successfully. Total overload reduced from ${res.baseline_congestion.total_overload} to ${res.optimized_congestion.total_overload} trucks.`,
+      });
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'TAS optimization failed',
+      });
+    } finally {
+      setIsOptimizingTAS(false);
+    }
+  };
+
+  const handleAdminRiskChange = async (dev: number) => {
+    setAdminDeviation(dev);
+    try {
+      const expHour = 9;
+      const expMin = 0;
+      const actTotalMin = expHour * 60 + expMin + dev;
+      const actHour = Math.floor(actTotalMin / 60) % 24;
+      const actMinRemainder = actTotalMin % 60;
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const expectedStr = `${pad(expHour)}:${pad(expMin)}`;
+      const actualStr = `${pad(actHour)}:${pad(actMinRemainder)}`;
+      const res = await calculateBookingFailureRisk({
+        expected_arrival: expectedStr,
+        actual_arrival: actualStr,
+        k: 0.05,
+        unit: 'minutes',
+      });
+      setAdminRiskResult(res);
+    } catch {
+      // Retain previous state
+    }
+  };
+
+  useEffect(() => {
+    if (activeSubTab === 'slots' && !adminRiskResult) {
+      handleAdminRiskChange(30);
+    }
+  }, [activeSubTab]);
+
   return (
     <div className="space-y-6">
       {/* Top Admin Header Banner */}
@@ -664,8 +726,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
       {/* Sub-Navigation Tabs */}
       <div className="flex bg-slate-200/70 p-1.5 rounded-2xl gap-1.5 border border-slate-300/60 max-w-2xl">
         <button
+          type="button"
+          id="btn-admin-subtab-mandis"
           onClick={() => setActiveSubTab('mandis')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
             activeSubTab === 'mandis'
               ? 'bg-white text-emerald-950 shadow-sm'
               : 'text-slate-700 hover:text-slate-900'
@@ -676,8 +740,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
         </button>
 
         <button
+          type="button"
+          id="btn-admin-subtab-crops"
           onClick={() => setActiveSubTab('crops')}
-          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
+          className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5 cursor-pointer ${
             activeSubTab === 'crops'
               ? 'bg-white text-emerald-950 shadow-sm'
               : 'text-slate-700 hover:text-slate-900'
@@ -721,8 +787,10 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
               <p className="text-xs text-slate-500">{t('admin.mandisSubtitle')}</p>
             </div>
             <button
+              type="button"
+              id="btn-add-mandi"
               onClick={() => setIsMandiModalOpen(true)}
-              className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm"
+              className="px-4 py-2 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>{t('admin.addMandi')}</span>
@@ -855,8 +923,11 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                       </td>
                       <td className="p-3.5 text-right space-x-1.5">
                         <button
+                          type="button"
+                          id={c.crop_code.toLowerCase().includes('wheat') ? 'btn-edit-crop-wht' : `btn-edit-crop-${c.crop_code.toLowerCase()}`}
+                          data-crop-code={c.crop_code}
                           onClick={() => openEditCrop(c)}
-                          className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs inline-flex items-center space-x-1 transition border border-slate-300/60"
+                          className="btn-edit-crop px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs inline-flex items-center space-x-1 transition border border-slate-300/60 cursor-pointer"
                         >
                           <Edit2 className="w-3 h-3" />
                           <span>{t('admin.editMsp')}</span>
@@ -993,6 +1064,165 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
             </div>
           </div>
 
+          {/* TAS BILP Slot Optimization & Logistic Risk Showcase Card */}
+          <div className="bg-white border-2 border-purple-200 rounded-2xl p-5 shadow-xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-800 flex items-center justify-center">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <h3 className="text-sm font-black text-purple-950">{t('admin.tasAdminTitle')}</h3>
+                    <span className="text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-full">
+                      {t('demoTools.tasSolverBadge')}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-0.5">{t('admin.tasAdminSubtitle')}</p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                disabled={isOptimizingTAS}
+                onClick={handleOptimizeTAS}
+                className="px-4 py-2 rounded-xl bg-purple-800 hover:bg-purple-900 text-white font-bold text-xs flex items-center space-x-1.5 transition shadow-sm disabled:opacity-50 cursor-pointer"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isOptimizingTAS ? 'animate-spin' : ''}`} />
+                <span>{isOptimizingTAS ? t('demoTools.tasSolving') : t('admin.tasOptimizeNow')}</span>
+              </button>
+            </div>
+
+            {/* Results Display */}
+            {tasResult ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* BEFORE */}
+                  <div className="p-4 bg-rose-50/70 border-2 border-rose-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-rose-950 uppercase tracking-wider">{t('demoTools.tasBefore')}</span>
+                      <span className="text-[10px] bg-rose-200/80 text-rose-900 font-bold px-2 py-0.5 rounded-full">
+                        {t('demoTools.tasOverload')}: {tasResult.baseline_congestion.total_overload}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 font-mono text-xs">
+                      {Object.entries(tasResult.baseline_congestion.slot_distribution).map(([slot, count]) => (
+                        <div key={slot} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-rose-100 shadow-2xs">
+                          <span className="font-bold text-slate-800">{slot}</span>
+                          <span className="font-black text-rose-700">{count} {t('demoTools.tasTrucks')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* AFTER */}
+                  <div className="p-4 bg-emerald-50/70 border-2 border-emerald-200 rounded-xl space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-emerald-950 uppercase tracking-wider">{t('demoTools.tasAfter')}</span>
+                      <span className="text-[10px] bg-emerald-200/80 text-emerald-900 font-bold px-2 py-0.5 rounded-full">
+                        {t('demoTools.tasOverload')}: {tasResult.optimized_congestion.total_overload}
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 font-mono text-xs">
+                      {Object.entries(tasResult.optimized_congestion.slot_distribution).map(([slot, count]) => (
+                        <div key={slot} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg border border-emerald-100 shadow-2xs">
+                          <span className="font-bold text-slate-800">{slot}</span>
+                          <span className="font-black text-emerald-700">{count} {t('demoTools.tasTrucks')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-purple-50/60 rounded-xl border border-purple-100 text-xs text-purple-950">
+                  <span className="font-medium">{tasResult.summary}</span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[10px] font-bold uppercase text-slate-500">{t('demoTools.tasObjective')}:</span>
+                    <span className="font-mono font-black text-purple-800 bg-white px-2 py-0.5 rounded border border-purple-200">
+                      {tasResult.objective_value.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 text-center space-y-2 bg-slate-50 rounded-xl border border-dashed border-slate-300">
+                <p className="text-xs text-slate-600 font-medium">
+                  {t('demoTools.optimizeSlotsDesc')}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleOptimizeTAS}
+                  className="px-4 py-2 rounded-xl bg-purple-800 hover:bg-purple-900 text-white font-bold text-xs inline-flex items-center space-x-1.5 transition shadow-sm cursor-pointer"
+                >
+                  <Layers className="w-3.5 h-3.5" />
+                  <span>{t('demoTools.tasRunSolver')}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Logistic Booking Failure Model Interactive Inspector */}
+            <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 pb-2">
+                <div className="text-xs font-black text-slate-900 flex items-center space-x-1.5">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                  <span>{t('demoTools.failureModelTitle')}</span>
+                </div>
+                <span className="px-2 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-900 text-[10px] font-black tracking-tight">
+                  {t('demoTools.failureModelLabel')}
+                </span>
+              </div>
+
+              <p className="text-[11px] text-slate-500 leading-relaxed">
+                {t('demoTools.failureModelDesc')}
+              </p>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-700">{t('demoTools.arrivalDeviation')}:</span>
+                  <span className="font-mono font-black text-slate-900">+{adminDeviation} min</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="120"
+                  step="5"
+                  value={adminDeviation}
+                  onChange={(e) => handleAdminRiskChange(Number(e.target.value))}
+                  className="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-purple-700"
+                />
+                <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                  <span>{`0 min (P = 0.50)`}</span>
+                  <span>{`30 min (P = 0.82)`}</span>
+                  <span>{`60 min (P = 0.95)`}</span>
+                  <span>{`120 min (P = 1.00)`}</span>
+                </div>
+              </div>
+
+              {adminRiskResult && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-200 text-xs">
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('demoTools.expectedArrival')}</span>
+                    <span className="font-mono font-bold text-slate-900">{adminRiskResult.expected_arrival}</span>
+                  </div>
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('demoTools.actualArrival')}</span>
+                    <span className="font-mono font-bold text-slate-900">{adminRiskResult.actual_arrival}</span>
+                  </div>
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('demoTools.arrivalDeviation')}</span>
+                    <span className="font-mono font-bold text-slate-900">+{adminRiskResult.deviation.toFixed(0)} min</span>
+                  </div>
+                  <div className="p-2.5 bg-white rounded-lg border border-slate-200">
+                    <span className="text-[10px] text-slate-400 font-bold uppercase block">{t('demoTools.failureProbability')}</span>
+                    <span className={`font-mono font-black ${adminRiskResult.failure_probability > 0.8 ? 'text-rose-700' : 'text-emerald-700'}`}>
+                      {(adminRiskResult.failure_probability * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Slots Table */}
           <div className="bg-white border-2 border-slate-200 rounded-2xl overflow-hidden shadow-xs">
             {slots.length === 0 ? (
@@ -1060,6 +1290,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                 <label className="block font-bold text-slate-700 mb-1">{t('admin.mandiName')}</label>
                 <input
                   type="text"
+                  id="input-mandi-name"
                   required
                   placeholder={t('admin.mandiNamePlaceholder')}
                   value={mandiForm.name}
@@ -1073,6 +1304,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <label className="block font-bold text-slate-700 mb-1">{t('admin.districtLabel')}</label>
                   <input
                     type="text"
+                    id="input-mandi-district"
                     required
                     placeholder={t('admin.districtPlaceholder')}
                     value={mandiForm.district}
@@ -1084,6 +1316,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <label className="block font-bold text-slate-700 mb-1">{t('admin.stateLabel')}</label>
                   <input
                     type="text"
+                    id="input-mandi-state"
                     required
                     placeholder={t('admin.statePlaceholder')}
                     value={mandiForm.state}
@@ -1098,6 +1331,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <label className="block font-bold text-slate-700 mb-1">{t('admin.dailyCapacityLabel')}</label>
                   <input
                     type="number"
+                    id="input-mandi-capacity"
                     required
                     value={mandiForm.daily_capacity_qt}
                     onChange={(e) => setMandiForm({ ...mandiForm, daily_capacity_qt: Number(e.target.value) })}
@@ -1108,6 +1342,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                   <label className="block font-bold text-slate-700 mb-1">{t('admin.weighbridges')}</label>
                   <input
                     type="number"
+                    id="input-mandi-weighbridges"
                     required
                     min={1}
                     value={mandiForm.active_weighbridges}
@@ -1119,7 +1354,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2"
+                id="btn-save-mandi"
+                className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2 cursor-pointer"
               >
                 {t('admin.saveButton')}
               </button>
@@ -1182,6 +1418,7 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
                 <label className="block font-bold text-slate-700 mb-1">{t('admin.mspPriceUnit')}</label>
                 <input
                   type="number"
+                  id="input-crop-msp"
                   step="0.50"
                   required
                   value={cropForm.msp_price_inr}
@@ -1217,7 +1454,8 @@ export function AdminDashboard({ selectedMandiId, effectiveOnline }: AdminDashbo
 
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2"
+                id="btn-save-crop"
+                className="w-full py-3 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-extrabold text-xs shadow-md transition mt-2 cursor-pointer"
               >
                 {t('admin.saveButton')}
               </button>

@@ -88,6 +88,8 @@ export function WALSyncMonitor({
             </button>
 
             <button
+              type="button"
+              id="btn-trigger-wal-sync"
               onClick={() => onTriggerSync()}
               disabled={isSyncing || pendingCount === 0 || !effectiveOnline}
               className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold px-4 py-2.5 rounded-xl text-sm transition flex items-center space-x-2 shadow-md shadow-emerald-700/20 cursor-pointer"
