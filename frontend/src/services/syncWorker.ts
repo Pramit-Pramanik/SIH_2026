@@ -130,17 +130,29 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
 
     if (!response.ok) {
       const errorText = await response.text();
+      let errorDetail = '';
+      try {
+        const errorJson = JSON.parse(errorText);
+        if (errorJson && errorJson.detail) {
+          errorDetail = typeof errorJson.detail === 'string' ? errorJson.detail : JSON.stringify(errorJson.detail);
+        }
+      } catch {
+        errorDetail = errorText;
+      }
+
       const isAuthError = response.status === 401 || response.status === 403;
       const isTransient = response.status >= 500;
+      const authErrorMsg = `Authentication required (HTTP ${response.status}): ${errorDetail || errorText}`;
+      const serverErrorMsg = `Server HTTP ${response.status}: ${errorDetail || errorText}`;
 
       for (const rec of pending) {
         if (rec.id !== undefined) {
           if (isAuthError) {
             // A 401/403 caused by missing/expired authentication must NOT be treated as a permanent domain rejection.
             // Mutation remains PENDING and recoverable.
-            await markWALRecordAuthRequired(rec.id, `Authentication required (HTTP ${response.status}): ${errorText}`);
+            await markWALRecordAuthRequired(rec.id, authErrorMsg);
           } else {
-            await markWALRecordFailed(rec.id, `Server HTTP ${response.status}: ${errorText}`, isTransient);
+            await markWALRecordFailed(rec.id, serverErrorMsg, isTransient);
           }
         }
       }
@@ -148,7 +160,7 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
         success: false,
         syncedCount: 0,
         totalPending: pending.length,
-        error: isAuthError ? `Authentication required (HTTP ${response.status})` : `HTTP ${response.status}: ${errorText}`
+        error: isAuthError ? `Authentication required (HTTP ${response.status})` : serverErrorMsg
       };
     }
 
@@ -202,10 +214,15 @@ export async function syncPendingMutations(apiBaseUrl: string = ''): Promise<Syn
       }
     }
 
+    const firstFailure = Array.isArray(resultData.results)
+      ? resultData.results.find((r: { status: string; message?: string }) => r.status === 'REJECTED')?.message
+      : undefined;
+
     return {
       success: resultData.success ?? true,
       syncedCount,
-      totalPending: pending.length
+      totalPending: pending.length,
+      error: !resultData.success ? (firstFailure || `${pending.length - syncedCount} records rejected`) : undefined
     };
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

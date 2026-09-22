@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   executeLocalTransactionMutation,
   getAllWALRecords,
+  getLocalTransaction,
   LocalTransactionWAL
 } from './db/dexie';
 import { initSyncWorker, syncPendingMutations, SyncResult } from './services/syncWorker';
@@ -22,7 +23,7 @@ import { DemoToolsModal } from './components/DemoToolsModal';
 import { LanguageProvider, useLanguage } from './i18n/LanguageContext';
 import { TransactionProvider, useAuthoritativeTransaction } from './context/TransactionContext';
 import { findScopedLocalTransaction } from './services/transactionService';
-import { ArrowRight, Loader2 } from 'lucide-react';
+import { ArrowRight, Loader2, X } from 'lucide-react';
 
 function defaultTabForRole(role: string): StationTab {
   switch (role) {
@@ -199,23 +200,32 @@ function StationManager({
     const txnId = activeTxnId;
     const enrichedPayload = { ...payload, mutation_type: mutationType };
 
-    const isDemoRole = currentUser && (currentUser.role === 'ADMIN' || currentUser.role === 'SUPERVISOR');
-    let effectiveFarmerId = 0;
+    let effectiveFarmerId = (payload && (payload as { farmer_id?: number }).farmer_id) || activeTransaction?.farmer_id || demoFarmerId || 0;
+    let effectiveMandiId = (payload && (payload as { mandi_id?: number }).mandi_id) || activeTransaction?.mandi_id || selectedMandiId || 0;
+
     if (currentUser?.role === 'FARMER') {
-      if (!currentUser.farmer_id) {
-        console.warn('Authenticated farmer has no linked profile. Mutation aborted.');
-        return;
+      if (currentUser.farmer_id) {
+        effectiveFarmerId = currentUser.farmer_id;
       }
-      effectiveFarmerId = currentUser.farmer_id;
-    } else if (isDemoRole) {
-      effectiveFarmerId = (payload && (payload as { farmer_id?: number }).farmer_id) || demoFarmerId || 0;
+    }
+
+    if (!effectiveFarmerId || !effectiveMandiId) {
+      try {
+        const local = await getLocalTransaction(txnId);
+        if (local) {
+          if (!effectiveFarmerId) effectiveFarmerId = local.farmer_id;
+          if (!effectiveMandiId) effectiveMandiId = local.mandi_id;
+        }
+      } catch {
+        // Fallback
+      }
     }
 
     await executeLocalTransactionMutation({
       client_mutation_id: mutationId,
       transaction_id: txnId,
       farmer_id: effectiveFarmerId,
-      mandi_id: selectedMandiId || 0,
+      mandi_id: effectiveMandiId || selectedMandiId || 1,
       current_state: state,
       payload_json: JSON.stringify(enrichedPayload),
       payload: enrichedPayload,
@@ -302,6 +312,14 @@ function StationManager({
                   • {activeTransaction.crop_type || 'Wheat'} ({activeTransaction.current_state})
                 </span>
               )}
+              <button
+                type="button"
+                onClick={() => clearActiveTransaction('User cleared active transaction')}
+                className="ml-2 text-slate-400 hover:text-rose-600 p-0.5 rounded transition cursor-pointer"
+                title={t('common.clearActiveTransaction') || 'Clear Active Transaction'}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
 
             {canAdvance && (

@@ -218,6 +218,7 @@ export async function reserveSlot(payload: BookingPayload): Promise<BookingRespo
     slot_id: payload.slot_id,
     farmer_id: payload.farmer_id,
     requested_qty_qt: payload.requested_qty_qt,
+    crop_type: payload.crop_type,
   };
 
   const res = await fetch('/api/v1/slots/reserve', {

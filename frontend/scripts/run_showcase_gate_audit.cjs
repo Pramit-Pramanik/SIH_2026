@@ -42,6 +42,14 @@ async function runShowcaseAudit() {
     }
   });
 
+  page.on('response', async (response) => {
+    if (response.status() >= 400) {
+      let body = '';
+      try { body = await response.text(); } catch {}
+      console.warn(`[HTTP ${response.status()}] ${response.request().method()} ${response.url()}: ${body.slice(0, 200)}`);
+    }
+  });
+
   try {
     console.log(`[INIT] Navigating to ${APP_URL}...`);
     await page.goto(APP_URL, { waitUntil: 'networkidle2', timeout: 30000 });
@@ -130,10 +138,11 @@ async function runShowcaseAudit() {
     console.log('  [STEP 5.1] Selecting destination mandi (Sehore Mandi)...');
     const headerMandi = await page.$('#select-header-mandi');
     if (headerMandi) {
-      await page.select('#select-header-mandi', '1');
+      await page.waitForSelector('#select-header-mandi option[value="1"]', { timeout: 10000 }).catch(() => {});
+      await page.select('#select-header-mandi', '1').catch(() => {});
       await sleep(500);
     }
-    await page.waitForSelector('#select-destination-mandi', { visible: true, timeout: 10000 });
+    await page.waitForSelector('#select-destination-mandi option[value="1"]', { timeout: 10000 });
     await page.select('#select-destination-mandi', '1');
     await sleep(1000);
 

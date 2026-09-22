@@ -226,7 +226,9 @@ def process_single_wal_mutation(
         )
 
     # 4. Validate foreign keys and tenant matches against the authoritative transaction
-    if rec.farmer_id != log.farmer_id:
+    if not rec.farmer_id:
+        rec.farmer_id = log.farmer_id
+    elif rec.farmer_id != log.farmer_id:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail=f"Access forbidden: Mutation farmer ID ({rec.farmer_id}) does not match transaction farmer ID ({log.farmer_id})."
@@ -239,7 +241,9 @@ def process_single_wal_mutation(
             detail=f"Foreign key violation: Farmer {rec.farmer_id} does not exist"
         )
 
-    if rec.mandi_id != log.mandi_id:
+    if not rec.mandi_id:
+        rec.mandi_id = log.mandi_id
+    elif rec.mandi_id != log.mandi_id:
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
             detail=f"Access forbidden: Mutation mandi ID ({rec.mandi_id}) does not match transaction mandi ID ({log.mandi_id})."
@@ -459,8 +463,6 @@ def process_wal_batch_sync(
         try:
             result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
         except HTTPException as exc:
-            if exc.status_code in (401, 403, 404):
-                raise exc
             server_seq = get_next_server_sequence(db)
             result = WALMutationResult(
                 client_mutation_id=rec.client_mutation_id,

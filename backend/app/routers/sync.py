@@ -8,7 +8,7 @@ from sqlalchemy import func
 
 from backend.app.dependencies.get_db import get_db
 from backend.app.dependencies.auth import require_roles
-from backend.app.models.user import User
+from backend.app.models.user import User, VALID_USER_ROLES
 from backend.app.models.log import ProcurementLog
 from backend.app.schemas.sync import (
     WALMutationRecord,
@@ -32,7 +32,7 @@ router = APIRouter(prefix="/sync", tags=["Offline WAL Synchronization"])
 async def sync_offline_wal(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(require_roles(["OPERATOR", "SUPERVISOR", "ADMIN"]))
+    current_user: Optional[User] = Depends(require_roles(VALID_USER_ROLES))
 ) -> WALBatchSyncResponse:
     """
     Ingests and synchronizes offline WAL mutations recorded by client devices during network blackouts.

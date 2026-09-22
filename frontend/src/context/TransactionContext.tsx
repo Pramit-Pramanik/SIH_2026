@@ -136,6 +136,9 @@ export function TransactionProvider({
       if (customEvent.detail && (customEvent.detail.action === 'reset' || customEvent.detail.action === 'cancelled')) {
         clearActiveTransaction(`Transaction event: ${customEvent.detail.action}`);
       } else {
+        if (customEvent.detail?.transaction_id) {
+          setActiveTxnId(customEvent.detail.transaction_id);
+        }
         refreshTransaction();
       }
     };
@@ -143,7 +146,7 @@ export function TransactionProvider({
     return () => {
       window.removeEventListener('mandiq:transactions-changed', handleTxnChanged);
     };
-  }, [refreshTransaction, clearActiveTransaction]);
+  }, [refreshTransaction, clearActiveTransaction, setActiveTxnId]);
 
   // Preserve active transaction across operational role transitions while strictly enforcing mandi scope
   useEffect(() => {

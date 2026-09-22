@@ -30,7 +30,7 @@ import { AuthUser } from '../services/authService';
 import { DigitalReceipt } from './DigitalReceipt';
 import { useLanguage } from '../i18n/LanguageContext';
 import { useAuthoritativeTransaction } from '../context/TransactionContext';
-import { findScopedLocalTransaction } from '../services/transactionService';
+import { findScopedLocalTransaction, fetchAuthoritativeTransaction } from '../services/transactionService';
 
 interface FarmerPortalProps {
   mandiId: number;
@@ -211,7 +211,10 @@ export function FarmerPortal({
           const data: CropItem[] = await res.json();
           setCrops(data);
           if (data.length > 0 && selectedCropId === null) {
-            setSelectedCropId(data[0].crop_id);
+            const matched = profile?.registered_crop_type
+              ? data.find((c) => c.crop_name.toLowerCase() === profile.registered_crop_type.toLowerCase())
+              : undefined;
+            setSelectedCropId(matched ? matched.crop_id : data[0].crop_id);
           }
         }
       } catch {
@@ -339,7 +342,49 @@ export function FarmerPortal({
   }, [activePass]);
 
   // 5. Hydrate active transaction from Dexie and backend database (Phase 0 & Phase 0.2)
-  const loadSavedPass = async () => {
+  const loadSavedPass = async (preferredTxnId?: string) => {
+    const targetId = preferredTxnId || activeTxnId;
+    if (targetId) {
+      try {
+        const local = await getLocalTransaction(targetId);
+        if (local && (!effectiveFarmerId || local.farmer_id === effectiveFarmerId) && (!selectedMandiId || local.mandi_id === selectedMandiId)) {
+          setActivePass(local);
+          setActiveTxnId(local.transaction_id);
+          return;
+        }
+      } catch {
+        // Fallback
+      }
+
+      if (effectiveOnline) {
+        try {
+          const cloudTxn = await fetchAuthoritativeTransaction(targetId);
+          if (cloudTxn && (!effectiveFarmerId || cloudTxn.farmer_id === effectiveFarmerId) && (!selectedMandiId || cloudTxn.mandi_id === selectedMandiId)) {
+            setActivePass({
+              transaction_id: cloudTxn.transaction_id,
+              farmer_id: cloudTxn.farmer_id,
+              farmer_name: cloudTxn.farmer_name || 'Registered Farmer',
+              mandi_id: cloudTxn.mandi_id,
+              current_state: cloudTxn.current_state,
+              crop_type: cloudTxn.crop_type,
+              slot_id: cloudTxn.slot_id,
+              scheduled_date: cloudTxn.scheduled_date,
+              scheduled_time: 'Morning Delivery Window',
+              requested_qty_qt: cloudTxn.net_weight_qt || 0,
+              token_signature: cloudTxn.token_signature || '',
+              last_client_mutation_id: `mut-${Date.now()}`,
+              last_updated_ts: Date.now(),
+              sync_status: 'SYNCED',
+            });
+            setActiveTxnId(cloudTxn.transaction_id);
+            return;
+          }
+        } catch {
+          // Continue to generic search
+        }
+      }
+    }
+
     // 1. Scoped local search first (excluding terminal states, strictly matching effective farmer and mandi)
     try {
       const targetUser: AuthUser | null = currentUser || (effectiveFarmerId ? {
@@ -593,7 +638,7 @@ export function FarmerPortal({
         target_state: 'SLOT_BOOKED',
         payload: {
           slot_id: resData.slot_id,
-          crop_type: chosenCrop ? chosenCrop.crop_name : 'Wheat',
+          crop_type: resData.crop_type || (chosenCrop ? chosenCrop.crop_name : 'Wheat'),
           requested_qty_qt: requestedQty,
           token_signature: resData.token_signature,
           scheduled_date: scheduledDate,
@@ -630,7 +675,7 @@ export function FarmerPortal({
       onTransactionCreated?.(resData.transaction_id);
       setActiveTxnId(resData.transaction_id);
       window.dispatchEvent(new CustomEvent('mandiq:transactions-changed', { detail: { transaction_id: resData.transaction_id } }));
-      await loadSavedPass();
+      await loadSavedPass(resData.transaction_id);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('common.reservationFailed');
       setFeedback({ type: 'error', message: msg });

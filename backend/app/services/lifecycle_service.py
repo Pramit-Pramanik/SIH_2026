@@ -88,6 +88,7 @@ ALLOWED_TRANSITIONS: Dict[Optional[str], Set[str]] = {
     TransactionState.BILL_GENERATED: {
         TransactionState.BILL_GENERATED,
         TransactionState.DBT_PAYMENT_INITIATED,
+        TransactionState.PAYMENT_SETTLED,
         TransactionState.CANCELLED
     },
     TransactionState.DBT_PAYMENT_INITIATED: {

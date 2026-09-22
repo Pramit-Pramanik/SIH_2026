@@ -275,9 +275,10 @@ export async function findScopedLocalTransaction(params: {
     }
   }
 
-  // 2. Local Dexie Fallback
+  // 2. Local Dexie Fallback (sort most recently updated first)
   const all = await getAllLocalTransactions();
-  for (const tx of all) {
+  const sorted = [...all].sort((a, b) => (b.last_updated_ts || 0) - (a.last_updated_ts || 0));
+  for (const tx of sorted) {
     if (terminalStates.includes(tx.current_state)) continue;
     if (selectedMandiId && tx.mandi_id !== selectedMandiId) continue;
     if (currentUser.role === 'FARMER' && currentUser.farmer_id && tx.farmer_id !== currentUser.farmer_id) continue;
