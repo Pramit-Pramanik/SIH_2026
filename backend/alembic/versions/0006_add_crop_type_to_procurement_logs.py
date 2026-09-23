@@ -9,7 +9,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = '0006_add_crop_type_to_procurement_logs'
+revision: str = '0006_add_crop_type'
 down_revision: Union[str, None] = '0005_add_cancelled_state'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = '0007_add_showcase_discriminators'
-down_revision: Union[str, None] = '0006_add_crop_type_to_procurement_logs'
+down_revision: Union[str, None] = '0006_add_crop_type'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
