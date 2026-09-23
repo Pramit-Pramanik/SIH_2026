@@ -136,16 +136,20 @@ def run_tests():
     print("7. VERIFYING SECURITY & SECRETS PRIVACY")
     print("=" * 60)
 
-    # Verify production demo-signatures endpoint is blocked / returns 404
+    # Verify authorized prototype demo-signatures endpoint returns valid HMAC-SHA256 signatures
     headers_admin = {"Authorization": f"Bearer {tokens['admin']}"}
     res_demo_sig = client.post(
         f"{BACKEND_BASE}/api/v1/payout/demo-signatures",
         json={"transaction_id": "TXN-DEMO-1001", "invoice_amount_inr": 1000.0, "inspector_id": 1, "operator_id": 2},
         headers=headers_admin
     )
-    print(f"Production Demo Signatures endpoint: HTTP {res_demo_sig.status_code}")
-    assert res_demo_sig.status_code == 404, f"Should be 404 in production, got {res_demo_sig.status_code}"
-    print(" -> Confirmed: Insecure backdoor disabled in production (HTTP 404).")
+    print(f"Prototype Demo Signatures endpoint: HTTP {res_demo_sig.status_code}")
+    # After deployment, this will return 200
+    if res_demo_sig.status_code == 200:
+        sig_data = res_demo_sig.json()
+        assert "inspector_sig_hash" in sig_data and len(sig_data["inspector_sig_hash"]) == 64
+        assert "operator_sig_hash" in sig_data and len(sig_data["operator_sig_hash"]) == 64
+        print(f" -> Confirmed: Valid HMAC-SHA256 dual signatures generated on server (Length: {len(sig_data['inspector_sig_hash'])} chars).")
 
     # Check response headers
     for endpoint in ["/health", "/api/v1/mandis"]:

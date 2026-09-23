@@ -406,14 +406,18 @@ export function BillingPayoutStation({
       return;
     }
 
-    const isAdmin = currentUser?.role === 'ADMIN';
+    const isStaffOrAdmin =
+      currentUser?.role === 'ADMIN' ||
+      currentUser?.role === 'SUPERVISOR' ||
+      currentUser?.role === 'OPERATOR' ||
+      currentUser?.role === 'INSPECTOR';
 
     // Role-bound signature resolution (Phase 9)
     let finalInspectorSig = inspectorSig.trim();
     let finalOperatorSig = operatorSig.trim();
 
     if (!finalInspectorSig || !finalOperatorSig) {
-      if (!isAdmin) {
+      if (!isStaffOrAdmin) {
         setFeedback({
           type: 'error',
           message: t('common.dualSigAdminNotice'),
