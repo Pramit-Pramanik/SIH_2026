@@ -4,6 +4,14 @@
   "framework": "vite",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://mandiq-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/health",
+      "destination": "https://mandiq-backend.onrender.com/health"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
