@@ -65,15 +65,6 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        # If alembic_version table exists, ensure version_num column is VARCHAR(255) on PostgreSQL
-        try:
-            from sqlalchemy import text
-            if connection.dialect.name == "postgresql":
-                connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(255);"))
-                connection.commit()
-        except Exception:
-            pass
-
         context.configure(
             connection=connection,
             target_metadata=target_metadata
