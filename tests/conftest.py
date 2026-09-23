@@ -21,6 +21,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["MANDIQ_AUTH_ENFORCED"] = "false"
 
 from backend.app.core.config import get_settings, Settings
+get_settings.cache_clear()
 from backend.app.db.base import Base
 from backend.app.dependencies.get_db import get_db
 from backend.app.main import app

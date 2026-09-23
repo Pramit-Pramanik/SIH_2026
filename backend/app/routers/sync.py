@@ -32,7 +32,7 @@ router = APIRouter(prefix="/sync", tags=["Offline WAL Synchronization"])
 async def sync_offline_wal(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(require_roles(VALID_USER_ROLES))
+    current_user: Optional[User] = Depends(require_roles(["ADMIN", "SUPERVISOR", "OPERATOR", "INSPECTOR"], strict=True))
 ) -> WALBatchSyncResponse:
     """
     Ingests and synchronizes offline WAL mutations recorded by client devices during network blackouts.

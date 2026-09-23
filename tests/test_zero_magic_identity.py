@@ -123,10 +123,10 @@ def test_mandi_strict_validation_no_silent_defaults(client: TestClient, db_sessi
     admin_headers = {"Authorization": f"Bearer {admin_tok}"}
 
     # 1. Queue endpoints: non-existent mandi 99999 -> 404
-    r_queue = client.get("/api/v1/queue/99999")
+    r_queue = client.get("/api/v1/queue/99999", headers=admin_headers)
     assert r_queue.status_code == 404
 
-    r_queue_state = client.get("/api/v1/queue/state?mandi_id=99999")
+    r_queue_state = client.get("/api/v1/queue/state?mandi_id=99999", headers=admin_headers)
     assert r_queue_state.status_code == 404
 
     # 2. Slots listing: non-existent mandi 99999 -> 404
@@ -221,9 +221,12 @@ def test_farmer_identity_and_booking_isolation(client: TestClient, db_session: S
 
 def test_mandi_switching_isolation(client: TestClient, db_session: Session):
     """Verifies that Mandi 1 (Khanna) and Mandi 2 (Sirsa) resources and queues are isolated."""
+    admin_tok = get_token_for_role(db_session, "ADMIN")
+    admin_headers = {"Authorization": f"Bearer {admin_tok}"}
+
     # 1. Mandi 1 Queue vs Mandi 2 Queue
-    q1 = client.get("/api/v1/queue/1").json()
-    q2 = client.get("/api/v1/queue/2").json()
+    q1 = client.get("/api/v1/queue/1", headers=admin_headers).json()
+    q2 = client.get("/api/v1/queue/2", headers=admin_headers).json()
 
     assert q1["mandi_id"] == 1
     assert q2["mandi_id"] == 2

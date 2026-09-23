@@ -1,0 +1,41 @@
+services:
+  - type: web
+    name: mandiq-backend
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mandiq-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: mandiq-redis
+          property: connectionString
+      - key: MANDIQ_SECRET_HMAC_KEY
+        generateValue: true
+      - key: MANDIQ_PAYOUT_SECRET_KEY
+        generateValue: true
+      - key: MANDIQ_AUTH_ENFORCED
+        value: "true"
+      - key: CORS_ORIGINS
+        value: '["https://frontend-gamma-coral-15.vercel.app","https://frontend-54umjamh6-kissankasaman.vercel.app"]'
+
+databases:
+  - name: mandiq-postgres
+    plan: free
+    region: oregon
+    databaseName: mandiq
+    user: mandiq
+
+redis:
+  - name: mandiq-redis
+    plan: free
+    region: oregon
+    maxmemoryPolicy: noeviction

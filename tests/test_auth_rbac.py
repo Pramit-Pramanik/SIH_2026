@@ -492,11 +492,12 @@ def test_rbac_billing_and_sync(client: TestClient, db_session: Session):
     sync_payload = {
         "mutations": [
             {
-                "mutation_id": "mut_auth_test_001",
+                "client_mutation_id": "mut_auth_test_001",
                 "transaction_id": res.transaction_id,
-                "target_state": "GATE_ENTRY_VERIFIED",
-                "client_sequence": 1,
-                "client_timestamp": datetime.now(timezone.utc).isoformat(),
+                "farmer_id": farmer.farmer_id,
+                "mandi_id": mandi.mandi_id,
+                "current_state": "GATE_ENTRY_VERIFIED",
+                "client_timestamp": 1726000000.0,
                 "payload": {}
             }
         ]
