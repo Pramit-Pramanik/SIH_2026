@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "MandiQ - Intelligent APMC Yard & Dynamic Queue Management Platform",
+  "scripts": {
+    "build": "npm --prefix frontend run build"
+  },
   "devDependencies": {
     "supabase": "^2.117.0"
   }
