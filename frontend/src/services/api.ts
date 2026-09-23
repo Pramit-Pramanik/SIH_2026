@@ -83,7 +83,7 @@ export interface BookingResponse {
   farmer_remaining_ceiling_qt: number;
 }
 const rawApiBase = (
-  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || ''
+  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || 'https://mandiq-backend.onrender.com'
 );
 export const API_BASE_URL: string = rawApiBase.replace(/\s+/g, '').replace(/\/+$/, '');
 

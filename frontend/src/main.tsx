@@ -6,7 +6,7 @@ import { registerServiceWorker } from './services/serviceWorkerRegistration.ts';
 
 // Dynamic API base URL resolution from environment (AC-VITE / Section 6)
 const rawApiBase = (
-  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || ''
+  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || 'https://mandiq-backend.onrender.com'
 );
 // Aggressively strip any whitespace, carriage returns, newlines, and trailing slashes
 const apiBase = rawApiBase.replace(/\s+/g, '').replace(/\/+$/, '');

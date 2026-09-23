@@ -25,7 +25,7 @@ services:
       - key: MANDIQ_AUTH_ENFORCED
         value: "true"
       - key: CORS_ORIGINS
-        value: '["https://frontend-gamma-coral-15.vercel.app","https://frontend-f7k1xnduo-kissankasaman.vercel.app","https://frontend-54umjamh6-kissankasaman.vercel.app"]'
+        value: '["https://frontend-gamma-coral-15.vercel.app","https://frontend-kissankasaman.vercel.app","https://frontend-f7k1xnduo-kissankasaman.vercel.app","https://frontend-54umjamh6-kissankasaman.vercel.app","https://frontend-nuc25y2o0-kissankasaman.vercel.app"]'
 
   - type: keyvalue
     name: mandiq-redis
