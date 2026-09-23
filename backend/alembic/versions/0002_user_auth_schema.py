@@ -33,7 +33,7 @@ def upgrade() -> None:
         sa.Column('role', sa.String(length=30), server_default='OPERATOR', nullable=False),
         sa.Column('mandi_id', sa.Integer(), nullable=True),
         sa.Column('farmer_id', sa.Integer(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), server_default=sa.text('1'), nullable=False),
+        sa.Column('is_active', sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.Column('updated_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.ForeignKeyConstraint(['mandi_id'], ['mandis.mandi_id'], name='fk_users_mandi_id'),

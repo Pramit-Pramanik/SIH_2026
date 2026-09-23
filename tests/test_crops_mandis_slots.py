@@ -288,10 +288,9 @@ def test_gap_fixes_endpoints(client: TestClient, seed_test_data):
     assert book_res.status_code == 201
     txn_id = book_res.json()["transaction_id"]
 
-    # 3. Test quality inspection endpoint for newly booked lot
+    # 3. Test quality inspection rejects unverified lot prior to gate entry
     res_q = client.get(f"/api/v1/quality/{txn_id}")
-    assert res_q.status_code == 200
-    assert res_q.json()["transaction_id"] == txn_id
+    assert res_q.status_code == 409
 
     # 4. Cancel slot appointment before gate check-in
     cancel_res = client.post("/api/v1/slots/cancel", json={"transaction_id": txn_id})

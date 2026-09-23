@@ -498,6 +498,7 @@ def test_quality_override_role_authorization(client: TestClient, db_session: Ses
         scheduled_date=date.today(),
         current_state="QUALITY_REJECTED",
         crop_moisture_pct=Decimal("18.5"),
+        net_weight_qt=Decimal("45.0"),
         token_signature="TEST_TOKEN_SIG",
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc)

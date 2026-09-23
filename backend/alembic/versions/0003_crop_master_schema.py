@@ -25,7 +25,7 @@ def upgrade() -> None:
         sa.Column('msp_price_inr', sa.Numeric(precision=10, scale=2), nullable=False),
         sa.Column('optimal_moisture_pct', sa.Numeric(precision=4, scale=2), server_default='14.00', nullable=False),
         sa.Column('max_moisture_pct', sa.Numeric(precision=4, scale=2), server_default='17.00', nullable=False),
-        sa.Column('is_active', sa.Boolean(), server_default=sa.text('1'), nullable=False),
+        sa.Column('is_active', sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.CheckConstraint('msp_price_inr > 0', name='chk_crop_msp_positive'),
         sa.CheckConstraint('optimal_moisture_pct > 0 AND optimal_moisture_pct <= 100', name='chk_crop_optimal_moisture'),

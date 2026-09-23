@@ -21,6 +21,7 @@ os.environ["DATABASE_URL"] = "sqlite:///:memory:"
 os.environ["MANDIQ_AUTH_ENFORCED"] = "false"
 
 from backend.app.core.config import get_settings, Settings
+get_settings.cache_clear()
 from backend.app.db.base import Base
 from backend.app.dependencies.get_db import get_db
 from backend.app.main import app
@@ -53,9 +54,12 @@ TestingSessionLocal = sessionmaker(
 @pytest.fixture(scope="function", autouse=True)
 def setup_tables():
     """Create all tables in memory cleanly before each test and drop after."""
+    from backend.app.services.sync_service import reset_sync_state
+    reset_sync_state()
     Base.metadata.create_all(bind=test_engine)
     yield
     Base.metadata.drop_all(bind=test_engine)
+    reset_sync_state()
 
 @pytest.fixture
 def session_factory():

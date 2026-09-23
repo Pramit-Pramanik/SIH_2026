@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column('state', sa.String(length=50), nullable=False),
         sa.Column('daily_capacity_qt', sa.Numeric(precision=12, scale=2), nullable=False),
         sa.Column('active_weighbridges', sa.Integer(), server_default='2', nullable=False),
-        sa.Column('is_operational', sa.Boolean(), server_default=sa.text('1'), nullable=False),
+        sa.Column('is_operational', sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column('created_at', sa.DateTime(), server_default=sa.func.current_timestamp(), nullable=False),
         sa.CheckConstraint('daily_capacity_qt > 0', name='chk_mandi_daily_capacity'),
         sa.CheckConstraint('active_weighbridges >= 1', name='chk_mandi_active_weighbridges'),

@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     with op.batch_alter_table('procurement_logs') as batch_op:
         batch_op.add_column(
-            sa.Column('is_showcase', sa.Boolean(), nullable=False, server_default=sa.text('0'))
+            sa.Column('is_showcase', sa.Boolean(), nullable=False, server_default=sa.false())
         )
         batch_op.add_column(
             sa.Column('demo_run_id', sa.String(length=64), nullable=True)

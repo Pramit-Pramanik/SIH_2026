@@ -54,6 +54,13 @@ _seq_lock = threading.Lock()
 _current_server_sequence: Optional[int] = None
 _processed_mutations: Dict[str, Tuple[int, str, str]] = {}  # mutation_id -> (server_seq, txn_id, status)
 
+def reset_sync_state() -> None:
+    """Clear in-memory processed mutations registry for test isolation and resets."""
+    global _processed_mutations, _current_server_sequence
+    with _seq_lock:
+        _processed_mutations.clear()
+        _current_server_sequence = None
+
 def get_next_server_sequence(db: Session) -> int:
     """
     Atomically increments and returns the next monotonic server_receive_sequence.
@@ -479,19 +486,7 @@ def process_wal_batch_sync(
     synced_count = 0
 
     for rec in request.mutations:
-        try:
-            result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
-        except HTTPException as exc:
-            server_seq = get_next_server_sequence(db)
-            result = WALMutationResult(
-                client_mutation_id=rec.client_mutation_id,
-                transaction_id=rec.transaction_id,
-                status="REJECTED",
-                server_receive_sequence=server_seq,
-                current_state=None,
-                signature_type=SignatureClassification.INTEGRITY_METADATA,
-                message=exc.detail if isinstance(exc.detail, str) else str(exc.detail)
-            )
+        result = process_single_wal_mutation(db=db, rec=rec, current_user=current_user)
         results.append(result)
         if result.status in ("SYNCED", "CONFLICT_RESOLVED", "IGNORED_DUPLICATE"):
             synced_count += 1
