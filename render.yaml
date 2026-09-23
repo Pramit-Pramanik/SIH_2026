@@ -15,7 +15,7 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
-          type: redis
+          type: keyvalue
           name: mandiq-redis
           property: connectionString
       - key: MANDIQ_SECRET_HMAC_KEY
@@ -27,15 +27,16 @@ services:
       - key: CORS_ORIGINS
         value: '["https://frontend-gamma-coral-15.vercel.app","https://frontend-f7k1xnduo-kissankasaman.vercel.app","https://frontend-54umjamh6-kissankasaman.vercel.app"]'
 
+  - type: keyvalue
+    name: mandiq-redis
+    region: oregon
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
 databases:
   - name: mandiq-postgres
-    plan: free
     region: oregon
+    plan: free
     databaseName: mandiq
     user: mandiq
-
-redis:
-  - name: mandiq-redis
-    plan: free
-    region: oregon
-    maxmemoryPolicy: noeviction
