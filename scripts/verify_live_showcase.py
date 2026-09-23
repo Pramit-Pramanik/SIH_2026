@@ -32,28 +32,34 @@ def run_tests():
     print(f" -> Redis Status: {health_data['redis']['status']}")
     results["direct_health"] = "PASS"
 
-    # 1.2 Frontend Proxied Health
-    res = client.get(f"{FRONTEND_BASE}/health")
-    print(f"Frontend Proxied Health: HTTP {res.status_code}")
-    assert res.status_code == 200, f"Proxied health failed: {res.text}"
-    results["proxy_health"] = "PASS"
+    # 1.2 Frontend PWA Assets
+    res_index = client.get(f"{FRONTEND_BASE}/")
+    print(f"Frontend Root App: HTTP {res_index.status_code}")
+    assert res_index.status_code == 200
+    res_manifest = client.get(f"{FRONTEND_BASE}/manifest.json")
+    print(f"Frontend PWA Manifest: HTTP {res_manifest.status_code}")
+    assert res_manifest.status_code == 200
+    res_sw = client.get(f"{FRONTEND_BASE}/sw.js")
+    print(f"Frontend Service Worker: HTTP {res_sw.status_code}")
+    assert res_sw.status_code == 200
+    results["frontend_pwa"] = "PASS"
 
     print("\n" + "=" * 60)
     print("2. VERIFYING REFERENCE DATA (MANDIS & CROPS)")
     print("=" * 60)
 
-    # 2.1 Mandis via Frontend Proxy
-    res = client.get(f"{FRONTEND_BASE}/api/v1/mandis")
-    print(f"Mandis (Proxied): HTTP {res.status_code}")
+    # 2.1 Mandis API
+    res = client.get(f"{BACKEND_BASE}/api/v1/mandis")
+    print(f"Mandis API: HTTP {res.status_code}")
     assert res.status_code == 200
     mandis = res.json()
     print(f" -> Mandis found: {len(mandis)}: {[m['name'] for m in mandis]}")
     assert len(mandis) >= 2
     results["mandis"] = "PASS"
 
-    # 2.2 Crops via Frontend Proxy
-    res = client.get(f"{FRONTEND_BASE}/api/v1/crops")
-    print(f"Crops (Proxied): HTTP {res.status_code}")
+    # 2.2 Crops API
+    res = client.get(f"{BACKEND_BASE}/api/v1/crops")
+    print(f"Crops API: HTTP {res.status_code}")
     assert res.status_code == 200
     crops = res.json()
     print(f" -> Crops found: {len(crops)}: {[c['crop_name'] for c in crops]}")
