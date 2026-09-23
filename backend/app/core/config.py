@@ -1,9 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Any, Union
+from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator
-import json
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
@@ -48,22 +47,9 @@ class Settings(BaseSettings):
     MANDIQ_MOISTURE_DECAY_K: float = Field(default=0.8)
 
     # CORS
-    CORS_ORIGINS: Union[List[str], str] = Field(
+    CORS_ORIGINS: List[str] = Field(
         default=["http://localhost:5173", "http://localhost:3000"]
     )
-
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: Any) -> List[str]:
-        if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("[") and v.endswith("]"):
-                try:
-                    return json.loads(v)
-                except Exception:
-                    pass
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
 
     @field_validator("DATABASE_URL")
     @classmethod

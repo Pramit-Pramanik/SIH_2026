@@ -158,8 +158,7 @@ async function runShowcaseVerification() {
 
       // Security check in HMAC module: verify no raw secret keys displayed
       const modalText = await page.evaluate(() => document.body.textContent || '');
-      const forbiddenKey = ['MANDIQ', 'SECRET', 'HMAC', 'KEY', '2026'].join('_');
-      if (modalText.includes(forbiddenKey) || modalText.includes('SUPERVISOR_SECRET_OVERRIDE_TOKEN')) {
+      if (modalText.includes('MANDIQ_SECRET_HMAC_KEY_2026') || modalText.includes('SUPERVISOR_SECRET_OVERRIDE_TOKEN')) {
         failures.push('Security Violation: Raw secret key detected in visible DOM text!');
       } else {
         console.log('  [OK] Zero secrets or raw HMAC keys exposed in Algorithm Center.');

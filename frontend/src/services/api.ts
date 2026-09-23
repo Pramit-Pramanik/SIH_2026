@@ -82,14 +82,6 @@ export interface BookingResponse {
   farmer_cumulative_booked_qt: number;
   farmer_remaining_ceiling_qt: number;
 }
-export const API_BASE_URL: string = (
-  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || ''
-).replace(/\/+$/, '');
-
-export function apiUrl(path: string): string {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  return API_BASE_URL ? `${API_BASE_URL}${cleanPath}` : cleanPath;
-}
 
 export function getAuthHeaders(): Record<string, string> {
   const token = localStorage.getItem('mandiq_token');
