@@ -82,12 +82,13 @@ export interface BookingResponse {
   farmer_cumulative_booked_qt: number;
   farmer_remaining_ceiling_qt: number;
 }
-export const API_BASE_URL: string = (
+const rawApiBase = (
   (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || ''
-).replace(/\/+$/, '');
+);
+export const API_BASE_URL: string = rawApiBase.replace(/\s+/g, '').replace(/\/+$/, '');
 
 export function apiUrl(path: string): string {
-  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  const cleanPath = path.trim().startsWith('/') ? path.trim() : `/${path.trim()}`;
   return API_BASE_URL ? `${API_BASE_URL}${cleanPath}` : cleanPath;
 }
 
