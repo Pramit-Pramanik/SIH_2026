@@ -18,3 +18,5 @@ python-dotenv>=1.0.1,<2.0.0
 # Mixed-Integer Linear Programming (MILP/BILP) Solver for Truck Appointment System (TAS) (Algorithm 6)
 # Uses scipy.optimize.milp with embedded HiGHS solver (in-process C++, cross-platform, Python 3.12+ compatible)
 scipy>=1.11.0,<2.0.0
+setuptools>=69.0.0
+wheel>=0.42.0

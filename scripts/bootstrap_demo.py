@@ -22,7 +22,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, pool
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from alembic.migration import MigrationContext
@@ -76,7 +76,7 @@ def verify_alembic_at_head() -> Tuple[bool, str]:
         script = ScriptDirectory.from_config(cfg)
         head_rev = script.get_current_head()
 
-        engine = create_engine(settings.DATABASE_URL)
+        engine = create_engine(settings.DATABASE_URL, poolclass=pool.NullPool)
         try:
             with engine.connect() as conn:
                 ctx = MigrationContext.configure(conn)
@@ -106,7 +106,7 @@ def verify_schema_exists() -> Tuple[bool, str, List[str]]:
     Verifies that all required canonical schema tables exist in the database.
     """
     settings = get_settings()
-    engine = create_engine(settings.DATABASE_URL)
+    engine = create_engine(settings.DATABASE_URL, poolclass=pool.NullPool)
     try:
         inspector = inspect(engine)
         existing_tables = set(inspector.get_table_names())
