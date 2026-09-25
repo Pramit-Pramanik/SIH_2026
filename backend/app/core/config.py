@@ -11,7 +11,9 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 def _resolve_sqlite_url(database_url: str) -> str:
     """Normalize PostgreSQL URLs and resolve relative SQLite database paths against repository root."""
     if database_url.startswith("postgres://"):
-        database_url = "postgresql://" + database_url[len("postgres://"):]
+        database_url = "postgresql+psycopg2://" + database_url[len("postgres://"):]
+    elif database_url.startswith("postgresql://") and not database_url.startswith("postgresql+"):
+        database_url = "postgresql+psycopg2://" + database_url[len("postgresql://"):]
     prefix = "sqlite:///"
     if not database_url.startswith(prefix):
         return database_url
