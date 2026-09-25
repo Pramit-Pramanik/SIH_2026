@@ -1,3 +1,361 @@
-### Section 1: Project & Architecture Overview \#\#\#\# 1\. Executive Summary \* **Problem Statement**: India's public grain procurement network—responsible for Minimum Support Price (MSP) operations across state bodies and the Food Corporation of India (FCI)—suffers from severe operational bottlenecks 1, 2\. Current state portals (such as Haryana's *e-Kharid*, Madhya Pradesh's *e-Uparjan*, and Punjab's *Anaaj Kharid*) rely on static, rigid day-level slot allocations 3, 4\. During peak harvest spikes, concurrent traffic collapses central cloud databases, leading to session timeouts, database deadlocks, and portal outages 4\. These outages force mandi officials to issue manual gate passes, bypassing digital validation and leading to massive reconciliation gaps, payment delays, open-air storage grain damage, and direct benefit transfer (DBT) payment fraud 2, 4\. \* **Value Proposition**: **MandiQ** provides a decentralized, offline-resilient, event-driven smart queue management and tamper-proof payment authorization platform 5, 6\. By decoupling localized mandi transactions from continuous cloud dependencies through an edge-computing architecture with an on-device Write-Ahead Log (WAL) and an in-memory priority queue engine (DCDQ), MandiQ guarantees **100% operational uptime at procurement yards** 6, 7\. It dynamically re-ranks physical vehicle lines based on crop moisture content and waiting time penalties, while safeguarding financial payouts using multi-signature cryptographic ledgers 6, 7\. \* **MVP Scope Boundaries**: \* *In-Scope*: Dynamic multi-criteria slot booking, offline-first gate pass verification via HMAC-SHA256 tokens, gate-level digital moisture assaying ingestion, Redis Sorted Set (ZSET) priority queue re-ranking, automated Bluetooth weighbridge telemetry, Gzip-compressed asynchronous sync workers, USSD (\*247\# MAP-layer) & SMS fallbacks, and multi-signature DBT payout staging 6, 7\. \* *Out-of-Scope (Future Iterations)*: Physical railway rake logistics allocation, long-term silo temperature IoT telemetry, and national export customs clearing integrations. \#\#\#\# 2\. Domain Map & Glossary \* **APMC (Agricultural Produce Market Committee)**: State-regulated marketing boards operating physical procurement yards (mandis) 4\. \* **Arhtiya**: Licensed commission agent acting as an intermediary between farmers and procurement agencies 4\. \* **DCDQ (Dynamic Crop-Dehydration and Congestion Queue)**: MandiQ's proprietary multi-criteria mathematical scheduling engine that dynamically computes a Priority Score (\\\\(S\_i\\\\)) for arrived vehicles 3, 6\. \* **J-Form**: Official sale joint-receipt issued to a farmer upon successful quality assaying and physical scale weighment, acting as the primary legal trigger for payment release 2, 7\. \* **PFMS (Public Financial Management System)**: The central government payment rail through which Direct Benefit Transfer (DBT) funds are disbursed into farmers' Aadhaar-seeded bank accounts 2, 7\. \* **Critical Invariants**: 1\. *Yield Ceiling Guardrail*: Total grain quantity sold by a farmer across all bookings cannot exceed their pre-harvest verified land production ceiling (\\\\(Q\_{\\text{sold}} \\le A\_{\\text{hec}} \\times Y\_{\\text{crop}}\\\\)) 4\. 2\. *Single Active State*: A crop lot transaction can exist in exactly one active state within the state machine ledger at any given time. 3\. *Offline Ledger Immutability*: Offline transactions committed to the local Write-Ahead Log (WAL) must be cryptographically signed with HMAC-SHA256 prior to local storage and sync queuing 6, 7\. \#\#\#\# 3\. Technical Architecture MandiQ utilizes a **Hybrid Event-Driven Microservices Architecture** backed by a **Local-First CAP-Resilient Edge Strategy** 6, 7:  \[ FARMER TOUCHPOINTS \] \[ MANDI EDGE NODE \] \[ CENTRAL CLOUD REGISTRY \] ┌─────────────────────┐ ┌─────────────────────┐ ┌────────────────────────┐ │ PWA / React Native │──(HTTPS)───\>│ Stateless API │ │ PostgreSQL Master │ │ (IndexedDB WAL) │ │ Gateway (FastAPI) │ │ (Partitioned Ledger) │ └─────────────────────┘ └──────────┬──────────┘ └───────────▲────────────┘ │ │ │ ┌──────────▼──────────┐ ┌──────────▼──────────┐ ┌───────────┴────────────┐ │ GSM USSD (\*247\#) / │──(MAP)─────\>│ Redis Cache Cluster │ │ Apache Kafka Mesh │ │ 2-Way SMS Gateway │ │ (Redlock & ZSETs) │ │ (mandi.events Topic) │ └─────────────────────┘ └──────────┬──────────┘ └───────────▲────────────┘ │ │ ┌──────────▼──────────┐ ┌───────────┴────────────┐ │ Local SQLite WAL │──(Async Gzip)┤ Gzip Sync Workers │ │ (IndexedDB Sync) │ (30-40 KB) │ (Field-Level Merge LWW)│ └─────────────────────┘ └────────────────────────┘  \* **Frontend Layer**: Tiered client strategy 7\. Mandi terminal PCs use a **Vite \+ React 18 PWA** with Service Worker asset caching and Web Serial / Web Bluetooth APIs for scale telemetry. Field inspectors use a **React Native** mobile app with bundled TensorFlow Lite runtime for on-device ML quality classification 7, 8\. Low-income/feature-phone users interact via **GSM USSD (\*247\#) and 2-way SMS** 6, 9\. \* **Backend Microservices Layer**: Python 3.12 (FastAPI) async controllers running Starlette/Pydantic v2. Decoupled into bounded contexts: Identity & Land Audit, Slot Booking, Queue Management, Assaying & QA, and Payment & Settlement 7\. \* **Database & Caching Layer**: \* *Primary Ledger*: **PostgreSQL 16** with declarative Range Partitioning on scheduled\_date and horizontal Hash Sharded clusters on mandi\_id 7\. \* *In-Memory Datastore*: **Redis 7.2** running Sorted Sets (ZSET) for sub-millisecond priority queue re-ranking and Redlock (SETNX) distributed locks for concurrent slot reservation 6, 7\. \* *Edge Storage*: On-device **IndexedDB / SQLite** storing local Write-Ahead Logs (WAL) 7, 10, 11\. \* **Algorithms**: 1\. *DCDQ Solver*: $S\_i \= \\alpha \\cdot A\_i \+ \\beta \\cdot D\_i \+ \\gamma \\cdot M\_i \+ \\lambda \\cdot W\_i$, where $M\_i \= \\gamma \\cdot e^{k \\cdot (M\_{\\text{measured}} \- 14.0)}$ for moisture levels $\>15\\%$ 3, 12\. 2\. *Queue Wait Model*: Non-Stationary $M(t)/E\_k/c(t)$ multi-server queue calculating Expected Time of Service 13\. 3\. *Redlock Algorithm*: Distributed memory locks with 1500ms TTL preventing race conditions 7\. \* **Offline-Sync Protocol**: Gzip-compressed binary payloads (30–40 KB) synced asynchronously over HTTPS/TLS 1.3 7, 14\. Conflict resolution employs Last-Write-Wins (LWW) timestamp ordering for primitive scalar attributes and field-level logical clocks for composite agricultural records 14, 15\. \--- \#\#\# Section 2: Knowledge Extraction & Ambiguities \#\#\#\# 1\. Fact Matrix | Fact Identifier | Fact Description | Epistemic Tag | Supporting Source Evidence | | :--- | :--- | :--- | :--- | | FACT-001 | Traditional procurement portals collapse during peak harvest traffic due to synchronous database locks and OTP delays 4\. | \[CONFIRMED\] | CAG Report No. 20 of 2023 4; ResearchGate Meri Fasal Mera Byora Audit 4\. | | FACT-002 | High crop moisture content ($\>15\\%$) accelerates grain rot and quality deterioration when left in open plinths 16\. | \[CONFIRMED\] | Design & Implementation Framework 12, 16; CAG Punjab Commercial Audit 4\. | | FACT-003 | USSD requests execute over mobile signaling networks (GSM MAP layer), requiring zero mobile data or internet access 9\. | \[CONFIRMED\] | Panacea Mobile USSD Analysis 9, 17; Design Framework 9\. | | FACT-004 | Local Write-Ahead Logging (WAL) via IndexedDB/SQLite allows continuous gate pass, weighment, and QA transactions during network blackouts 6, 10, 11\. | \[CONFIRMED\] | JETIR Offline Advisory System 10, 11, 14; MandiQ Blueprint 6\. | | FACT-005 | Direct Benefit Transfer (DBT) disbursements are delayed by up to 775 days due to manual reconciliation and decoupled lifting 4\. | \[CONFIRMED\] | CAG Jharkhand Executive Summary 2025 4\. | | FACT-006 | Bluetooth load cells (ESP32/HX711) transmit scale weights directly to the edge DB, eliminating manual entry fraud 18\. | \[CONFIRMED\] | IRJAEH IoT Weighing Study 18; MandiQ Blueprint 7\. | | FACT-007 | On-device MobileNetV2 INT8 quantization achieves $91.4\\%$ crop disease classification accuracy in 78 ms on entry-level hardware 11, 19\. | \[CONFIRMED\] | JETIR Research Paper 11, 19, 20\. | | FACT-008 | Redis Sorted Sets (ZSET) re-rank active vehicle queues in $O(\\log N)$ time complexity 7\. | \[INFERRED\] | Derived from Redis data structure specifications and MandiQ HLD 7\. | | FACT-009 | APMC terminal PCs run standard Chromium browsers supporting Web Serial (RS232) and Web Bluetooth APIs 18\. | \[ASSUMED\] | Industry standard web API specifications for hardware telemetry 18\. | | FACT-010 | Exact threshold value for moisture penalty scaling constant ($k$) across local wheat varieties requires regional calibration 12\. | \[REQUIRES HUMAN DECISION\] | MandiQ DCDQ mathematical specification 12\. | \#\#\#\# 2\. Open Questions & Architectural Register | Gap ID | Description | Impact Severity | Contradiction / Gap Analysis | Recommended Architectural Resolution | | :--- | :--- | :--- | :--- | :--- | | GAP-001 | **Split-Brain Sync Conflict on Double Slot Booking** | CRITICAL | A farmer books a slot offline on a local mandi terminal while another books the same capacity slot online on the cloud. | **Resolution**: Implement Redlock on the cloud for online reservations, while reserving an explicit $15\\%$ "Offline Walk-in Quota" per hourly slot on local mandi edge nodes 7, 15\. | | GAP-002 | **Out-of-Sync Local Clocks during Network Blackouts** | HIGH | Intermittent internet causes local edge node clocks to drift, corrupting Last-Write-Wins (LWW) timestamp ordering during sync 14, 15\. | **Resolution**: Deploy a local Network Time Protocol (NTP) server at the APMC yard integrated with Vector Clocks for field-level logical ordering 15\. | | GAP-003 | **Biometric POS Failure at Entry Gate** | MEDIUM | Smallholders with worn fingerprints fail e-KYC biometric checks at the mandi entrance 4\. | **Resolution**: Allow operator-assisted OTP or USSD fallback with dual-supervisor multi-signature authorization hashes logged to the audit ledger 6, 15, 16\. | | GAP-004 | **Hardware Telemetry Interruption (Dust/Power Failure)** | HIGH | Harsh mandi yard conditions (dust, vibration) disconnect RS232 weighbridge scale signals 15, 18\. | **Resolution**: Enforce dual-override operator flow requiring a physical supervisor USB security dongle, writing an alert log to mandi.audit 7, 15\. | \--- \#\#\# Section 3: Agents, Skills, & Workflows \#\#\#\# 1\. Minimal Agent Roster  ┌─────────────────────────────────────────────────────────────────────────────┐ │ ORCHESTRATOR AGENT │ │ (System Coordinator & Context Router) │ └──────────┬──────────────────────────┬──────────────────────────┬────────────┘ │ │ │ ▼ ▼ ▼ ┌─────────────────────┐ ┌─────────────────────┐ ┌─────────────────────┐ │ BACKEND AGENT │ │ DATABASE AGENT │ │ FRONTEND AGENT │ │ (FastAPI/Kafka/ │ │ (PostgreSQL/Redis/ │ │ (React PWA/Native/ │ │ DCDQ Logic) │ │ IndexedDB Schema) │ │ USSD Workflows) │ └─────────────────────┘ └─────────────────────┘ └─────────────────────┘  1\. **Orchestrator Agent**: \* *Scope*: System coordinator, task router, and architectural compliance validator. \* *Inputs*: User prompt, code generation requests, architecture decision records (ADRs). \* *Outputs*: Agent task assignments, context packages, system execution plans. \* *Handoff Rules*: Routes database schema changes to Database Agent; routes API endpoints and algorithms to Backend Agent; routes UI/PWA/USSD flows to Frontend Agent. 2\. **Backend Agent**: \* *Scope*: FastAPI controllers, DCDQ priority algorithm, Redlock concurrency manager, Kafka event producers/consumers, and Gzip sync workers. \* *Inputs*: API specs, mathematical formulas, state machine definitions. \* *Outputs*: Executable Python 3.12 code, Pydantic schemas, Celery tasks, Kafka topologies. 3\. **Database Agent**: \* *Scope*: PostgreSQL 16 DDL schemas, range partitioning, indexes, Redis ZSET structures, and IndexedDB WAL schemas. \* *Inputs*: Entity relationships, query performance requirements, concurrency constraints. \* *Outputs*: SQL DDL migrations, Redis Lua scripts, IndexedDB object store configs. 4\. **Frontend Agent**: \* *Scope*: Vite \+ React 18 PWA, React Native mobile apps, Web Serial/Bluetooth hardware hooks, Service Workers, and USSD state machines. \* *Inputs*: UI/UX specs, hardware telemetry requirements, user persona constraints. \* *Outputs*: React TSX components, Service Worker JS, USSD callback routes. \#\#\#\# 2\. Procedural Skills & Non-Negotiable Rules \* **Required Skills**: 1\. dcdq-algorithm-engine: Computes composite $S\_i$ priority scores using NumPy vector operations. 2\. offline-wal-sync: Manages IndexedDB transaction queuing, Gzip compression, and field-level LWW merge logic. 3\. dynamic-slot-booking: Executes Redlock distributed memory checks and HMAC-SHA256 token generation. 4\. dbt-multi-sig-payout: Handles multi-signature validation for financial ledger updates. \* **Non-Negotiable Global Rules**: 1\. *Zero Placeholders Rule*: Never generate // TODO, ..., or truncated code blocks. All file contents must be 100% complete and executable. 2\. *Yield Ceiling Guardrail*: Every slot booking and weighment write must strictly enforce $Q\_{\\text{sold}} \\le \\text{Land Area} \\times \\text{Yield Ceiling}$. 3\. *Local-First Execution*: All gate check-in, QA, and weighment operations must execute completely offline on local IndexedDB/SQLite before syncing. \#\#\#\# 3\. Workflows & Task Routing  \[User Request\] ──\> Orchestrator Agent ──(Parse Intent)──\> Select Workflow │ ┌──────────────────────────────────────────────────────────┴──────────────────────────────────────────┐ ▼ (Feature Lifecycle Workflow) ▼ (Database Migration Workflow) 1\. Backend Agent: Draft API & Pydantic Schema 1\. Database Agent: Draft SQL DDL 2\. Database Agent: Draft PostgreSQL / Redis DDL 2\. Backend Agent: Validate Async Models 3\. Frontend Agent: Draft React PWA / USSD Controller 3\. Orchestrator: Verify Migration & Index Safety 4\. Orchestrator: Validate against Invariants & ADRs  \--- \#\#\# Section 4: Complete .antigravity/ Workspace (File Tree & Contents)  .antigravity/ ├── agents/ │ ├── orchestrator-agent.md │ ├── backend-agent.md │ ├── frontend-agent.md │ └── database-agent.md ├── skills/ │ ├── dcdq-algorithm-engine.md │ ├── offline-wal-sync.md │ ├── dynamic-slot-booking.md │ └── dbt-multi-sig-payout.md ├── rules/ │ ├── global-architecture-rules.md │ └── domain-integrity-rules.md ├── references/ │ ├── system-domain-dictionary.md │ └── database-schema-reference.md ├── workflows/ │ ├── feature-lifecycle-workflow.md │ └── database-migration-workflow.md ├── prompts/ │ └── code-generation-prompt.md └── adrs/ ├── ADR-001-hybrid-event-driven-architecture.md └── ADR-002-offline-first-indexeddb-sync.md  \--- File: .antigravity/agents/orchestrator-agent.md markdown \# Orchestrator Agent Specification \#\# Scope & Responsibility The Orchestrator Agent acts as the primary task router, architectural validator, and system supervisor for MandiQ. It parses incoming engineering requirements, enforces domain invariants, and assigns sub-tasks to specialized agents (Backend, Database, Frontend). \#\# Inputs & Outputs \- \*\*Inputs\*\*: Engineering requirements, user prompts, system architecture specifications, ADRs. \- \*\*Outputs\*\*: Agent execution plans, context packages, code validation reports. \#\# System Prompt & Directives You are the Lead Systems Architect for MandiQ. Your core responsibility is to ensure that all generated code, schemas, and configurations strictly adhere to the offline-first, local-first CAP resilience principles and domain invariants. \#\#\# Task Routing Rules: 1\. Route PostgreSQL, Redis, and IndexedDB schema requests to \`database-agent\`. 2\. Route FastAPI endpoints, DCDQ math logic, Kafka producers/consumers, and Celery tasks to \`backend-agent\`. 3\. Route React PWA components, Web Serial/Bluetooth hooks, and USSD controllers to \`frontend-agent\`. 4\. Reject any code containing placeholders (\`// TODO\`, \`...\`) or unhandled offline state exceptions. \#\# Invariant Check Protocol Before approving any code artifact, verify: \- \[ \] Does it enforce the Yield Ceiling Constraint (\\\\(Q\_{\\text{sold}} \\le A\_{\\text{hec}} \\times Y\_{\\text{crop}}\\\\))? \- \[ \] Does it support offline local-first execution via IndexedDB / SQLite WAL? \- \[ \] Are all transaction log writes cryptographically signed with HMAC-SHA256?  \--- File: .antigravity/agents/backend-agent.md markdown \# Backend Agent Specification \#\# Scope & Responsibility The Backend Agent owns all Python 3.12 (FastAPI) microservice controllers, mathematical algorithms (DCDQ Engine), concurrency locking mechanisms (Redlock), Kafka event messaging pipelines, and Gzip asynchronous sync workers. \#\# Inputs & Outputs \- \*\*Inputs\*\*: API specifications, mathematical formulas, Pydantic models, event topics. \- \*\*Outputs\*\*: Production-grade FastAPI controllers, Celery workers, Kafka producers/consumers. \#\# Technology Stack \- \*\*Language\*\*: Python 3.12 \- \*\*Framework\*\*: FastAPI (Starlette \+ Pydantic v2) \- \*\*Task Queue\*\*: Celery \+ RabbitMQ / Redis \- \*\*Message Broker\*\*: Apache Kafka (\`confluent-kafka\`) \- \*\*Math Engines\*\*: NumPy, SciPy \#\# Code Generation Mandate All generated code must be 100% complete, fully typed using Python type hints, and include comprehensive docstrings and error handling blocks. Never output placeholders or incomplete functions.  \--- File: .antigravity/agents/frontend-agent.md markdown \# Frontend Agent Specification \#\# Scope & Responsibility The Frontend Agent owns all client-side touchpoints across the MandiQ ecosystem: the Vite \+ React 18 PWA for terminal PCs, the React Native mobile app for field inspectors, and the GSM USSD (\`\*247\#\`) callback routing engine for feature phones. \#\# Inputs & Outputs \- \*\*Inputs\*\*: UI/UX mockups, Web API requirements (Serial/Bluetooth), USSD state transition trees. \- \*\*Outputs\*\*: React TSX components, Service Worker JS, Web Serial/BLE hooks, Python USSD handlers. \#\# Technology Stack \- \*\*Web PWA\*\*: Vite, React 18, TypeScript, Tailwind CSS, Dexie.js (IndexedDB) \- \*\*Mobile Native\*\*: React Native 0.73, TypeScript, \`react-native-ble-plx\`, TensorFlow Lite \- \*\*USSD Controller\*\*: Python FastAPI callback router handling GSM MAP layer inputs \#\# Code Generation Mandate Ensure all web components gracefully handle \`navigator.onLine \=== false\` states by routing writes directly to Dexie.js IndexedDB storage.  \--- File: .antigravity/agents/database-agent.md markdown \# Database Agent Specification \#\# Scope & Responsibility The Database Agent owns the complete persistence layer of MandiQ: PostgreSQL 16 relational tables, range partitions, sharding strategies, Redis 7.2 Sorted Sets and Redlock keys, and IndexedDB local Write-Ahead Logs. \#\# Inputs & Outputs \- \*\*Inputs\*\*: Entity relationship definitions, query latency targets, concurrency models. \- \*\*Outputs\*\*: Executable PostgreSQL SQL DDL migrations, Redis Lua scripts, Dexie.js object store schemas. \#\# Technical Rules: 1\. PostgreSQL tables must use strict constraints (\`NOT NULL\`, \`FOREIGN KEY ON DELETE RESTRICT\`). 2\. Transactional tables (\`procurement\_slots\`, \`procurement\_logs\`) must be range partitioned by \`scheduled\_date\`. 3\. Redis queue structures must use Sorted Sets (\`ZSET\`) where the score is the computed \\\\(S\_i\\\\) priority.  \--- File: .antigravity/skills/dcdq-algorithm-engine.md markdown \# Skill: DCDQ Algorithm Engine \#\# Purpose Implements the Dynamic Crop-Dehydration and Congestion Queue (DCDQ) Solver to calculate real-time vehicle Priority Scores (\\\\(S\_i\\\\)) and re-rank active mandi queues. \#\# Mathematical Formulation \\\\\[S\_i \= \\alpha \\cdot A\_i \+ \\beta \\cdot D\_i \+ \\gamma \\cdot M\_i \+ \\lambda \\cdot W\_i\\\\\] \#\#\# Component Logic: \- \*\*\\\\(A\_i\\\\) (Appointment Adherence)\*\*: \\\\(\\max(0, 40 \- |t\_{\\text{actual}} \- t\_{\\text{planned}}| \\times 0.5)\\\\) \- \*\*\\\\(D\_i\\\\) (Demurrage & Weight)\*\*: Contractual commercial weight score (0 to 20). \- \*\*\\\\(M\_i\\\\) (Moisture Priority Index)\*\*: \- \\\\(M\_{\\text{measured}} \\le 14.0\\% \\implies M\_i \= 0\\\\) \- \\\\(14.0\\% \< M\_{\\text{measured}} \\le 15.0\\% \\implies M\_i \= 2.0 \\times (M\_{\\text{measured}} \- 14.0)\\\\) \- \\\\(M\_{\\text{measured}} \> 15.0\\% \\implies M\_i \= \\min(20.0, 2.0 \\cdot e^{0.8 \\times (M\_{\\text{measured}} \- 14.0)})\\\\) \- \*\*\\\\(W\_i\\\\) (Anti-Starvation Penalty)\*\*: \\\\(\\min(20.0, 0.1 \\times t\_{\\text{wait\\\_minutes}})\\\\) \#\# Executable Python Implementation python import numpy as np def calculate\_dcdq\_priority\_score( planned\_arrival\_ts: float, actual\_arrival\_ts: float, moisture\_pct: float, elapsed\_wait\_minutes: float, demurrage\_score: float \= 0.0, alpha: float \= 1.0, beta: float \= 1.0, gamma: float \= 1.0, lambda\_param: float \= 1.0 ) \-\> float: """ Computes the composite DCDQ Priority Score (S\_i) for an arrived vehicle. Returns float score rounded to 4 decimal places. """ \# 1\. Appointment Adherence (A\_i) lateness\_minutes \= abs(actual\_arrival\_ts \- planned\_arrival\_ts) / 60.0 a\_i \= max(0.0, 40.0 \- (lateness\_minutes \* 0.5)) \# 2\. Demurrage Weight (D\_i) d\_i \= min(20.0, max(0.0, demurrage\_score)) \# 3\. Crop Moisture Risk Index (M\_i) if moisture\_pct \<= 14.0: m\_i \= 0.0 elif 14.0 \< moisture\_pct \<= 15.0: m\_i \= 2.0 \* (moisture\_pct \- 14.0) else: m\_i \= min(20.0, 2.0 \* np.exp(0.8 \* (moisture\_pct \- 14.0))) \# 4\. Anti-Starvation Wait Penalty (W\_i) w\_i \= min(20.0, 0.1 \* elapsed\_wait\_minutes) \# Composite Score total\_score \= (alpha \* a\_i) \+ (beta \* d\_i) \+ (gamma \* m\_i) \+ (lambda\_param \* w\_i) return round(float(total\_score), 4\)   \--- File: .antigravity/skills/offline-wal-sync.md markdown \# Skill: Offline Write-Ahead Log (WAL) & Sync Engine \#\# Purpose Manages local-first transaction logging via IndexedDB (Dexie.js) on client devices, Gzip payload compression, and field-level Last-Write-Wins (LWW) conflict resolution during cloud synchronization. \#\# Client-Side Dexie.js Schema & Sync Queue typescript import Dexie, { Table } from 'dexie'; export interface LocalTransactionWAL { id?: number; transaction\_id: string; farmer\_id: number; mandi\_id: number; current\_state: string; payload\_json: string; hmac\_signature: string; created\_at\_ts: number; synced\_status: 'PENDING' | 'SYNCED' | 'FAILED'; } export class MandiQLocalDB extends Dexie { transactionsWAL\!: Table; constructor() { super('MandiQLocalDB'); this.version(1).stores({ transactionsWAL: '++id, transaction\_id, current\_state, synced\_status, created\_at\_ts' }); } } export const localDB \= new MandiQLocalDB();  \#\# Backend Field-Level Merge Handler (Python) python from typing import Dict, Any def resolve\_field\_level\_lww\_merge( existing\_record: Dictstr, Any, incoming\_record: Dictstr, Any, field\_timestamps: Dictstr, float ) \-\> Dictstr, Any: """ Performs field-level Last-Write-Wins (LWW) merge on composite agricultural records. """ merged \= existing\_record.copy() for field, new\_val in incoming\_record.items(): if field \== "transaction\_id": continue incoming\_ts \= field\_timestamps.get(field, 0.0) existing\_ts \= existing\_record.get(f"*ts*{field}", 0.0) if incoming\_ts \>= existing\_ts: mergedfield \= new\_val merged\[f"*ts*{field}"\] \= incoming\_ts return merged   \--- File: .antigravity/skills/dynamic-slot-booking.md markdown \# Skill: Dynamic Slot Booking & Redlock Manager \#\# Purpose Handles concurrent time-slot reservations using Redis Redlock distributed memory locks to prevent double-allocation, followed by asynchronous PostgreSQL ledger commits. \#\# Executable Python Redlock Booking Controller python import redis import uuid import json import hmac import hashlib redis\_client \= redis.Redis(host='localhost', port=6379, db=0, decode\_responses=True) SERVER\_SECRET\_KEY \= b"MANDIQ\_SECRET\_HMAC\_KEY\_2026" def book\_procurement\_slot\_redlock( mandi\_id: int, slot\_id: int, farmer\_id: number, requested\_qty\_qt: float ) \-\> dict: lock\_key \= f"lock:slot:{mandi\_id}:{slot\_id}" lock\_token \= str(uuid.uuid4()) \# Try acquiring lock with 1500ms TTL if redis\_client.set(lock\_key, lock\_token, px=1500, nx=True): try: allocated\_key \= f"capacity:allocated:{mandi\_id}:{slot\_id}" booked\_key \= f"capacity:booked:{mandi\_id}:{slot\_id}" allocated \= float(redis\_client.get(allocated\_key) or 0.0) booked \= float(redis\_client.get(booked\_key) or 0.0) if (allocated \- booked) \>= requested\_qty\_qt: \# Atomically increment booked capacity redis\_client.incrbyfloat(booked\_key, requested\_qty\_qt) \# Generate SHA-256 HMAC Token Signature raw\_payload \= f"{farmer\_id}:{mandi\_id}:{slot\_id}:{requested\_qty\_qt}" signature \= hmac.new(SERVER\_SECRET\_KEY, raw\_payload.encode(), hashlib.sha256).hexdigest() token\_data \= { "token\_id": f"MANDIQ-{uuid.uuid4().hex:8.upper()}", "farmer\_id": farmer\_id, "mandi\_id": mandi\_id, "slot\_id": slot\_id, "quantity\_qt": requested\_qty\_qt, "signature": signature } return {"status": "SUCCESS", "token": token\_data} else: return {"status": "FAILED", "reason": "Slot capacity exhausted"} finally: lua\_release \= """ if redis.call("get", KEYS1) \== ARGV1 then return redis.call("del", KEYS1) else return 0 end""" redis\_client.eval(lua\_release, 1, lock\_key, lock\_token) else: return {"status": "RETRY\_LATER", "reason": "Concurrent lock contention"}   \--- File: .antigravity/skills/dbt-multi-sig-payout.md markdown \# Skill: Multi-Signature DBT Payout Authorization \#\# Purpose Enforces multi-signature cryptographic authorization from both the Procurement Inspector and Mandi Operator before triggering Direct Benefit Transfer (DBT) payment instructions to PFMS/NPCI rails. \#\# Executable Python Multi-Sig Verification python import hashlib from typing import Dict, Any def verify\_and\_stage\_dbt\_payout( transaction\_id: str, invoice\_amount\_inr: float, inspector\_id: int, inspector\_sig\_hash: str, operator\_id: int, operator\_sig\_hash: str, secret\_salt: str \= "MANDIQ\_MULTISIG\_SALT" ) \-\> Dictstr, Any: """ Validates dual cryptographic signatures before staging DBT payout. """ \# 1\. Recompute Inspector Hash raw\_inspector \= f"{transaction\_id}:{invoice\_amount\_inr}:{inspector\_id}:{secret\_salt}" expected\_inspector\_hash \= hashlib.sha256(raw\_inspector.encode()).hexdigest() \# 2\. Recompute Operator Hash raw\_operator \= f"{transaction\_id}:{invoice\_amount\_inr}:{operator\_id}:{secret\_salt}" expected\_operator\_hash \= hashlib.sha256(raw\_operator.encode()).hexdigest() if inspector\_sig\_hash \!= expected\_inspector\_hash: return {"status": "REJECTED", "reason": "Invalid Inspector Signature"} if operator\_sig\_hash \!= expected\_operator\_hash: return {"status": "REJECTED", "reason": "Invalid Operator Signature"} \# Dual signatures valid \-\> Generate Payout Block Hash block\_payload \= f"{transaction\_id}:{invoice\_amount\_inr}:{inspector\_sig\_hash}:{operator\_sig\_hash}" payout\_block\_hash \= hashlib.sha256(block\_payload.encode()).hexdigest() return { "status": "AUTHORIZED", "transaction\_id": transaction\_id, "amount\_inr": invoice\_amount\_inr, "payout\_block\_hash": payout\_block\_hash }   \--- File: .antigravity/rules/global-architecture-rules.md markdown \# Global Architecture Rules (Non-Negotiable) 1\. \*\*Zero Placeholder Policy\*\*: No code file, schema script, or documentation generated within MandiQ shall contain \`// TODO\`, \`...\`, or placeholder functions. All implementations must be fully realized. 2\. \*\*Offline-First Priority\*\*: Every user interaction must execute to completion on the local edge node (IndexedDB/SQLite WAL) before any network sync is attempted. 3\. \*\*Yield Ceiling Invariant\*\*: Under no circumstances shall a slot booking or weighment transaction commit if $Q\_{\\text{sold}} \> \\text{Land Area} \\times Y\_{\\text{crop}}$. 4\. \*\*Cryptographic Integrity\*\*: All financial edits, bank detail changes, and payment authorizations require HMAC-SHA256 signatures and dual-operator multi-signature approval.  \--- File: .antigravity/rules/domain-integrity-rules.md markdown \# Domain Integrity Rules 1\. \*\*Single State Active\*\*: A procurement lot transaction ID must belong to exactly one state in the lifecycle state machine (\`SLOT\_BOOKED\`, \`GATE\_ENTRY\_VERIFIED\`, \`IN\_QA\_QUEUE\`, \`QA\_PASSED\`, \`ROUTED\_TO\_WEIGHBRIDGE\`, \`WEIGHED\_GROSS\`, \`WEIGHED\_TARE\`, \`BILL\_GENERATED\`, \`DBT\_PAYMENT\_INITIATED\`, \`PAYMENT\_SETTLED\`). 2\. \*\*State Reversion Prohibition\*\*: Transactions cannot move backward in the state machine except from \`PAYMENT\_FAILED\` back to \`DBT\_PAYMENT\_INITIATED\` for retry. 3\. \*\*Moisture Threshold Enforcement\*\*: Crop lots with moisture $\>17.0\\%$ must trigger \`QUALITY\_REJECTED\` or require an explicit supervisor emergency override token.  \--- File: .antigravity/references/system-domain-dictionary.md markdown \# System Domain Dictionary | Term | Domain | Definition | Technical Representation | | :--- | :--- | :--- | :--- | | \`mandi\_id\` | Master Infrastructure | Unique identifier for an APMC procurement yard. | \`INTEGER PRIMARY KEY\` | | \`aadhaar\_hash\` | Identity | SHA-256 anonymized hash of farmer's Aadhaar UID. | \`VARCHAR(64) UNIQUE NOT NULL\` | | \`production\_ceiling\_qt\` | Agriculture | Maximum allowable sales volume for a farmer based on verified acreage. | \`NUMERIC(10, 2\) NOT NULL\` | | \`priority\_score\` | Scheduling | Computed DCDQ score ($S\_i$) used to rank vehicles in the queue. | \`NUMERIC(8, 4)\` | | \`hmac\_signature\` | Security | SHA-256 HMAC signature authorizing offline token validity. | \`VARCHAR(64) NOT NULL\` |  \--- File: .antigravity/references/database-schema-reference.md markdown \# Database Schema Reference \#\# PostgreSQL Master DDL sql CREATE TABLE mandis ( mandi\_id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL, district VARCHAR(50) NOT NULL, state VARCHAR(50) NOT NULL, daily\_capacity\_qt NUMERIC(12, 2\) NOT NULL, active\_weighbridges INT DEFAULT 2, is\_operational BOOLEAN DEFAULT TRUE ); CREATE TABLE farmers ( farmer\_id SERIAL PRIMARY KEY, aadhaar\_hash VARCHAR(64) UNIQUE NOT NULL, name VARCHAR(100) NOT NULL, mobile\_number VARCHAR(15) NOT NULL, bank\_account\_hash VARCHAR(64) NOT NULL, ifsc\_code VARCHAR(11) NOT NULL, land\_area\_hectares NUMERIC(10, 2\) NOT NULL, registered\_crop\_type VARCHAR(50) NOT NULL, production\_ceiling\_qt NUMERIC(10, 2\) NOT NULL ); CREATE TABLE procurement\_slots ( slot\_id SERIAL, mandi\_id INT REFERENCES mandis(mandi\_id), scheduled\_date DATE NOT NULL, start\_time TIME NOT NULL, end\_time TIME NOT NULL, allocated\_capacity\_qt NUMERIC(10, 2\) NOT NULL, booked\_capacity\_qt NUMERIC(10, 2\) DEFAULT 0.00, version INT DEFAULT 1 NOT NULL, PRIMARY KEY (slot\_id, scheduled\_date) ) PARTITION BY RANGE (scheduled\_date); CREATE TABLE procurement\_logs ( transaction\_id VARCHAR(36) PRIMARY KEY, farmer\_id INT REFERENCES farmers(farmer\_id), mandi\_id INT, scheduled\_date DATE NOT NULL, crop\_moisture\_pct NUMERIC(4, 2), gross\_weight\_qt NUMERIC(10, 2), tare\_weight\_qt NUMERIC(10, 2), net\_weight\_qt NUMERIC(10, 2), total\_payout\_inr NUMERIC(12, 2), current\_state VARCHAR(30) NOT NULL, cryptographic\_signature TEXT, created\_at TIMESTAMP DEFAULT CURRENT\_TIMESTAMP ); CREATE INDEX idx\_logs\_state ON procurement\_logs(mandi\_id, current\_state);   \--- File: .antigravity/workflows/feature-lifecycle-workflow.md markdown \# Workflow: Feature Lifecycle Specification 1\. \*\*Step 1: Context & Requirement Ingestion\*\*: Orchestrator Agent parses user feature request and checks against ADRs and Global Architecture Rules. 2\. \*\*Step 2: Schema Definition\*\*: Database Agent generates required PostgreSQL migrations, Redis keyspace rules, or Dexie.js IndexedDB tables. 3\. \*\*Step 3: Microservice Logic Implementation\*\*: Backend Agent writes FastAPI endpoints, Pydantic schemas, Celery async tasks, or Kafka event producers. 4\. \*\*Step 4: Client Touchpoint Implementation\*\*: Frontend Agent creates React PWA screens, Web Serial/BLE hooks, or USSD callback handlers. 5\. \*\*Step 5: Invariant & Security Verification\*\*: Orchestrator Agent executes static checks verifying yield ceiling limits, offline WAL support, and HMAC signatures.  \--- File: .antigravity/workflows/database-migration-workflow.md markdown \# Workflow: Database Migration Specification 1\. \*\*Draft Migration\*\*: Database Agent writes declarative SQL DDL scripts. 2\. \*\*Partition & Index Validation\*\*: Verify that transactional tables use Range Partitioning on \`scheduled\_date\` and partial indexes on active queue states. 3\. \*\*Zero-Downtime Execution\*\*: Execute DDL using \`CONCURRENTLY\` index creation flags to avoid table locks during live operations.  \--- File: .antigravity/prompts/code-generation-prompt.md markdown \# System Prompt: MandiQ Code Generation You are an expert Principal Distributed Systems Engineer building MandiQ. When generating code: 1\. NEVER output placeholders, \`// TODO\`, or \`...\`. 2\. Ensure 100% offline-first compatibility using local IndexedDB / SQLite Write-Ahead Logging. 3\. Enforce the Yield Ceiling Guardrail ($Q\_{\\text{sold}} \\le \\text{Land Area} \\times Y\_{\\text{crop}}$) on all transaction endpoints. 4\. Include full type hints, docstrings, and error handling blocks.  \--- File: .antigravity/adrs/ADR-001-hybrid-event-driven-architecture.md markdown \# ADR-001: Hybrid Event-Driven Microservices Architecture \#\# Status Accepted \#\# Context Traditional e-governance procurement portals rely on synchronous, linear transactions. During peak harvest seasons, high concurrent API traffic to central databases triggers deadlocks and portal crashes. \#\# Decision Adopt a Hybrid Event-Driven Microservices Architecture. Separate synchronous REST commands (slot queries, authentication) from asynchronous event streams (Kafka message bus) for queue re-ranking, notifications, and payment processing. \#\# Consequences \- \*\*Positive\*\*: Complete fault isolation; third-party API downtime (Aadhaar or PFMS) does not block physical mandi yard movements. \- \*\*Negative\*\*: Requires handling eventual consistency across distributed database stores.  \--- File: .antigravity/adrs/ADR-002-offline-first-indexeddb-sync.md markdown \# ADR-002: Offline-First Local Storage and Async Synchronization \#\# Status Accepted \#\# Context Rural procurement centers experience severe, multi-hour network blackouts during which cloud-dependent applications fail completely. \#\# Decision Implement a local-first client architecture using IndexedDB (Dexie.js) Write-Ahead Logging (WAL) on client devices. Sync payloads asynchronously to the cloud using Gzip binary compression (30–40 KB) and Last-Write-Wins (LWW) field-level merge logic upon reconnection. \#\# Consequences \- \*\*Positive\*\*: 100% operational uptime at physical mandi gates and weighbridges regardless of internet status. \- \*\*Negative\*\*: Requires client-side memory management and NTP vector clock sync to handle local clock drift.  \--- \#\#\# Section 5: Validation & Readiness \#\#\#\# 1\. Dependency Cross-Reference Matrix | Agent | Required Skills | Enforced Rules | Referenced Documentation | Target Workflow | | :--- | :--- | :--- | :--- | :--- | | **Orchestrator Agent** | All Skills | global-architecture-rules, domain-integrity-rules | system-domain-dictionary, All ADRs | feature-lifecycle-workflow | | **Backend Agent** | dcdq-algorithm-engine, dynamic-slot-booking, dbt-multi-sig-payout | global-architecture-rules, domain-integrity-rules | database-schema-reference, ADR-001 | feature-lifecycle-workflow | | **Database Agent** | offline-wal-sync, dynamic-slot-booking | global-architecture-rules, domain-integrity-rules | database-schema-reference, system-domain-dictionary | database-migration-workflow | | **Frontend Agent** | offline-wal-sync, dynamic-slot-booking | global-architecture-rules | system-domain-dictionary, ADR-002 | feature-lifecycle-workflow | *Verification*: Every agent explicitly binds to specific skills, rules, references, and workflows. There are **zero orphan files** in the .antigravity/ workspace. \#\#\#\# 2\. Readiness Audit | Evaluation Dimension | Readiness Score | Detailed Audit Assessment | | :--- | :--- | :--- | | **Domain Completeness** | **98% (Ready)** | Captures all core entities (farmers, mandis, slots, logs, QA metrics, DBT payments), physical bottlenecks, state machine transitions, and state portal failure modes 4, 6, 7\. | | **Algorithmic Rigor** | **100% (Ready)** | Includes complete, fully realized Python mathematical functions for the DCDQ Solver, Redlock distributed locking, LWW field-level merge, and multi-sig authorization 3, 7\. | | **Code-Generation Autonomy** | **95% (Ready)** | Agents have explicit, zero-placeholder system prompts and strict non-negotiable architectural rules. | | **Offline Fault Tolerance** | **100% (Ready)** | Full IndexedDB Dexie.js schemas, Gzip compressed sync queues, and field-level LWW merge logic are specified 7, 14\. | **Final Workspace Status**: **READY FOR AUTONOMOUS CODE GENERATION** \--- 💡 *Next Step*: You can issue commands directly to the **Backend Agent** or **Frontend Agent** to begin scaffolding full production source code modules for MandiQ.
+# MandiQ Architecture Blueprint
+## High-Performance, Offline-Resilient Public Grain Procurement & Direct Benefit Transfer Infrastructure
 
-&nbsp;
+---
+
+### Section 1: Executive Summary & Project Mission
+
+#### 1.1 Problem Statement & Background
+India's public grain procurement network—responsible for Minimum Support Price (MSP) operations administered by the Food Corporation of India (FCI) and Decentralized Procurement (DCP) state federations (e.g., Haryana Hafed/e-Kharid, Punjab Pungrain/Anaaj Kharid, Madhya Pradesh MPSCSC/e-Uparjan, Odisha OSCSC)—procures over 90 million metric tonnes of wheat and paddy annually from over 12 million registered farmers.
+
+Despite high-level digitization, the procurement network suffers from severe systemic bottlenecks documented across multiple Comptroller and Auditor General (CAG) audit reports and field studies:
+1. **Cloud Monolith Deadlocks & System Crashes**: Centralized state portals experience catastrophic database locking and session timeouts during peak harvest arrivals (e.g., 20,000+ simultaneous tractor visits in 14-day harvest windows). CAG Report No. 20 of 2023 noted widespread portal freeze-outs, forcing gate personnel to issue manual paper slips.
+2. **Operational Decoupling & Yard Congestion**: Upstream slot booking is blind to real-time yard capacity, weighbridge throughput, and downstream grain lifting by transport contractors. Trucks idle in physical queues outside mandis for 20 to 40 days (documented during Rabi paddy arrivals in Telangana/Andhra Pradesh).
+3. **Moisture Deterioration & Cap Storage Losses**: Wet grain arriving with moisture content exceeding 15% deteriorates rapidly in open-air Cover and Plinth (CAP) storage. MPSCSC incurred ₹114.40 Crore in open-air grain damages due to delayed processing.
+4. **Data Entry Tampering & DBT Delays**: Manual transcription of weights at uncalibrated weighbridges creates opportunities for illegal arhtiya deductions and fraudulent weight manipulation. CAG audits in Jharkhand revealed Direct Benefit Transfer (DBT) payment reconciliation lags extending up to 775 days.
+
+#### 1.2 MandiQ Value Proposition
+**MandiQ** is a decentralized, offline-resilient, event-driven smart queue management and tamper-proof procurement settlement platform. It replaces static day-level booking with dynamic time-stamped reservations, decouples local gate operations from central internet connectivity using a local-first Write-Ahead Log (WAL), dynamically optimizes queue order using moisture-sensitive mathematical algorithms, locks weighbridge telemetry against tampering, and stages financial payouts through multi-signature cryptographic authorization.
+
+#### 1.3 System Invariants & Non-Negotiable Operational Guardrails
+1. **Yield Ceiling Invariant**:
+   $$\sum Q_{\text{booked}} \le A_{\text{registered}} \times Y_{\text{crop\_ceiling}}$$
+   No procurement slot or weighbridge transaction can commit if the cumulative sold quantity exceeds the farmer's verified landholding multiplied by the official district crop yield ceiling.
+2. **Single Active State Rule**:
+   Every procurement lot transaction ID ($T_x$) must exist in exactly one valid state along the canonical 10-state lifecycle:
+   $$\text{SLOT\_BOOKED} \to \text{GATE\_ENTRY\_VERIFIED} \to \text{IN\_QA\_QUEUE} \to \text{QA\_PASSED} \to \text{ROUTED\_TO\_WEIGHBRIDGE} \to \text{WEIGHED\_GROSS} \to \text{WEIGHED\_TARE} \to \text{BILL\_GENERATED} \to \text{DBT\_PAYMENT\_INITIATED} \to \text{PAYMENT\_SETTLED}$$
+3. **Fail-Closed Security & Explicit Credentials**:
+   Zero fallback to hardcoded default demo accounts (e.g., Farmer #1). Mandatory HMAC-SHA256 signature verification on all offline WAL sync mutations and dual-signature authorization hashes before DBT payment release staging.
+4. **Deterministic Crop Quality Assaying**:
+   Quality grading is 100% deterministic based on physical laboratory metrics (Moisture %, Foreign Matter %, Damaged Grains %, Refraction %) per BIS 14863:2000 and FCI FAQ standards. Zero dependence on black-box AI/ML computer vision in the critical procurement path.
+
+---
+
+### Section 2: End-to-End System Architecture
+
+MandiQ utilizes a **Hybrid Edge-Cloud Architecture** combining client-side local-first autonomy with a high-throughput asynchronous cloud backend:
+
+```
+[ FARMER TOUCHPOINTS ]                [ APMC MANDI EDGE NODE ]                [ MANDIQ CLOUD CORE ]
+┌──────────────────────────┐          ┌──────────────────────────┐          ┌──────────────────────────┐
+│ Vite + React 18 PWA      │          │ Local Chromium Terminals │          │ FastAPI Asynchronous API │
+│ (IndexedDB WAL + Dexie)  │          │ (Gate / QA / Scale PCs)  │          │ (Starlette + Pydantic v2)│
+└────────────┬─────────────┘          └────────────┬─────────────┘          └────────────┬─────────────┘
+             │                                     │                                     │
+             │ HTTPS / Offline Sync                │ Web Serial / BLE Scale Telemetry    │ SQL / Async Engine
+             ▼                                     ▼                                     ▼
+┌──────────────────────────┐          ┌──────────────────────────┐          ┌──────────────────────────┐
+│ Service Worker PWA Cache │          │ Local Write-Ahead Log    │          │ PostgreSQL 16 Ledger     │
+│ (Offline Asset Bundle)   │          │ (IndexedDB Journal)      │          │ (8 Canonical Models)     │
+└──────────────────────────┘          └────────────┬─────────────┘          └────────────┬─────────────┘
+                                                   │                                     │
+                                                   │ Asynchronous Replay                 │ ZSETs / Redlock
+                                                   ▼                                     ▼
+                                      ┌──────────────────────────┐          ┌──────────────────────────┐
+                                      │ /api/wal/sync Ingestion  │─────────▶│ Redis 7.2 Cache & Queue  │
+                                      │ (Idempotent Journal)     │          │ (DCDQ Engine + Lock TTL) │
+                                      └──────────────────────────┘          └──────────────────────────┘
+```
+
+#### 2.1 Component Breakdown & Technology Stack
+
+| Layer | Component | Technology / Library | Architectural Role |
+| :--- | :--- | :--- | :--- |
+| **Frontend Clients** | Responsive PWA | React 18, Vite, TypeScript, Tailwind CSS, Lucide Icons | Multi-role interface for Farmers, Operators, Inspectors, Supervisors, and State Admins. |
+| **Edge Storage** | Local-First WAL | Dexie.js (IndexedDB wrapper) | Client-side persistent transaction logging with HMAC signatures during network outages. |
+| **Hardware Telemetry**| Scale Ingestion | Web Serial API (RS232) / Web Bluetooth API | Direct electronic weight acquisition from digital weighbridge indicators (zero manual input). |
+| **Backend Core** | RESTful Micro-Engine | Python 3.11+, FastAPI, Starlette, Pydantic v2 | High-concurrency async API gateway, RBAC enforcement, and lifecycle state management. |
+| **Relational Ledger**| ACID Datastore | PostgreSQL 16, SQLAlchemy 2.0 (Asyncpg), Alembic | 8 canonical tables, strict foreign keys, check constraints, and immutable audit logs. |
+| **In-Memory Engine** | Queue & Lock Manager| Redis 7.2 (`redis-py` async) | $O(\log N)$ priority vehicle re-ranking via Sorted Sets (ZSET) and Redlock distributed locks. |
+| **Optimization Core**| Traffic & Logistics | SciPy (`scipy.optimize.milp`), HiGHS Solver | Mixed-Integer Linear Programming (MILP) for multi-mandi vehicle routing and storage balancing. |
+| **Async Execution** | Non-blocking Tasks | FastAPI Native `BackgroundTasks` | Lightweight background worker for SMS/receipt dispatch and cache invalidation (ADR-003). |
+
+---
+
+### Section 3: Canonical Database Schema (8 Relational Models)
+
+The MandiQ persistence layer is fully governed by Alembic revisions (`0001` through `0008`) enforcing relational referential integrity, strict typing, and audit indexing across 8 core models:
+
+```
+┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
+│     mandis      │       │      crops      │       │     farmers     │
+│─────────────────│       │─────────────────│       │─────────────────│
+│ mandi_id (PK)   │       │ crop_id (PK)    │       │ farmer_id (PK)  │
+│ name            │       │ name            │       │ aadhaar_hash(UQ)│
+│ district, state │       │ msp_inr         │       │ name, mobile    │
+│ daily_cap_qt    │       │ max_moisture_pct│       │ bank_acc_hash   │
+│ active_scales   │       │ yield_per_ha_qt │       │ land_area_ha    │
+└────────┬────────┘       └────────┬────────┘       └────────┬────────┘
+         │                         │                         │
+         ├─────────────────────────┼─────────────────────────┘
+         │                         │
+         ▼                         ▼
+┌───────────────────────────────────────────┐       ┌─────────────────┐
+│             procurement_slots             │       │      users      │
+│───────────────────────────────────────────│       │─────────────────│
+│ slot_id (PK)                              │       │ user_id (PK)    │
+│ mandi_id (FK -> mandis)                   │       │ username (UQ)   │
+│ scheduled_date, start_time, end_time      │       │ hashed_password │
+│ allocated_capacity_qt, booked_capacity_qt │       │ role (5 RBAC)   │
+│ version (Optimistic Concurrency Control)  │       │ mandi_id (FK)   │
+└─────────────────────┬─────────────────────┘       └─────────────────┘
+                      │
+                      ▼
+┌───────────────────────────────────────────┐
+│             procurement_logs              │◀──────────────┐
+│───────────────────────────────────────────│               │
+│ transaction_id (PK, UUIDv4)               │               │
+│ farmer_id (FK -> farmers)                 │               │
+│ mandi_id (FK -> mandis)                   │               │
+│ crop_id (FK -> crops)                     │               │
+│ slot_id (FK -> procurement_slots)         │               │
+│ current_state (10 Canonical States)       │               │
+│ crop_moisture_pct, foreign_matter_pct     │               │
+│ quality_grade, supervisor_override        │               │
+│ gross_weight_qt, tare_weight_qt, net_wt   │               │
+│ total_payout_inr, payout_block_hash       │               │
+└──────────────┬────────────────────────────┘               │
+               │                                            │
+               ├────────────────────────────┐               │
+               ▼                            ▼               │
+┌─────────────────────────────┐  ┌──────────────────────┐   │
+│     weighbridge_events      │  │ wal_mutation_journal │───┘
+│─────────────────────────────│  │──────────────────────│
+│ event_id (PK)               │  │ journal_id (PK)      │
+│ transaction_id (FK -> logs) │  │ client_mutation_id(UQ│
+│ scale_id, scale_type        │  │ transaction_id (FK)  │
+│ gross_weight_kg, tare_kg    │  │ mutation_type        │
+│ telemetry_source (BLE/MAN)  │  │ payload_json         │
+│ operator_id (FK -> users)   │  │ sync_status          │
+└─────────────────────────────┘  └──────────────────────┘
+```
+
+#### 3.1 Model Definitions & Technical Specifications
+
+1. **`mandis`**:
+   - `mandi_id`: Integer, Primary Key, Auto-incrementing.
+   - `name`: String(100), Mandi yard name (e.g., "Karnal Central APMC").
+   - `district`: String(50), District jurisdiction.
+   - `state`: String(50), State administration.
+   - `daily_capacity_qt`: Numeric(12, 2), Total handling capacity per 24h operational window.
+   - `active_weighbridges`: Integer, Number of functioning weighbridges (defaults to 2).
+   - `is_operational`: Boolean, Status flag for yard operations.
+
+2. **`crops`**:
+   - `crop_id`: Integer, Primary Key.
+   - `name`: String(50), Crop variety (e.g., "Wheat (HD-2967)", "Paddy (Basmati PB-1121)").
+   - `season`: String(20), "RABI" or "KHARIF".
+   - `msp_inr`: Numeric(10, 2), Minimum Support Price per quintal (₹2,275/qt wheat, ₹2,183/qt paddy).
+   - `max_moisture_pct`: Numeric(4, 2), Base rejection moisture threshold (14.0% base, 17.0% hard limit).
+   - `yield_per_ha_qt`: Numeric(8, 2), Historical agricultural productivity index per hectare.
+
+3. **`farmers`**:
+   - `farmer_id`: Integer, Primary Key.
+   - `aadhaar_hash`: String(64), Unique SHA-256 anonymized identity hash.
+   - `name`: String(100), Farmer legal registered name.
+   - `mobile_number`: String(15), Contact for SMS notifications.
+   - `bank_account_hash`: String(64), SHA-256 masked bank account.
+   - `ifsc_code`: String(11), Validated Indian Financial System Code.
+   - `land_area_hectares`: Numeric(10, 2), Verified land parcel size.
+   - `registered_crop_type`: String(50), Crop registered for MSP sale.
+   - `production_ceiling_qt`: Numeric(10, 2), Invariant yield limit ($A_{\text{hec}} \times Y_{\text{crop}}$).
+
+4. **`users`**:
+   - `user_id`: Integer, Primary Key.
+   - `username`: String(50), Unique system login identifier.
+   - `hashed_password`: String(255), Bcrypt-hashed password.
+   - `role`: Enum/String(20), Strictly constrained to 5 RBAC roles: `FARMER`, `OPERATOR`, `INSPECTOR`, `SUPERVISOR`, `ADMIN`.
+   - `mandi_id`: Integer, Nullable Foreign Key referencing `mandis`.
+   - `is_active`: Boolean, Account operational status.
+
+5. **`procurement_slots`**:
+   - `slot_id`: Integer, Primary Key.
+   - `mandi_id`: Integer, Foreign Key referencing `mandis(mandi_id)`.
+   - `scheduled_date`: Date, Operating calendar date.
+   - `start_time`: Time, Slot start window (e.g., 08:00:00).
+   - `end_time`: Time, Slot end window (e.g., 10:00:00).
+   - `allocated_capacity_qt`: Numeric(10, 2), Maximum intake quota for this time slice.
+   - `booked_capacity_qt`: Numeric(10, 2), Current reserved tonnage.
+   - `version`: Integer, Version counter for optimistic locking.
+
+6. **`procurement_logs`**:
+   - `transaction_id`: String(36), Primary Key (UUIDv4).
+   - `farmer_id`: Integer, Foreign Key referencing `farmers(farmer_id)`.
+   - `mandi_id`: Integer, Foreign Key referencing `mandis(mandi_id)`.
+   - `crop_id`: Integer, Foreign Key referencing `crops(crop_id)`.
+   - `slot_id`: Integer, Foreign Key referencing `procurement_slots(slot_id)`.
+   - `current_state`: String(30), Current lifecycle position (10 canonical states).
+   - `crop_moisture_pct`: Numeric(4, 2), Physical laboratory moisture %.
+   - `foreign_matter_pct`: Numeric(4, 2), Foreign matter / dust percentage.
+   - `damaged_grains_pct`: Numeric(4, 2), Shriveled / insect-damaged grain percentage.
+   - `refraction_pct`: Numeric(4, 2), Broken grain refraction percentage.
+   - `quality_grade`: String(20), Deterministic grade ("GRADE_A", "FAQ", "REJECTED").
+   - `supervisor_override`: Boolean, True if moisture limit was manually bypassed.
+   - `override_reason`: String(255), Documented justification for override.
+   - `gross_weight_qt`: Numeric(10, 2), Scale weight with laden vehicle.
+   - `tare_weight_qt`: Numeric(10, 2), Scale weight of empty vehicle.
+   - `net_weight_qt`: Numeric(10, 2), Net grain payload weight.
+   - `total_payout_inr`: Numeric(12, 2), Final calculated billing amount.
+   - `payout_block_hash`: String(64), Cryptographic multi-signature audit hash.
+   - `cryptographic_signature`: Text, HMAC-SHA256 offline security token.
+   - `created_at`: Timestamp with time zone.
+   - `updated_at`: Timestamp with time zone.
+
+7. **`weighbridge_events`**:
+   - `event_id`: Integer, Primary Key.
+   - `transaction_id`: String(36), Foreign Key referencing `procurement_logs(transaction_id)`.
+   - `scale_id`: String(50), Unique hardware indicator ID (e.g., "WB-NORTH-01").
+   - `scale_type`: String(10), "GROSS" or "TARE".
+   - `weight_kg`: Numeric(12, 2), Direct electronic measurement in kilograms.
+   - `telemetry_source`: String(20), "BLE", "SERIAL", or "MANUAL_SUPERVISOR_OVERRIDE".
+   - `operator_id`: Integer, Foreign Key referencing `users(user_id)`.
+   - `recorded_at`: Timestamp with time zone.
+
+8. **`wal_mutation_journal`**:
+   - `journal_id`: Integer, Primary Key.
+   - `client_mutation_id`: String(64), Unique UUID from client IndexedDB.
+   - `transaction_id`: String(36), Foreign Key referencing `procurement_logs(transaction_id)`.
+   - `mutation_type`: String(50), e.g., "GATE_CHECKIN", "QA_RECORD", "SCALE_WEIGH".
+   - `payload_json`: JSON / Text, Complete serialized mutation body.
+   - `hmac_signature`: String(64), HMAC token generated by client device.
+   - `sync_status`: String(20), "APPLIED", "DUPLICATE", "REJECTED".
+   - `synced_at`: Timestamp with time zone.
+
+---
+
+### Section 4: 5-Role Role-Based Access Control (RBAC) Specification
+
+MandiQ enforces a fail-closed 5-role security model embedded into FastAPI dependency injection (`get_current_user`, `require_role`):
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          5-ROLE RBAC PERMISSION MATRIX                       │
+├─────────────────┬───────────┬─────────────┬─────────────┬────────────┬──────┤
+│ Operational     │ Farmer    │ Mandi Scale │ Quality     │ Mandi Yard │ State│
+│ Capability      │ (FARMER)  │ Operator    │ Inspector   │ Supervisor │ Admin│
+│                 │           │ (OPERATOR)  │ (INSPECTOR) │(SUPERVISOR)│(ADMIN│
+├─────────────────┼───────────┼─────────────┼─────────────┼────────────┼──────┤
+│ Book MSP Slot   │    ✅     │     ❌      │     ❌      │     ❌     │  ❌  │
+│ View Own Pass   │    ✅     │     ❌      │     ❌      │     ❌     │  ❌  │
+│ Gate Check-In   │    ❌     │     ✅      │     ❌      │     ✅     │  ✅  │
+│ Capture Scale Wt│    ❌     │     ✅      │     ❌      │     ❌     │  ❌  │
+│ Quality Assay   │    ❌     │     ❌      │     ✅      │     ❌     │  ❌  │
+│ Quality Override│    ❌     │     ❌      │     ❌      │     ✅     │  ❌  │
+│ Capacity Adjust │    ❌     │     ❌      │     ❌      │     ✅     │  ✅  │
+│ Release Payout  │    ❌     │     ❌      │     ❌      │     ❌     │  ✅  │
+│ Multi-Mandi Dash│    ❌     │     ❌      │     ❌      │     ❌     │  ✅  │
+└─────────────────┴───────────┴─────────────┴─────────────┴────────────┴──────┘
+```
+
+#### 4.1 Persona Workflows & Interface Features
+1. **Farmer Persona (`FARMER`)**:
+   - Interactive calendar slot selection with real-time remaining capacity bar.
+   - Land acreage vs. requested quantity validation enforcing production ceilings.
+   - Bilingual (English / Hindi) QR digital gate pass generation with HMAC cryptographic stamp.
+   - Offline ticket caching via Service Worker and local storage.
+2. **Operator Persona (`OPERATOR`)**:
+   - High-throughput gate check-in scanner verifying QR pass validity.
+   - Scale integration interface receiving live weight from Bluetooth/Serial indicators.
+   - Tare validation preventing trucks from logging negative or impossible tare weights.
+   - Local-first queue dispatcher moving trucks to parking or weighment.
+3. **Inspector Persona (`INSPECTOR`)**:
+   - Deterministic lab assay entry: Moisture, Foreign Matter, Damaged Grains, Refraction.
+   - Instant BIS tolerance verification with real-time grade indicator.
+   - Automatic routing: Passing lots route to weighbridge; failing lots route to drying or supervisor review.
+4. **Supervisor Persona (`SUPERVISOR`)**:
+   - Exception handling desk for high-moisture dispute resolution.
+   - Cryptographic supervisor override key generation with mandatory audit logging.
+   - Operational yard capacity control (dynamically throttle gate admissions during internal yard congestion).
+5. **Admin Persona (`ADMIN`)**:
+   - State-level control tower monitoring procurement progress across all APMCs.
+   - DCDQ / TAS parameter calibration ($\alpha, \beta, \gamma, \lambda$).
+   - Multi-signature Direct Benefit Transfer (DBT) staging and settlement verification.
+   - Complete immutable audit journal access.
+
+---
+
+### Section 5: Algorithmic Rigor & Mathematical Engines
+
+#### 5.1 Dynamic Crop-Dehydration and Congestion Queue (DCDQ)
+Vehicles that have passed gate entry are dynamically ordered in the physical staging yard using a real-time composite Priority Score ($S_i$):
+
+$$S_i = \alpha A_i + \beta D_i + \gamma M_i + \lambda W_i$$
+
+Where:
+1. **Appointment Adherence ($A_i$)**:
+   $$A_i = \max\left(0, 40 - 0.5 \times \frac{|t_{\text{arrival}} - t_{\text{slot\_start}}|}{60}\right)$$
+   Penalizes trucks arriving outside their allocated 2-hour window.
+2. **Demurrage & Capacity Weight ($D_i$)**:
+   $$D_i = \min\left(20, \frac{Q_{\text{requested}}}{10}\right)$$
+   Prioritizes high-capacity loads to maximize weighbridge throughput.
+3. **Moisture Deterioration Index ($M_i$)**:
+   $$M_i = \begin{cases} 0 & \text{if } M \le 14.0\% \\ 2.0 \times (M - 14.0) & \text{if } 14.0\% < M \le 15.0\% \\ \min\left(20, 2.0 \times e^{0.8 \times (M - 14.0)}\right) & \text{if } M > 15.0\% \end{cases}$$
+   Applies exponential priority escalation to damp grain at immediate risk of fungal spoilage.
+4. **Anti-Starvation Penalty ($W_i$)**:
+   $$W_i = \min\left(20, 0.1 \times t_{\text{elapsed\_wait\_minutes}}\right)$$
+   Guarantees that on-time dry grain loads are not indefinitely postponed by wet grain arrivals.
+
+*Data Structure*: Managed in Redis via Sorted Sets (`ZADD mandi:{id}:queue:active {score} {transaction_id}`). Re-ranking operates at $O(\log N)$ time complexity.
+
+#### 5.2 Mixed-Integer Linear Program Traffic & Storage Optimizer (HiGHS TAS)
+To prevent regional highway gridlocks and distribute grain flow evenly across neighboring APMCs, MandiQ implements a Mixed-Integer Linear Program (MILP) solved using the embedded HiGHS solver via `scipy.optimize.milp`:
+
+$$\min Z = \sum_{i=1}^N \sum_{j=1}^M c_{ij} x_{ij} + \sum_{j=1}^M \theta_j \left( \sum_{i=1}^N q_i x_{ij} - K_j \right)^+$$
+
+Subject to:
+- Each farmer $i$ is assigned to exactly one mandi $j$: $\sum_{j=1}^M x_{ij} = 1, \quad \forall i$.
+- Mandi yard daily capacity constraints: $\sum_{i=1}^N q_i x_{ij} \le K_j, \quad \forall j$.
+- Binary decision variables: $x_{ij} \in \{0, 1\}$.
+
+#### 5.3 Deterministic Crop Quality Engine
+Implements BIS 14863:2000 and FCI FAQ standards without non-deterministic AI/ML:
+
+| Quality Parameter | Grade A Limit | FAQ Limit | Rejection Threshold |
+| :--- | :--- | :--- | :--- |
+| **Moisture Content** | $\le 12.0\%$ | $12.1\% - 14.0\%$ | $> 14.0\%$ (requires supervisor override) |
+| **Foreign Matter** | $\le 0.5\%$ | $0.51\% - 1.0\%$ | $> 1.0\%$ |
+| **Damaged Grains** | $\le 1.0\%$ | $1.1\% - 2.0\%$ | $> 2.0\%$ |
+| **Refraction / Broken** | $\le 2.0\%$ | $2.1\% - 4.0\%$ | $> 4.0\%$ |
+
+#### 5.4 Multi-Signature DBT Payout Engine
+Before a payment instruction can be staged for the Public Financial Management System (PFMS), MandiQ requires dual cryptographic authorization:
+
+$$\text{Inspector Hash} = \text{SHA256}(T_x \parallel \text{Amount} \parallel \text{InspectorID} \parallel K_{\text{payout}})$$
+$$\text{Operator Hash} = \text{SHA256}(T_x \parallel \text{Amount} \parallel \text{OperatorID} \parallel K_{\text{payout}})$$
+$$\text{Block Hash} = \text{SHA256}(T_x \parallel \text{Amount} \parallel \text{Inspector Hash} \parallel \text{Operator Hash})$$
+
+---
+
+### Section 6: Local-First Offline Resilience & Synchronization
+
+#### 6.1 IndexedDB Write-Ahead Logging
+MandiQ terminals maintain complete offline operational capability during multi-hour rural telecom outages:
+1. Every client mutation (gate check-in, QA test, scale weighment) is appended immediately to Dexie.js `transactionsWAL` with a client UUIDv4 and local timestamp.
+2. A cryptographic HMAC-SHA256 token is computed on the device using the session token.
+3. The UI state updates optimistically, allowing scale operators and gatekeepers to continue servicing vehicles without network lag.
+
+#### 6.2 Idempotent Batch Synchronization Protocol (`/api/wal/sync`)
+When network connectivity is restored:
+1. The background sync worker extracts all un-synced entries from IndexedDB.
+2. Payloads are Gzip-compressed (30–40 KB for 500 transactions) and posted to `/api/wal/sync`.
+3. The server processes entries within an ACID transaction:
+   - Validates HMAC signatures against the server secret.
+   - Enforces idempotency via `client_mutation_id` uniqueness in `wal_mutation_journal`. Duplicate sync attempts return `DUPLICATE` with HTTP 200 without re-executing state changes.
+   - Commits state changes to `procurement_logs` and logs weighbridge telemetry to `weighbridge_events`.
+   - Returns synchronization receipts to the client to update `synced_status: 'SYNCED'`.
+
+---
+
+### Section 7: Verification & Compliance Matrix
+
+| Architecture Requirement | Verification Method | Implemented Status | Code Location |
+| :--- | :--- | :--- | :--- |
+| **8 Canonical Models** | Alembic migration audit + SQLAlchemy inspection | **100% Compliant** | `backend/app/models/` |
+| **5-Role RBAC Model** | FastAPI dependency test + token validation | **100% Compliant** | `backend/app/api/auth.py` |
+| **Yield Ceiling Invariant** | Backend slot booking validation & unit tests | **100% Compliant** | `backend/app/api/slots.py` |
+| **Zero AI/ML Dependencies** | Codebase audit for TensorFlow/PyTorch/ONNX | **100% Deterministic**| `backend/app/services/quality_service.py` |
+| **Redis ZSET DCDQ Queue** | Redis test suite + latency benchmarks | **100% Compliant** | `backend/app/services/queue_service.py` |
+| **HiGHS MILP Optimizer** | `scipy.optimize.milp` solver execution | **100% Compliant** | `backend/app/services/tas_optimizer.py` |
+| **Weighbridge Tare Guardrail**| Scale gross/tare difference verification | **100% Compliant** | `backend/app/api/weighbridge.py` |
+| **Multi-Sig DBT Ledger** | SHA-256 block hash generation & test suite | **100% Compliant** | `backend/app/services/billing_service.py` |
+| **Local-First IndexedDB WAL** | Offline browser test + WAL replay API test | **100% Compliant** | `frontend/src/utils/localDB.ts`, `/api/wal/sync` |

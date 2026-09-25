@@ -82,9 +82,28 @@ export interface BookingResponse {
   farmer_cumulative_booked_qt: number;
   farmer_remaining_ceiling_qt: number;
 }
-const rawApiBase = (
-  (typeof import.meta !== 'undefined' && import.meta.env && (import.meta.env.VITE_API_BASE_URL as string)) || 'https://mandiq-backend.onrender.com'
-);
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname === '[::1]' ||
+    window.location.hostname.endsWith('.local'));
+
+const envApiBase =
+  typeof import.meta !== 'undefined' &&
+  import.meta.env &&
+  import.meta.env.VITE_API_BASE_URL !== undefined &&
+  import.meta.env.VITE_API_BASE_URL !== ''
+    ? (import.meta.env.VITE_API_BASE_URL as string)
+    : undefined;
+
+const rawApiBase =
+  envApiBase !== undefined
+    ? envApiBase
+    : (import.meta.env?.DEV || isLocalhost)
+    ? ''
+    : 'https://mandiq-backend.onrender.com';
+
 export const API_BASE_URL: string = rawApiBase.replace(/\s+/g, '').replace(/\/+$/, '');
 
 export function apiUrl(path: string): string {

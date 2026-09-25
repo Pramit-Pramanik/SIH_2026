@@ -68,64 +68,133 @@ A highly optimized 36-hour hackathon implementation stack designed for local dep
 +----------------------------------------------------------------------------------+
 ```
 
-### A. Frontend (Farmer & Admin UI Workflows)
-*   **Farmer Mobile PWA**: Built using **React + Tailwind CSS**.
-    *   *Workflow 1*: Instant OTP login -> Crop & land area dashboard (populated from land record database) -> One-click dynamic slot reservation.
-    *   *Workflow 2*: Real-time Queue Status Tracker. Shows a visual queue representation, live ETA updates, and active notifications.
-    *   *Workflow 3*: Offline Cryptographic Gate Pass (generates a secure, offline QR code containing verified land and booking details).
-*   **Admin/Mandi Operator Dashboard**: Built with **React-ChartJS-2**.
-    *   *Workflow 1*: Interactive Gate Camera Feed Emulator (clicking "Register Arrival" triggers crop moisture capture and queue calculation).
-    *   *Workflow 2*: Real-Time Yard Monitor. Displays the computed $S_i$ priority list, weighbridge processing times, and average wait-time metrics.
-    *   *Workflow 3*: Digital J-Form/Receipt Generator (direct trigger for payment processing upon weighing completion).
+### A. Frontend (5 Persona UI Workflows)
+*   **Farmer Portal**: Built using **React 18 + Vite + Tailwind CSS**.
+    *   *Workflow 1*: Secure farmer session -> Crop & verified landholding dashboard -> One-click dynamic slot reservation with real-time remaining capacity bar.
+    *   *Workflow 2*: Real-time Queue Status Tracker. Shows live DCDQ priority position, dynamic ETA updates, and station progress.
+    *   *Workflow 3*: Bilingual (EN/HI) Offline Cryptographic Gate Pass with HMAC-SHA256 signature and QR representation.
+*   **Operator Portal**:
+    *   *Workflow 1*: QR Gate Entry Scanner verifying offline HMAC pass tokens and validating arrival appointments.
+    *   *Workflow 2*: Real-Time Yard Monitor & Scale Interface. Captures gross weight and tare weight via Web Serial / BLE telemetry hooks with tare validation guardrails.
+*   **Inspector Portal**:
+    *   *Workflow 1*: Deterministic Lab Assaying Entry (Moisture %, Foreign Matter %, Damaged Grains %, Refraction %).
+    *   *Workflow 2*: Real-time BIS 14863:2000 / FCI FAQ tolerance grading with automated routing (Weighbridge vs. Quality Rejection vs. Supervisor Review).
+*   **Supervisor Portal**:
+    *   *Workflow 1*: Exception resolution and high-moisture override desk with cryptographic audit logging.
+    *   *Workflow 2*: Real-time yard capacity throttling and weighbridge lane management.
+*   **Admin Dashboard**:
+    *   *Workflow 1*: Multi-mandi state overview monitoring throughput, bottlenecks, and active vehicles.
+    *   *Workflow 2*: Multi-signature Direct Benefit Transfer (DBT) payout staging with SHA-256 block hash generation.
+    *   *Workflow 3*: HiGHS TAS logistics optimizer triggering multi-mandi truck re-routing.
 
-### B. Backend & Database Schema
-*   **Tech Stack**: **Python (FastAPI)** for rapid development and high-concurrency async handling; **Redis** for in-memory queue states and real-time waiting list order; **PostgreSQL** for relational mapping.
+### B. Backend & Canonical Database Schema (8 Tables)
+*   **Tech Stack**: **Python 3.11+ (FastAPI)** with Starlette and Pydantic v2; **Redis 7.2** for ZSET priority queue states and Redlock distributed locks; **PostgreSQL 16** managed via **Alembic** migrations (`0001` to `0008`).
 
-#### Minimal SQL Schema:
+#### Production Relational Schema:
 ```sql
--- Core Farmer Entity
-CREATE TABLE farmers (
-    id SERIAL PRIMARY KEY,
-    aadhaar_hash VARCHAR(64) UNIQUE NOT NULL,
+-- 1. APMC Mandi Master
+CREATE TABLE mandis (
+    mandi_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    mobile VARCHAR(15) NOT NULL,
-    bank_acc_hash VARCHAR(64) NOT NULL,
-    land_area_hec NUMERIC(10,2) NOT NULL,
-    crop_type VARCHAR(50) NOT NULL,
-    estimated_yield_qt NUMERIC(10,2) NOT NULL
+    district VARCHAR(50) NOT NULL,
+    state VARCHAR(50) NOT NULL,
+    daily_capacity_qt NUMERIC(12,2) NOT NULL,
+    active_weighbridges INT DEFAULT 2,
+    is_operational BOOLEAN DEFAULT TRUE
 );
 
--- Master Slot Allocations
+-- 2. Crop Master & MSP Registry
+CREATE TABLE crops (
+    crop_id SERIAL PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    season VARCHAR(20) NOT NULL,
+    msp_inr NUMERIC(10,2) NOT NULL,
+    max_moisture_pct NUMERIC(4,2) NOT NULL,
+    yield_per_ha_qt NUMERIC(8,2) NOT NULL
+);
+
+-- 3. Verified Farmer Registry
+CREATE TABLE farmers (
+    farmer_id SERIAL PRIMARY KEY,
+    aadhaar_hash VARCHAR(64) UNIQUE NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    mobile_number VARCHAR(15) NOT NULL,
+    bank_account_hash VARCHAR(64) NOT NULL,
+    ifsc_code VARCHAR(11) NOT NULL,
+    land_area_hectares NUMERIC(10,2) NOT NULL,
+    registered_crop_type VARCHAR(50) NOT NULL,
+    production_ceiling_qt NUMERIC(10,2) NOT NULL
+);
+
+-- 4. User Accounts & 5-Role RBAC
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL, -- 'FARMER', 'OPERATOR', 'INSPECTOR', 'SUPERVISOR', 'ADMIN'
+    mandi_id INT REFERENCES mandis(mandi_id),
+    is_active BOOLEAN DEFAULT TRUE
+);
+
+-- 5. Time-Stamped Procurement Slots
 CREATE TABLE procurement_slots (
-    id SERIAL PRIMARY KEY,
-    center_id INT NOT NULL,
+    slot_id SERIAL PRIMARY KEY,
+    mandi_id INT REFERENCES mandis(mandi_id),
     scheduled_date DATE NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
-    hourly_capacity INT NOT NULL,
-    active_bookings INT DEFAULT 0
+    allocated_capacity_qt NUMERIC(10,2) NOT NULL,
+    booked_capacity_qt NUMERIC(10,2) DEFAULT 0.00,
+    version INT DEFAULT 1 NOT NULL
 );
 
--- Active Bookings & Token Registry
-CREATE TABLE bookings (
-    id SERIAL PRIMARY KEY,
-    farmer_id INT REFERENCES farmers(id),
-    slot_id INT REFERENCES procurement_slots(id),
-    token_signature TEXT NOT NULL, -- SHA-256 hash of (farmer_id + slot_id + timestamp)
-    status VARCHAR(20) DEFAULT 'SCHEDULED', -- 'SCHEDULED', 'ARRIVED', 'PROCESSING', 'COMPLETED'
-    planned_arrival TIMESTAMP NOT NULL,
-    actual_arrival TIMESTAMP
+-- 6. Canonical 10-State Procurement Lifecycle Logs
+CREATE TABLE procurement_logs (
+    transaction_id VARCHAR(36) PRIMARY KEY, -- UUIDv4
+    farmer_id INT REFERENCES farmers(farmer_id),
+    mandi_id INT REFERENCES mandis(mandi_id),
+    crop_id INT REFERENCES crops(crop_id),
+    slot_id INT REFERENCES procurement_slots(slot_id),
+    current_state VARCHAR(30) NOT NULL,
+    crop_moisture_pct NUMERIC(4,2),
+    foreign_matter_pct NUMERIC(4,2),
+    damaged_grains_pct NUMERIC(4,2),
+    refraction_pct NUMERIC(4,2),
+    quality_grade VARCHAR(20),
+    supervisor_override BOOLEAN DEFAULT FALSE,
+    override_reason VARCHAR(255),
+    gross_weight_qt NUMERIC(10,2),
+    tare_weight_qt NUMERIC(10,2),
+    net_weight_qt NUMERIC(10,2),
+    total_payout_inr NUMERIC(12,2),
+    payout_block_hash VARCHAR(64),
+    cryptographic_signature TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- Live Mandi Real-Time Priority Queue
-CREATE TABLE active_mandi_queue (
-    id SERIAL PRIMARY KEY,
-    booking_id INT UNIQUE REFERENCES bookings(id),
-    arrival_time TIMESTAMP NOT NULL,
-    crop_moisture_pct NUMERIC(4,2) NOT NULL,
-    wait_time_minutes INT DEFAULT 0,
-    priority_score NUMERIC(8,4) DEFAULT 0.0,
-    queue_status VARCHAR(20) DEFAULT 'WAITING' -- 'WAITING', 'WEIGHING', 'COMPLETED'
+-- 7. Automated Weighbridge Telemetry Events
+CREATE TABLE weighbridge_events (
+    event_id SERIAL PRIMARY KEY,
+    transaction_id VARCHAR(36) REFERENCES procurement_logs(transaction_id),
+    scale_id VARCHAR(50) NOT NULL,
+    scale_type VARCHAR(10) NOT NULL, -- 'GROSS', 'TARE'
+    weight_kg NUMERIC(12,2) NOT NULL,
+    telemetry_source VARCHAR(20) NOT NULL, -- 'BLE', 'SERIAL', 'MANUAL_SUPERVISOR_OVERRIDE'
+    operator_id INT REFERENCES users(user_id),
+    recorded_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Offline Write-Ahead Log Mutation Journal (Idempotent Sync)
+CREATE TABLE wal_mutation_journal (
+    journal_id SERIAL PRIMARY KEY,
+    client_mutation_id VARCHAR(64) UNIQUE NOT NULL,
+    transaction_id VARCHAR(36) REFERENCES procurement_logs(transaction_id),
+    mutation_type VARCHAR(50) NOT NULL,
+    payload_json TEXT NOT NULL,
+    hmac_signature VARCHAR(64) NOT NULL,
+    sync_status VARCHAR(20) DEFAULT 'PENDING',
+    synced_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
 

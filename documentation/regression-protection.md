@@ -18,18 +18,20 @@ Every implementation decision, code modification, and database column must map d
 > **CRITICAL DISCOVERY-MODE RULE**:
 > All paths in the **Planned/Actual Code Location** column that are labeled `[PLANNED IMPLEMENTATION LOCATION]` represent future target file paths and do NOT yet exist in the greenfield specification repository. Discovery-mode agents must not assume these files already exist.
 
-| REQ-ID | Feature Area | Authoritative Source Document & Section | Planned/Actual Code Location | Target Automated Test | Acceptance Criterion |
-|---|---|---|---|---|---|
-| **REQ-001** | e-KYC & Land Audit | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.C.1 | `backend/routers/mock_gov.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_mock_gov.py::test_ekyc_lookup` `[PLANNED]` | [AC-001](./prototype-acceptance-criteria.md#ac-001-mock-aadhaar-e-kyc--land-record-lookup) |
-| **REQ-002** | Atomic Slot Booking | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.B; [dynamic-slot-booking.md](../.antigravity/skills/dynamic-slot-booking.md) | `backend/routers/slots.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_slots.py::test_concurrent_booking_lock` `[PLANNED]` | [AC-002](./prototype-acceptance-criteria.md#ac-002-dynamic-slot-reservation--concurrency-guardrail-redis-atomic-lock) |
-| **REQ-003** | HMAC Token Signing | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.B; [dynamic-slot-booking.md](../.antigravity/skills/dynamic-slot-booking.md) | `backend/services/crypto.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_crypto.py::test_token_hmac_signing` `[PLANNED]` | [AC-003](./prototype-acceptance-criteria.md#ac-003-offline-validatable-cryptographic-token-generation-hmac-sha256) |
-| **REQ-004** | Fail-Closed Secrets | [final-governance-audit.md](./final-governance-audit.md) §6.6; [agent/constraints.md](../agent/constraints.md) | `backend/core/config.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_crypto.py::test_fail_closed_on_missing_secret` `[PLANNED]` | [AC-004](./prototype-acceptance-criteria.md#ac-004-fail-closed-behavior-on-missing-cryptographic-secrets) |
-| **REQ-005** | Yield Ceiling Guardrail | [MandiQ Architecture Blueprint.md](./MandiQ%20Architecture%20Blueprint.md) §1.2; [global-architecture-rules.md](../.antigravity/rules/global-architecture-rules.md) | `backend/routers/slots.py` & DB constraints `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_invariants.py::test_yield_ceiling_enforcement` `[PLANNED]` | [AC-005](./prototype-acceptance-criteria.md#ac-005-yield-ceiling-invariant-enforcement) |
-| **REQ-006** | DCDQ Priority Scoring | [Mandi Queue Algorithms.md](./Mandi%20Queue%20Algorithms.md) §1; [dcdq-algorithm-engine.md](../.antigravity/skills/dcdq-algorithm-engine.md) | `backend/services/dcdq.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_dcdq.py::test_dcdq_priority_ordering` `[PLANNED]` | [AC-006](./prototype-acceptance-criteria.md#ac-006-dcdq-multi-criteria-priority-re-ranking--ordering-proof) |
-| **REQ-007** | Moisture Rejection Rule | [domain-integrity-rules.md](../.antigravity/rules/domain-integrity-rules.md) §3; [The MandiQ Platform.md](./The%20MandiQ%20Platform.md) §3.3 | `backend/routers/queue.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_queue.py::test_moisture_rejection_override` `[PLANNED]` | [AC-007](./prototype-acceptance-criteria.md#ac-007-quality-rejection-overrides-queue-priority) |
-| **REQ-008** | Offline WAL & Sync | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §2.B; [offline-wal-sync.md](../.antigravity/skills/offline-wal-sync.md) | `frontend/src/db/wal.ts` & `backend/routers/sync.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_sync.py::test_offline_wal_gzip_sync` `[PLANNED]` | [AC-008](./prototype-acceptance-criteria.md#ac-008-offline-write-ahead-logging-wal--gzip-batch-sync) |
-| **REQ-009** | Dual-Signature DBT | [dbt-multi-sig-payout.md](../.antigravity/skills/dbt-multi-sig-payout.md); [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.C.2 | `backend/routers/payout.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_payout.py::test_dual_signature_verification` `[PLANNED]` | [AC-009](./prototype-acceptance-criteria.md#ac-009-dual-signature-dbt-payout-staging-hmac-sha256) |
-| **REQ-010** | Scale Telemetry Simulator| [Mandi Queue Algorithms.md](./Mandi%20Queue%20Algorithms.md) §6; [final-governance-audit.md](./final-governance-audit.md) §2 | `backend/routers/telemetry.py` & `scripts/simulate_scale.py` `[PLANNED IMPLEMENTATION LOCATION]` | `tests/test_telemetry.py::test_scale_reading_lock` `[PLANNED]` | [AC-010](./prototype-acceptance-criteria.md#ac-010-software-weighbridge-telemetry-ingestion-websocket--emulator) |
+| REQ-ID | Feature Area | Authoritative Source Document & Section | Actual Code Location | Automated Test Suite | Acceptance Criterion | Status |
+|---|---|---|---|---|---|---|
+| **REQ-001** | e-KYC & Land Audit | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.C.1 | `backend/app/api/mock_gov.py` | `tests/test_mock_gov.py` | [AC-001](./prototype-acceptance-criteria.md#ac-001-mock-aadhaar-e-kyc--land-record-lookup) | **VERIFIED** |
+| **REQ-002** | Atomic Slot Booking | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.B; [dynamic-slot-booking.md](../.antigravity/skills/dynamic-slot-booking.md) | `backend/app/api/slots.py` | `tests/test_slots.py` | [AC-002](./prototype-acceptance-criteria.md#ac-002-dynamic-slot-reservation--concurrency-guardrail-redis-atomic-lock) | **VERIFIED** |
+| **REQ-003** | HMAC Token Signing | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.B; [dynamic-slot-booking.md](../.antigravity/skills/dynamic-slot-booking.md) | `backend/app/core/security.py` | `tests/test_crypto.py` | [AC-003](./prototype-acceptance-criteria.md#ac-003-offline-validatable-cryptographic-token-generation-hmac-sha256) | **VERIFIED** |
+| **REQ-004** | Fail-Closed Secrets | [final-governance-audit.md](./final-governance-audit.md) §6.6; [agent/constraints.md](../agent/constraints.md) | `backend/app/core/config.py` | `tests/test_crypto.py` | [AC-004](./prototype-acceptance-criteria.md#ac-004-fail-closed-behavior-on-missing-cryptographic-secrets) | **VERIFIED** |
+| **REQ-005** | Yield Ceiling Guardrail | [MandiQ Architecture Blueprint.md](./MandiQ%20Architecture%20Blueprint.md) §1.2; [global-architecture-rules.md](../.antigravity/rules/global-architecture-rules.md) | `backend/app/api/slots.py` | `tests/test_invariants.py` | [AC-005](./prototype-acceptance-criteria.md#ac-005-yield-ceiling-invariant-enforcement) | **VERIFIED** |
+| **REQ-006** | DCDQ Priority Scoring | [Mandi Queue Algorithms.md](./Mandi%20Queue%20Algorithms.md) §1; [dcdq-algorithm-engine.md](../.antigravity/skills/dcdq-algorithm-engine.md) | `backend/app/services/dcdq_service.py` | `tests/test_dcdq.py` | [AC-006](./prototype-acceptance-criteria.md#ac-006-dcdq-multi-criteria-priority-re-ranking--ordering-proof) | **VERIFIED** |
+| **REQ-007** | Moisture Rejection Rule | [domain-integrity-rules.md](../.antigravity/rules/domain-integrity-rules.md) §3; [The MandiQ Platform.md](./The%20MandiQ%20Platform.md) §3.3 | `backend/app/services/quality_service.py` | `tests/test_queue.py` | [AC-007](./prototype-acceptance-criteria.md#ac-007-quality-rejection-overrides-queue-priority) | **VERIFIED** |
+| **REQ-008** | Offline WAL & Sync | [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §2.B; [offline-wal-sync.md](../.antigravity/skills/offline-wal-sync.md) | `frontend/src/utils/localDB.ts`, `backend/app/api/wal_sync.py` | `tests/test_sync.py` | [AC-008](./prototype-acceptance-criteria.md#ac-008-offline-write-ahead-logging-wal--gzip-batch-sync) | **VERIFIED** |
+| **REQ-009** | Dual-Signature DBT | [dbt-multi-sig-payout.md](../.antigravity/skills/dbt-multi-sig-payout.md); [hackathon-mvp-blueprint.md](./hackathon-mvp-blueprint.md) §3.C.2 | `backend/app/services/billing_service.py` | `tests/test_billing.py` | [AC-009](./prototype-acceptance-criteria.md#ac-009-dual-signature-dbt-payout-staging-hmac-sha256) | **VERIFIED** |
+| **REQ-010** | Scale Telemetry & Guard | [Mandi Queue Algorithms.md](./Mandi%20Queue%20Algorithms.md) §6; [final-governance-audit.md](./final-governance-audit.md) §2 | `backend/app/api/weighbridge.py`, `frontend/src/hooks/useScaleTelemetry.ts` | `tests/test_weighbridge.py` | [AC-010](./prototype-acceptance-criteria.md#ac-010-software-weighbridge-telemetry-ingestion-websocket--emulator) | **VERIFIED** |
+| **REQ-011** | 5-Role RBAC Model | [MandiQ Architecture Blueprint.md](./MandiQ%20Architecture%20Blueprint.md) §4 | `backend/app/api/auth.py`, `frontend/src/context/AuthContext.tsx` | `tests/test_auth.py` | [AC-013](./prototype-acceptance-criteria.md#ac-013-5-role-role-based-access-control-rbac--route-protection) | **VERIFIED** |
+| **REQ-012** | HiGHS TAS Optimizer | [Mandi Queue Algorithms.md](./Mandi%20Queue%20Algorithms.md) §2 | `backend/app/services/tas_optimizer.py`, `backend/app/api/tas.py` | `tests/test_tas.py` | [AC-016](./prototype-acceptance-criteria.md#ac-016-mixed-integer-linear-program-traffic--storage-optimizer-highs-tas) | **VERIFIED** |
 
 ---
 
@@ -38,18 +40,18 @@ Before any feature or code change is approved or merged, the agent MUST run the 
 
 ```text
 ======================= MANDIQ PRE-COMMIT REGRESSION GATE =======================
-[ ] 1. Yield ceiling preserved (Q_sold <= production_ceiling_qt enforced atomically)
-[ ] 2. DCDQ ordering preserved (higher S_i strictly yields earlier position via ZREVRANGE)
-[ ] 3. Moisture rejection preserved (>17.0% moisture triggers QUALITY_REJECTED)
-[ ] 4. Offline operation preserved (client commits to IndexedDB WAL when offline)
-[ ] 5. HMAC verification preserved (HMAC-SHA256 used; plain SHA-256 rejected)
-[ ] 6. Fail-closed secrets preserved (raises error if environment keys are missing)
-[ ] 7. Dual-signature DBT preserved (requires both Inspector & Operator hashes)
-[ ] 8. No API contract regression (endpoint routes, verbs, and schemas match specs)
-[ ] 9. No database field naming regression (canonical schema names preserved)
-[ ] 10. No P2 scope leakage (zero Kafka/RabbitMQ/Celery/physical hardware code)
-[ ] 11. Zero placeholder violation (no TODO, FIXME, NotImplementedError in prod code)
-[ ] 12. 100% passing tests (all unit, integration, and security tests pass cleanly)
+[x] 1. Yield ceiling preserved (Q_sold <= production_ceiling_qt enforced atomically)
+[x] 2. DCDQ ordering preserved (higher S_i strictly yields earlier position via ZREVRANGE)
+[x] 3. Moisture rejection preserved (>17.0% moisture triggers QUALITY_REJECTED)
+[x] 4. Offline operation preserved (client commits to IndexedDB WAL when offline)
+[x] 5. HMAC verification preserved (HMAC-SHA256 used; plain SHA-256 rejected)
+[x] 6. Fail-closed secrets preserved (raises error if environment keys are missing)
+[x] 7. Dual-signature DBT preserved (requires both Inspector & Operator hashes)
+[x] 8. No API contract regression (endpoint routes, verbs, and schemas match specs)
+[x] 9. No database field naming regression (canonical schema names preserved)
+[x] 10. No P2 scope leakage (zero Kafka/RabbitMQ/Celery/physical hardware code)
+[x] 11. Zero placeholder violation (no TODO, FIXME, NotImplementedError in prod code)
+[x] 12. 100% passing tests (all unit, integration, and security tests pass cleanly)
 =================================================================================
 ```
 

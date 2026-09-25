@@ -135,3 +135,84 @@
 - **When**: The full test suite and demo services launch.
 - **Then**: All features (booking, DCDQ ranking, offline sync, weighment, DBT staging) execute to completion with 100% passing tests without any unfulfilled connection errors to external message brokers or cloud APIs.
 - **Verification**: Automated test runner executing the complete prototype test suite in an isolated environment containing only the approved dependency baseline.
+
+---
+
+### AC-013: 5-Role Role-Based Access Control (RBAC) & Route Protection
+- **Requirement**: The backend and frontend must enforce strict 5-role RBAC: `FARMER`, `OPERATOR`, `INSPECTOR`, `SUPERVISOR`, and `ADMIN`.
+- **Given**: An authenticated user session with a specific role token.
+- **When**: The user attempts an operation or API call restricted to another role (e.g., `FARMER` attempting `/api/weighbridge/capture` or `OPERATOR` attempting `/api/payout/release`).
+- **Then**: The backend immediately rejects the request with HTTP 403 Forbidden. The frontend renders role-appropriate navigation and views matching the user's role.
+- **Verification**: Integration test suite verifying that cross-role access is denied across all protected endpoint families.
+
+---
+
+### AC-014: MSP Billing & Deterministic Quality Value Deductions
+- **Requirement**: Automated billing must calculate gross MSP value, apply deterministic deductions for sub-optimal moisture and refraction, and compute net farmer payout with multi-signature block hashing.
+- **Given**: A completed weighment with validated net weight ($Q_{\text{net}} = Q_{\text{gross}} - Q_{\text{tare}}$) and recorded lab quality metrics.
+- **When**: The billing service generates the J-Form sale invoice.
+- **Then**: 
+  - Base invoice $= Q_{\text{net}} \times \text{MSP}$.
+  - Quality deduction is applied if moisture or refraction exceeds Grade A standards up to FAQ thresholds.
+  - Final payable amount is calculated, and an immutable SHA-256 payout block hash is generated combining the transaction ID, final amount, inspector signature, and operator signature.
+- **Verification**: `test_billing.py` executing deterministic calculation and multi-sig hash assertion.
+
+---
+
+### AC-015: Weighbridge Tare Validation & Physical Guardrails
+- **Requirement**: The weighbridge system must reject physical scale tampering, vehicle substitution, and invalid tare weights.
+- **Given**: An arrived vehicle with a recorded gross weight ($W_{\text{gross}}$).
+- **When**: The operator records the tare weight ($W_{\text{tare}}$) after grain discharge.
+- **Then**:
+  - $W_{\text{tare}}$ must be strictly less than $W_{\text{gross}}$.
+  - Net weight ($W_{\text{gross}} - W_{\text{tare}}$) must be greater than or equal to the minimum crop payload threshold (e.g., 5.0 quintals).
+  - Tare weight cannot be negative or zero.
+  - Transactions violating these physical guardrails return HTTP 400 with a descriptive validation error and lock the scale record.
+- **Verification**: Unit and API tests submitting invalid, negative, or equal gross/tare values and asserting rejection.
+
+---
+
+### AC-016: Mixed-Integer Linear Program Traffic & Storage Optimizer (HiGHS TAS)
+- **Requirement**: The Traffic & Storage (TAS) optimizer must route vehicle batches across regional mandis to minimize travel cost and prevent yard congestion.
+- **Given**: A batch of $N$ farmer delivery requests and $M$ operational APMC mandis with known daily capacities and transit distance matrices.
+- **When**: The optimizer is invoked via `/api/tas/optimize`.
+- **Then**:
+  - It formulates a Mixed-Integer Linear Program (MILP) solved using the embedded HiGHS solver via `scipy.optimize.milp`.
+  - Binary decision variables assign each farmer to exactly one mandi without exceeding any mandi's daily intake capacity constraint.
+  - The API returns optimal assignments, objective cost, and solver status (`Optimization terminated successfully`).
+- **Verification**: Execution of `tas_optimizer.py` tests with mock multi-mandi matrices asserting feasible binary allocations.
+
+---
+
+### AC-017: Bilingual User Experience & Zero Silent Fallback
+- **Requirement**: Frontend must provide seamless English and Hindi localization and eliminate silent hardcoded fallback accounts.
+- **Given**: A user accessing the PWA in either English or Hindi.
+- **When**: The user navigates through slot booking, queue tracking, gate passes, and weighbridge dashboards.
+- **Then**:
+  - All labels, states, badges, and instructional texts render in the selected language without broken translation keys.
+  - Unauthenticated users are redirected to explicit login; there is strictly zero silent fallback to "Farmer #1" or default demo identities.
+- **Verification**: Frontend test suite (`FarmerPortal.test.tsx`, `AuthContext.test.tsx`) asserting translation coverage and authentication isolation.
+
+---
+
+### AC-018: Canonical Data Bootstrap & Seed Integrity
+- **Requirement**: The database must provide automated bootstrap scripts that populate all 8 canonical tables with realistic APMC data.
+- **Given**: A freshly initialized PostgreSQL or SQLite database with Alembic migrations applied.
+- **When**: `python scripts/bootstrap_canonical.py` or `python scripts/seed_demo_data.py` executes.
+- **Then**:
+  - All 8 tables (`mandis`, `crops`, `farmers`, `users`, `procurement_slots`, `procurement_logs`, `weighbridge_events`, `wal_mutation_journal`) are seeded with valid relational linkages.
+  - At least 5 user accounts corresponding to each RBAC role are created with bcrypt-hashed passwords.
+  - Re-running the script is idempotent and does not produce duplicate key violations.
+- **Verification**: Execution of seed scripts against test database followed by schema and count assertions.
+
+---
+
+### AC-019: Cloud & Production Deployment Readiness
+- **Requirement**: MandiQ must build cleanly and support containerized/cloud deployment with standard environment configurations.
+- **Given**: The complete `frontend/` and `backend/` source directories.
+- **When**: Production build commands execute (`npm run build`, `python -m uvicorn`).
+- **Then**:
+  - The frontend builds into an optimized static bundle with zero TypeScript compilation errors.
+  - The backend starts cleanly with ASGI entrypoints, reading database URLs, Redis URLs, CORS origins, and secret keys from environment variables with fail-closed validation.
+- **Verification**: Clean build run of `npm run build` and successful pre-flight check of backend initialization.
+

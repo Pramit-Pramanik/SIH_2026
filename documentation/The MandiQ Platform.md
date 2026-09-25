@@ -229,7 +229,7 @@ Informal Tenancy Exclusion,"Sharecroppers lack formal land ownership deeds 9, 12
 
   ├── Dynamic Capacity-Aware Slot Booking \[cite: 141\]   ├── Sub-1.2s Scale Data Ingestion Latency \[cite: 74\]
 
-  ├── Local Offline Transaction Logging \[cite: 139\]     ├── 78ms Local ML Quality Classification \[cite: 140\]
+  ├── Local Offline Transaction Logging \[cite: 139\]     ├── \<5ms Deterministic Quality Assaying (BIS 14863)
 
   ├── Direct Hardware BLE/Serial Capture \[cite: 14, 62\]  ├── \<100 KB Gzip Sync Payload Size \[cite: 140\]
 
@@ -244,7 +244,7 @@ Informal Tenancy Exclusion,"Sharecroppers lack formal land ownership deeds 9, 12
 5. *Multi-Channel Zero-Data Access*: Must provide USSD (\*247\#) and 2-way SMS interfaces for low-literacy farmers on feature phones 22, 28, 29\.  
 6. *Multi-Signature Payout Authorization*: Must require dual cryptographic hashes (Inspector \+ Operator) before releasing DBT funds 22\.  
 7. **Non-Functional Requirements**:  
-8. *Performance Latency*: Scale sensor-to-app data logging must complete in **\<1.2 seconds** 53; local ML inference on ARM Cortex-A53 reference hardware targets **\<78 milliseconds** 65 (published academic reference benchmark; live prototype deployments dynamically measure actual execution latency via monotonic timer).  
+8. *Performance Latency*: Scale sensor-to-app data logging must complete in **\<1.2 seconds** 53; deterministic quality evaluation against BIS 14863:2000 tolerance matrices executes in **\<5 milliseconds** without non-deterministic AI/ML compute or bias.  
 9. *Data Efficiency*: Sync payloads compressed via Gzip must remain **\<100 KB** per sync session 65\.  
 10. *Availability & Resilience*: Must guarantee **100% operational transaction uptime** at physical mandi gates regardless of central cloud server health 22, 26\.  
 11. *Financial Security*: Financial ledgers must enforce strict ACID compliance, complete auditability, and zero unauthorized bank detail modifications 18, 19, 22, 38\.

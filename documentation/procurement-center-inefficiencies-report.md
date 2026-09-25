@@ -175,7 +175,7 @@ We propose **MandiQ**—a decentralized, offline-resilient, dynamic queue manage
     3.  *Double-Signature Payment Auditing:* Any change to a farmer's registered bank profile requires a biometric match on-site at a kiosk or a physical dual-sign-off from the Cooperative Society Secretary and the District Manager, cryptographically locked on a distributed ledger to eliminate Anaaj Kharid-style bank diversion frauds [2, 237].
 *   **Product Novelty (Operational Fallback):**
     *   *Zero-Data USSD Interface:* By dialing a shortcode (e.g., `*123#`), farmers use the operator's GSM MAP layer (which operates without mobile data or internet) to view crop prices, query payment status, and interactively reschedule slots via simple text menus [19, 150, 172].
-    *   *Edge-AI Dwell Tracking:* High-angle cameras at the mandi entry gates run a quantized on-device object detection model (MobileNet) to count incoming tractors, compute queue depth, and automatically broadcast departure-delay SMS alerts to farmers who have not yet left their farms [4, 149].
+    *   *Edge Automated Dwell Tracking (Phase 2 Vision):* In enterprise deployment, high-angle optical gate sensors can count incoming tractors, compute queue depth, and broadcast departure-delay SMS alerts to farmers who have not yet left their farms (deferred to Phase 2 per ADR-003; prototype computes queue depth deterministically from gate QR check-ins and Redis ZSET tracking) [4, 149].
 
 #### 4.3 SIH Prototype Feasibility and Data Strategy
 

@@ -37,8 +37,8 @@
 ### Slide 3: TECHNICAL APPROACH
 
 *   **Technologies to be Used:**
-    *   **Frontend:** React Native / Progressive Web App (PWA), Tailwind CSS, IndexedDB (local storage WAL) [17, 44].
-    *   **Backend:** Python (FastAPI) for high-performance async APIs, RabbitMQ for event-driven microservices [17, 44].
+    *   **Frontend:** Progressive Web App (Vite + React 18 PWA), 5 Dedicated Role Portals, Tailwind CSS, IndexedDB (Dexie.js WAL) [17, 44].
+    *   **Backend:** Python 3.11+ (FastAPI) async modular monolith with native BackgroundTasks, Redis 7.2 for in-memory queue states & distributed locking [17, 44].
     *   **In-Memory Cache:** Redis Sorted Sets (ZSET) for tracking real-time queue states and instant ETA updates [17, 44].
     *   **Database:** PostgreSQL (Primary Relational Ledger with ACID compliance) [17, 44].
     *   **Gateways:** USSD Gateway (MAP-layer signaling), Twilio/Gupshup SMS API, NPCI/PFMS mock gateways [17, 44].
